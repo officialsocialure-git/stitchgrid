@@ -30,8 +30,21 @@ class ApiClient {
     return headers;
   }
 
+  private async request(url: string, options: RequestInit): Promise<Response> {
+    try {
+      return await fetch(url, options);
+    } catch (err: any) {
+      if (err instanceof TypeError || err?.name === "TypeError" || String(err?.message || "").includes("fetch")) {
+        throw new Error(
+          "Unable to reach STITCHGRID backend server. Please verify your connection or retry in a few moments."
+        );
+      }
+      throw err;
+    }
+  }
+
   async get<T>(path: string): Promise<T> {
-    const res = await fetch(`${API_BASE_URL}${path}`, {
+    const res = await this.request(`${API_BASE_URL}${path}`, {
       method: "GET",
       headers: this.getHeaders(),
     });
@@ -41,7 +54,7 @@ class ApiClient {
   }
 
   async post<T>(path: string, body: unknown): Promise<T> {
-    const res = await fetch(`${API_BASE_URL}${path}`, {
+    const res = await this.request(`${API_BASE_URL}${path}`, {
       method: "POST",
       headers: this.getHeaders(),
       body: JSON.stringify(body),
@@ -52,7 +65,7 @@ class ApiClient {
   }
 
   async put<T>(path: string, body?: unknown): Promise<T> {
-    const res = await fetch(`${API_BASE_URL}${path}`, {
+    const res = await this.request(`${API_BASE_URL}${path}`, {
       method: "PUT",
       headers: this.getHeaders(),
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -63,7 +76,7 @@ class ApiClient {
   }
 
   async patch<T>(path: string, body?: unknown): Promise<T> {
-    const res = await fetch(`${API_BASE_URL}${path}`, {
+    const res = await this.request(`${API_BASE_URL}${path}`, {
       method: "PATCH",
       headers: this.getHeaders(),
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -74,7 +87,7 @@ class ApiClient {
   }
 
   async delete<T>(path: string): Promise<T> {
-    const res = await fetch(`${API_BASE_URL}${path}`, {
+    const res = await this.request(`${API_BASE_URL}${path}`, {
       method: "DELETE",
       headers: this.getHeaders(),
     });

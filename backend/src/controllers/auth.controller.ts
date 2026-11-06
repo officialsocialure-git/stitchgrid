@@ -130,10 +130,20 @@ export async function signup(req: Request, res: Response, next: NextFunction) {
     }
 
     const destination = input.email ?? input.phone!;
-    const otp = await issueOtp(destination);
-    if (input.email) await sendEmailOtp(input.email, otp); else await sendSmsOtp(input.phone!, otp);
+    const otpRes = await issueOtp(destination, { allowExisting: true });
+    if (!otpRes.isExisting && otpRes.otp) {
+      if (input.email) await sendEmailOtp(input.email, otpRes.otp); else await sendSmsOtp(input.phone!, otpRes.otp);
+    }
     await audit("AUTH_SIGNUP", "User", user.id, user.id, organization.id);
-    return sendOk(res, { userId: user.id, organizationId: organization.id, verificationChannel: input.email ? "email" : "sms", message: "Account created. Verify the OTP to continue.", devOtp: env.NODE_ENV !== "production" ? otp : undefined }, 201);
+    const shouldProvideDevOtp = !env.SMTP_HOST || env.NODE_ENV !== "production";
+    return sendOk(res, {
+      userId: user.id,
+      organizationId: organization.id,
+      verificationChannel: input.email ? "email" : "sms",
+      message: "Account created. Verify the OTP to continue.",
+      devOtp: shouldProvideDevOtp && otpRes.otp ? otpRes.otp : undefined,
+      cooldownRemaining: otpRes.cooldownRemaining
+    }, 201);
   } catch (e) { next(e); }
 }
 
@@ -173,9 +183,22 @@ export async function login(req: Request, res: Response, next: NextFunction) {
 
     const destination = isEmail ? user.email : user.phone;
     if (!destination) throw new AppError(400, "This login channel is not registered");
-    const otp = await issueOtp(destination);
-    if (isEmail) await sendEmailOtp(destination, otp); else await sendSmsOtp(destination, otp);
-    return sendOk(res, { challengeId: user.id, userId: user.id, destination, verificationChannel: isEmail ? "email" : "sms", message: "OTP sent. Verify to complete login.", devOtp: env.NODE_ENV !== "production" ? otp : undefined });
+    const otpRes = await issueOtp(destination, { allowExisting: true });
+    if (!otpRes.isExisting && otpRes.otp) {
+      if (isEmail) await sendEmailOtp(destination, otpRes.otp); else await sendSmsOtp(destination, otpRes.otp);
+    }
+    const shouldProvideDevOtp = !env.SMTP_HOST || env.NODE_ENV !== "production";
+    return sendOk(res, {
+      challengeId: user.id,
+      userId: user.id,
+      destination,
+      verificationChannel: isEmail ? "email" : "sms",
+      message: otpRes.isExisting
+        ? "Verification code already active. Enter code to continue."
+        : "OTP sent. Verify to complete login.",
+      devOtp: shouldProvideDevOtp && otpRes.otp ? otpRes.otp : undefined,
+      cooldownRemaining: otpRes.cooldownRemaining
+    });
   } catch (e) { next(e); }
 }
 
@@ -261,9 +284,18 @@ export async function switchContext(req: Request, res: Response, next: NextFunct
 export async function resendOtp(req: Request, res: Response, next: NextFunction) {
   try {
     const input = z.object({ destination: z.string().min(3) }).parse(req.body);
-    const otp = await issueOtp(input.destination);
-    if (channel(input.destination) === "email") await sendEmailOtp(input.destination, otp); else await sendSmsOtp(input.destination, otp);
-    return sendOk(res, { message: "OTP sent" });
+    const otpRes = await issueOtp(input.destination, { allowExisting: false });
+    if (channel(input.destination) === "email") {
+      await sendEmailOtp(input.destination, otpRes.otp);
+    } else {
+      await sendSmsOtp(input.destination, otpRes.otp);
+    }
+    const shouldProvideDevOtp = !env.SMTP_HOST || env.NODE_ENV !== "production";
+    return sendOk(res, {
+      message: "A new 6-digit verification code has been sent.",
+      devOtp: shouldProvideDevOtp ? otpRes.otp : undefined,
+      cooldownRemaining: otpRes.cooldownRemaining
+    });
   } catch (e) { next(e); }
 }
 

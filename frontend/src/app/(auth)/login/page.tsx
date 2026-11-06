@@ -71,12 +71,12 @@ export default function LoginPage() {
       }
 
       const res = await authService.login(trimmed, password);
-      const devOtpParam = res.devOtp ? `&devOtp=${res.devOtp}` : "";
-      router.push(
-        `/verify-otp?userId=${res.challengeId || res.userId}&channel=${res.verificationChannel}&dest=${encodeURIComponent(
-          trimmed
-        )}&mode=login${devOtpParam}`
-      );
+      const devOtpParam = res.devOtp ? `&devOtp=${encodeURIComponent(res.devOtp)}` : "";
+      window.location.href = `/verify-otp?userId=${encodeURIComponent(
+        res.challengeId || res.userId
+      )}&channel=${encodeURIComponent(res.verificationChannel)}&dest=${encodeURIComponent(
+        trimmed
+      )}&mode=login${devOtpParam}`;
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);

@@ -19,6 +19,7 @@ app.disable("x-powered-by");
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 const allowedOrigins = new Set([
   ...env.CLIENT_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean),
+  "https://stitchgrid-three.vercel.app",
   "http://localhost:3000",
   "http://localhost:3001",
   "http://127.0.0.1:3000",
@@ -42,7 +43,6 @@ app.use(
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
     optionsSuccessStatus: 204,
   })
 );
@@ -59,8 +59,26 @@ app.get("/api/health", (_req, res) =>
 
 // Rate limiting: disabled in development, active in production
 if (env.NODE_ENV === "production") {
-  app.use("/api", rateLimit({ windowMs: 15 * 60 * 1000, limit: 1000, standardHeaders: "draft-7", legacyHeaders: false }));
-  app.use("/api/auth", rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: "draft-7", legacyHeaders: false }));
+  app.use(
+    "/api",
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      limit: 1000,
+      standardHeaders: "draft-7",
+      legacyHeaders: false,
+      skip: (req) => req.method === "OPTIONS",
+    })
+  );
+  app.use(
+    "/api/auth",
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      limit: 300,
+      standardHeaders: "draft-7",
+      legacyHeaders: false,
+      skip: (req) => req.method === "OPTIONS",
+    })
+  );
 }
 
 app.use("/api/health", healthRoutes);

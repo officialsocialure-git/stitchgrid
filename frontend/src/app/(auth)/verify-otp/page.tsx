@@ -78,8 +78,8 @@ function VerifyOtpContent() {
       await authService.verifyOtp(userId, code, destination);
       setSuccess("Verification successful! Opening your workspace...");
       setTimeout(() => {
-        router.push("/dashboard");
-      }, 700);
+        window.location.href = "/dashboard";
+      }, 500);
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -94,13 +94,22 @@ function VerifyOtpContent() {
   const handleResend = async () => {
     if (timer > 0 || !destination) return;
     try {
-      await authService.resendOtp(destination);
-      setTimer(45);
-      setSuccess("A new 6-digit code has been sent!");
-      setTimeout(() => setSuccess(null), 3000);
+      const res: any = await authService.resendOtp(destination);
+      const remainingSeconds = Number(res?.cooldownRemaining) || 45;
+      setTimer(remainingSeconds);
+      if (res?.devOtp) {
+        setOtp(String(res.devOtp).split(""));
+      }
+      setSuccess("A new 6-digit verification code has been sent!");
+      setTimeout(() => setSuccess(null), 3500);
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
+        // If error message contains remaining seconds, sync the timer immediately
+        const match = err.message.match(/(\d+)\s*s/i);
+        if (match && match[1]) {
+          setTimer(parseInt(match[1], 10));
+        }
       } else {
         setError("Could not resend code. Please try again.");
       }

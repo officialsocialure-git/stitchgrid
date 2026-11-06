@@ -174,12 +174,12 @@ export default function RegisterPage() {
 
       const res = await authService.signup(payload);
       const dest = email.trim() || phone.trim();
-      const devOtpParam = res.devOtp ? `&devOtp=${res.devOtp}` : "";
-      router.push(
-        `/verify-otp?userId=${res.userId}&channel=${res.verificationChannel}&dest=${encodeURIComponent(
-          dest
-        )}&mode=signup${devOtpParam}`
-      );
+      const devOtpParam = res.devOtp ? `&devOtp=${encodeURIComponent(res.devOtp)}` : "";
+      window.location.href = `/verify-otp?userId=${encodeURIComponent(
+        res.userId
+      )}&channel=${encodeURIComponent(res.verificationChannel)}&dest=${encodeURIComponent(
+        dest
+      )}&mode=signup${devOtpParam}`;
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
