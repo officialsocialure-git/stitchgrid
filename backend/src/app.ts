@@ -28,11 +28,14 @@ const allowedOrigins = new Set([
 const isLocalhostOrigin = (origin: string) =>
   /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin);
 
+const isVercelOrigin = (origin: string) =>
+  /^https:\/\/[a-zA-Z0-9_-]+\.vercel\.app$/.test(origin);
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Requests without an Origin header or matching allowed origins, or any localhost in dev
-      if (!origin || env.NODE_ENV !== "production" || allowedOrigins.has(origin) || isLocalhostOrigin(origin)) {
+      // Requests without an Origin header or matching allowed origins, localhost in dev, or any vercel.app deployment
+      if (!origin || env.NODE_ENV !== "production" || allowedOrigins.has(origin) || isLocalhostOrigin(origin) || isVercelOrigin(origin)) {
         return callback(null, true);
       }
       return callback(null, false);

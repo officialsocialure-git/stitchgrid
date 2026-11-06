@@ -259,10 +259,7 @@ export function SupplierSamplesView({
 
         const res = await marketplaceService.uploadFile(file.name, dataUrl, label);
         if (res?.url) {
-          const fullUrl = res.url.startsWith("http")
-            ? res.url
-            : `http://localhost:5000${res.url}`;
-          uploaded.push({ url: fullUrl, label: res.label || label });
+          uploaded.push({ url: res.url, label: res.label || label });
         }
       }
 

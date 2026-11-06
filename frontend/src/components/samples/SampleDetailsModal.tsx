@@ -81,13 +81,18 @@ export function SampleDetailsModal({
     ? "bg-blue-50 text-blue-700 border-blue-200"
     : "bg-amber-50 text-amber-800 border-amber-200";
 
-  // Real photos uploaded by supplier
-  const photosList: { url: string; label: string }[] =
+  // Real photos uploaded by supplier (normalized to relative URLs for deployment resilience)
+  const rawPhotos: { url: string; label: string }[] =
     Array.isArray(sample.photos) && sample.photos.length > 0
       ? sample.photos
       : sample.parsedMeta?.photos && Array.isArray(sample.parsedMeta.photos) && sample.parsedMeta.photos.length > 0
       ? sample.parsedMeta.photos
       : [];
+
+  const photosList = rawPhotos.map((p) => ({
+    ...p,
+    url: typeof p.url === "string" ? p.url.replace(/^https?:\/\/localhost:\d+/, "") : p.url,
+  }));
 
   const currentPhoto = photosList[activeImageIndex] || photosList[0] || null;
 

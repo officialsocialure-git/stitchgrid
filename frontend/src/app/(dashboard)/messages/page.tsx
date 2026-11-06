@@ -99,6 +99,10 @@ export default function MessagesPage() {
   useEffect(() => {
     if (activeChatId) {
       loadMessages(activeChatId);
+      const pollTimer = setInterval(() => {
+        loadMessages(activeChatId);
+      }, 4000);
+      return () => clearInterval(pollTimer);
     } else {
       setMessages([]);
     }
@@ -124,6 +128,8 @@ export default function MessagesPage() {
     try {
       setSending(true);
       await marketplaceService.sendMessage(activeChatId, text);
+      await loadMessages(activeChatId);
+      await loadConversations();
     } catch (err) {
       console.error("Message send error:", err);
     } finally {
