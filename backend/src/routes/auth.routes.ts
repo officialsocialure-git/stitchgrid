@@ -1,0 +1,12 @@
+import { Router } from "express";
+import { googleLogin, login, me, resendOtp, signup, switchContext, verifyLoginOtp } from "../controllers/auth.controller";
+import { authenticate } from "../middleware/auth";
+const router = Router();
+router.post("/signup", signup);
+router.post("/login", login);
+router.post("/verify-otp", verifyLoginOtp);
+router.post("/resend-otp", resendOtp);
+router.post("/google", googleLogin);
+router.post("/switch-context", authenticate, switchContext);
+router.get("/me", authenticate, me);
+export default router;

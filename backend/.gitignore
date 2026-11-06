@@ -1,0 +1,69 @@
+# ==============================================================================
+# STITCHGRID Backend .gitignore
+# ==============================================================================
+
+# Dependencies
+node_modules/
+package-lock.json.bak
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build and Transpilation outputs
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Environment variables & secrets (CRITICAL: Never commit sensitive keys/credentials)
+.env
+.env.*
+.env.local
+.env.development
+.env.test
+.env.production
+!.env.example
+
+# User-uploaded files & media (preserve uploads directory with .gitkeep)
+uploads/*
+!uploads/.gitkeep
+temp/
+tmp/
+
+# Logs & runtime files
+logs/
+*.log
+
+# Testing & Code Coverage
+coverage/
+.nyc_output/
+
+# Local databases & dumps
+*.db
+*.sqlite
+*.sqlite-journal
+*.sqlite3
+
+# SSL/TLS Keys & Certificates
+*.pem
+*.key
+*.cert
+*.crt
+
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# IDE & Editor configuration
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
