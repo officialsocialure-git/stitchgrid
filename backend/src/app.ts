@@ -12,6 +12,9 @@ import workflowRoutes from "./routes/workflow.routes";
 import { errorHandler, notFound } from "./middleware/error";
 
 const app = express();
+// Render runs this service behind one trusted reverse proxy.
+// This preserves correct client IP detection for express-rate-limit.
+app.set("trust proxy", 1);
 app.disable("x-powered-by");
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 const allowedOrigins = new Set([
@@ -45,6 +48,11 @@ app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 if (env.NODE_ENV !== "test") app.use(morgan("combined"));
+
+// Public health endpoint for Render and uptime checks; it must not require authentication.
+app.get("/api/health", (_req, res) =>
+  res.json({ success: true, service: "STITCHGRID API", status: "healthy" })
+);
 
 // Rate limiting: disabled in development, active in production
 if (env.NODE_ENV === "production") {
