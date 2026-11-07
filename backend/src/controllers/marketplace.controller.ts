@@ -63,7 +63,7 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
           }
         },
         categories: true,
-        catalogItems: true,
+        catalogItems: { where: { moderationStatus: "APPROVED" } },
       },
       take: 50
     });

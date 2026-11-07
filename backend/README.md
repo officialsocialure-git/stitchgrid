@@ -1,11 +1,11 @@
 # STITCHGRID Backend API
 
-Express + TypeScript + Prisma + PostgreSQL for the STITCHGRID B2B sourcing platform.
+Express + TypeScript + Prisma + MySQL/TiDB for the STITCHGRID B2B sourcing platform. The Prisma schema and `.env.example` use MySQL; keep the database provider consistent unless a separately planned PostgreSQL migration is performed.
 
 ## Setup (Windows PowerShell)
-1. Install Node.js LTS and PostgreSQL.
+1. Install Node.js LTS and MySQL (or configure TiDB Cloud).
 2. Copy .env.example to .env.
-3. Create PostgreSQL database stitchgrid and set DATABASE_URL.
+3. Create the `stitchgrid_db` MySQL database and set DATABASE_URL.
 4. Set unique random JWT_ACCESS_SECRET and JWT_REFRESH_SECRET values (at least 32 chars).
 5. npm install
 6. npm run db:generate
@@ -26,6 +26,7 @@ OTP delivery uses SMTP or SMS adapter. In development, OTP is logged only when d
 ## Marketplace / procurement
 - GET /api/suppliers?category=&city=
 - PUT /api/supplier-profile
+- POST /api/catalog-items (supplier; new listings enter moderation as PENDING)
 - POST /api/rfqs
 - GET /api/rfqs?organizationId=
 - POST /api/rfqs/:rfqId/invitations
@@ -49,6 +50,23 @@ OTP delivery uses SMTP or SMS adapter. In development, OTP is logged only when d
 - GET /api/admin/organizations (ADMIN)
 - PATCH /api/admin/organizations/:organizationId/verification (ADMIN)
 - GET /api/admin/audit-logs (ADMIN)
+
+### Admin panel API
+All routes below require a valid JWT with an active `ADMIN` membership.
+- GET /api/admin/overview
+- GET /api/admin/users and PATCH /api/admin/users/:userId/status
+- GET /api/admin/organizations/:organizationId
+- GET /api/admin/marketplace and PATCH /api/admin/marketplace/:itemId/moderation
+- GET /api/admin/rfqs, GET /api/admin/rfqs/:rfqId and PATCH /api/admin/rfqs/:rfqId/status
+- GET /api/admin/orders
+- GET /api/admin/payments (read-only until a real payment provider is connected)
+- GET /api/admin/disputes
+- GET /api/admin/audit-logs
+
+### Admin setup and schema update
+1. From `backend`, apply the additive catalogue moderation migration with `npx prisma migrate deploy`.
+2. Run `npx prisma generate`.
+3. Create a normal user account, then edit `prisma/admin-bootstrap.sql` and replace the email placeholder. Run that SQL only from a trusted database session to grant the `ADMIN` membership. Public signup intentionally does not allow users to select ADMIN.
 
 ## Production limitations / next integrations
 Payment provider checkout and signed webhook verification are not enabled. Do not treat this service as a payment processor or money-holding service. Add official provider SDK and signature validation before production. Also finish real SMS adapter, password reset, refresh-token rotation/revocation, admin MFA, upload/object storage, full notifications, pagination, broader authorization tests, and automated tests before production. Never commit .env. Celery requires a separate Python worker when paired with this Node backend; Redis stores OTP state when configured.

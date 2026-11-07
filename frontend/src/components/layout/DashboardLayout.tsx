@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { cn } from "@/utils";
+import { AdminLayout } from "./AdminLayout";
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, membership, loading } = useAuth();
@@ -33,6 +34,10 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
     );
+  }
+
+  if (membership?.role === "ADMIN" || pathname.startsWith("/admin")) {
+    return <AdminLayout>{children}</AdminLayout>;
   }
 
   // Mobile Bottom Navigation items (Matches reference mobile screenshot)

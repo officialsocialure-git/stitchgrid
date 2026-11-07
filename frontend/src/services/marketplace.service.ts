@@ -129,6 +129,10 @@ export const marketplaceService = {
     return api.patch(`/samples/${sampleId}`, payload);
   },
 
+  createCatalogItem: async (data: { organizationId: string; name: string; itemType: string; description?: string; moq?: number; unitPrice?: number; currency?: string }) => {
+    return api.post<any>("/catalog-items", data);
+  },
+
   // 6b. Profile & Organization Settings
   updateOrganizationProfile: async (data: {
     organizationId: string;

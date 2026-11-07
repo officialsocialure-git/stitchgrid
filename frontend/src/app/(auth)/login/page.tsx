@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authService } from "@/services/auth.service";
@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const googleClickLock = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [focusedField, setFocusedField] = useState<"identifier" | "password" | null>(null);
 
@@ -92,14 +93,19 @@ export default function LoginPage() {
     setGoogleLoading(true);
     try {
       const res = await authService.googleLogin({ credential });
+      const adminMembership = res.memberships?.find((membership) => membership.role === "ADMIN");
+      if (adminMembership) {
+        await authService.switchContext(adminMembership.organizationId, "ADMIN");
+      }
+      const chosenMembership = adminMembership || res.activeMembership;
       localStorage.setItem("sg_user", JSON.stringify(res.user));
-      if (res.activeMembership) {
-        localStorage.setItem("sg_membership", JSON.stringify(res.activeMembership));
+      if (chosenMembership) {
+        localStorage.setItem("sg_membership", JSON.stringify(chosenMembership));
       } else {
         localStorage.removeItem("sg_membership");
       }
-      window.dispatchEvent(new CustomEvent("sg_workspace_changed", { detail: res.activeMembership }));
-      window.location.href = res.requiresOnboarding ? "/google-onboarding" : "/dashboard";
+      window.dispatchEvent(new CustomEvent("sg_workspace_changed", { detail: chosenMembership }));
+      window.location.href = res.requiresOnboarding ? "/google-onboarding" : adminMembership ? "/admin" : "/dashboard";
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Google sign-in failed. Please try again.");
       setGoogleLoading(false);
@@ -116,6 +122,8 @@ export default function LoginPage() {
       return;
     }
 
+    if (googleClickLock.current) return;
+    googleClickLock.current = true;
     setGoogleLoading(true);
     try {
       const googleWindow = window as typeof window & {
@@ -123,39 +131,68 @@ export default function LoginPage() {
           initialize: (config: { client_id: string; callback: (response: { credential: string }) => void; auto_select?: boolean }) => void;
           prompt: () => void;
         } } };
+        __stitchgridGoogleInitialized?: boolean;
+        __stitchgridGoogleScriptLoading?: boolean;
       };
+
       const initializeGoogle = () => {
         const googleId = googleWindow.google?.accounts?.id;
         if (!googleId) throw new Error("Google sign-in could not be loaded. Please try again.");
-        googleId.initialize({
-          client_id: clientId,
-          callback: (response) => {
-            if (response.credential) void handleGoogleCredential(response.credential);
-            else setGoogleLoading(false);
-          },
-          auto_select: false,
-        });
+
+        // Google Identity Services must be initialized only once per page.
+        if (!googleWindow.__stitchgridGoogleInitialized) {
+          googleId.initialize({
+            client_id: clientId,
+            callback: (response) => {
+              if (response.credential) void handleGoogleCredential(response.credential);
+              else {
+                setGoogleLoading(false);
+                googleClickLock.current = false;
+              }
+            },
+            auto_select: false,
+          });
+          googleWindow.__stitchgridGoogleInitialized = true;
+        }
+
         googleId.prompt();
-        window.setTimeout(() => setGoogleLoading(false), 1000);
+        window.setTimeout(() => {
+          setGoogleLoading(false);
+          googleClickLock.current = false;
+        }, 1500);
       };
 
       if (googleWindow.google?.accounts?.id) {
         initializeGoogle();
       } else {
-        const script = document.createElement("script");
-        script.src = "https://accounts.google.com/gsi/client";
-        script.async = true;
-        script.defer = true;
-        script.onload = initializeGoogle;
-        script.onerror = () => {
-          setError("Unable to load Google sign-in. Please check your internet connection.");
-          setGoogleLoading(false);
-        };
-        document.head.appendChild(script);
+        const existingScript = document.querySelector<HTMLScriptElement>('script[src="https://accounts.google.com/gsi/client"]');
+        if (existingScript) {
+          existingScript.addEventListener("load", initializeGoogle, { once: true });
+          existingScript.addEventListener("error", () => {
+            setError("Unable to load Google sign-in. Please check your internet connection.");
+            setGoogleLoading(false);
+            googleClickLock.current = false;
+          }, { once: true });
+        } else if (!googleWindow.__stitchgridGoogleScriptLoading) {
+          googleWindow.__stitchgridGoogleScriptLoading = true;
+          const script = document.createElement("script");
+          script.src = "https://accounts.google.com/gsi/client";
+          script.async = true;
+          script.defer = true;
+          script.onload = initializeGoogle;
+          script.onerror = () => {
+            setError("Unable to load Google sign-in. Please check your internet connection.");
+            setGoogleLoading(false);
+            googleClickLock.current = false;
+            googleWindow.__stitchgridGoogleScriptLoading = false;
+          };
+          document.head.appendChild(script);
+        }
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Google sign-in could not be started.");
       setGoogleLoading(false);
+      googleClickLock.current = false;
     }
   };
 

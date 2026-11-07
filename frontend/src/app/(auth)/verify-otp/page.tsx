@@ -88,10 +88,14 @@ function VerifyOtpContent() {
 
     setLoading(true);
     try {
-      await authService.verifyOtp(userId, code, destination);
+      const session = await authService.verifyOtp(userId, code, destination);
+      const adminMembership = session.memberships?.find((membership) => membership.role === "ADMIN");
+      if (adminMembership) {
+        await authService.switchContext(adminMembership.organizationId, "ADMIN");
+      }
       showToast("success", "OTP verified successfully! Welcome to STITCHGRID.");
       window.setTimeout(() => {
-        window.location.href = "/dashboard";
+        window.location.href = adminMembership ? "/admin" : "/dashboard";
       }, 1500);
     } catch (error) {
       showToast("error", error instanceof Error ? error.message : "Invalid OTP. Please try again.");

@@ -1,0 +1,3 @@
+ALTER TABLE `CatalogItem`
+  ADD COLUMN `moderationStatus` ENUM('PENDING', 'APPROVED', 'REJECTED') NOT NULL DEFAULT 'PENDING',
+  ADD COLUMN `moderationNote` TEXT NULL;

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticate, requireRole } from "../middleware/auth";
+import { createCatalogItem } from "../controllers/catalog.controller";
 import {
   adminVerification, createPurchaseOrder, createRfq, deleteRfq, getPurchaseOrderDetails,
   getRfqDetails, inviteSupplier, listAdminOrganizations, listMyRfqs, listPurchaseOrders,
@@ -10,6 +11,7 @@ const router = Router();
 router.use(authenticate);
 router.get("/suppliers", supplierSearch);
 router.put("/supplier-profile", upsertSupplierProfile);
+router.post("/catalog-items", createCatalogItem);
 router.put("/organization-profile", updateOrganizationProfile);
 router.post("/rfqs", createRfq);
 router.get("/rfqs", listMyRfqs);

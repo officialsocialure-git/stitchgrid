@@ -157,6 +157,12 @@ model SupplierCategory {
   @@unique([supplierProfileId, category])
 }
 
+enum CatalogModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model CatalogItem {
   id                String @id @default(cuid())
   supplierProfileId String
@@ -166,6 +172,8 @@ model CatalogItem {
   moq               Int?
   unitPrice         Decimal? @db.Decimal(12, 2)
   currency          String @default("INR")
+  moderationStatus  CatalogModerationStatus @default(PENDING)
+  moderationNote    String? @db.Text
   createdAt         DateTime @default(now())
   supplierProfile   SupplierProfile @relation(fields: [supplierProfileId], references: [id], onDelete: Cascade)
 }

@@ -37,10 +37,14 @@ export function UpdateCatalogModal({
       const parsedPrice = parseFloat(unitPrice) || 180;
       const parsedMoq = parseInt(moq, 10) || 300;
 
-      await marketplaceService.updateOrganizationProfile({
+      await marketplaceService.createCatalogItem({
         organizationId: membership.organizationId,
-        categories: [category, productName.trim()],
-        description: `Featured Product: ${productName.trim()} | MOQ: ${parsedMoq} pcs | Est. ₹${parsedPrice}/pc | Fabric: ${fabricSpec || "Standard Garment Grade"}`,
+        name: productName.trim(),
+        itemType: category,
+        moq: parsedMoq,
+        unitPrice: parsedPrice,
+        currency: "INR",
+        description: `Fabric specification: ${fabricSpec || "Standard Garment Grade"}`,
       });
 
       setSuccess(true);
@@ -69,7 +73,7 @@ export function UpdateCatalogModal({
         {success && (
           <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
             <span className="material-symbols-outlined text-[16px]">check_circle</span>
-            <span>Product added to your factory catalogue in MySQL database!</span>
+            <span>Listing submitted successfully and is pending admin review.</span>
           </div>
         )}
 

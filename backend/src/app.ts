@@ -9,6 +9,7 @@ import healthRoutes from "./routes/health.routes";
 import authRoutes from "./routes/auth.routes";
 import marketplaceRoutes from "./routes/marketplace.routes";
 import workflowRoutes from "./routes/workflow.routes";
+import adminRoutes from "./routes/admin.routes";
 import { errorHandler, notFound } from "./middleware/error";
 
 const app = express();
@@ -85,6 +86,7 @@ app.use("/api/health", healthRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api", marketplaceRoutes);
 app.use("/api", workflowRoutes);
+app.use("/api/admin", adminRoutes);
 app.use(notFound);
 app.use(errorHandler);
 export default app;
