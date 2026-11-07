@@ -55,7 +55,7 @@ export default function PaymentsPage() {
             supplier: t.purchaseOrder?.supplier?.name || "Manufacturing Supplier",
             amount: `₹${amt.toLocaleString("en-IN")}`,
             rawAmount: amt,
-            type: "Milestone Escrow Deposit",
+            type: "Milestone Secure Payment Deposit",
             status: t.status || "HELD_IN_ESCROW",
             date: new Date(t.createdAt).toLocaleDateString("en-IN"),
           };
@@ -115,18 +115,18 @@ export default function PaymentsPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="font-sans font-bold text-2xl text-on-surface">
-              {isSupplier ? "Escrow & Milestone Disbursements" : "Payments"}
+              {isSupplier ? "Secure Payments & Milestone Releases" : "Payments"}
             </h1>
             <Badge variant="primary" size="sm">B2B Vault Protected</Badge>
           </div>
           <p className="text-xs text-secondary mt-1">
-            Safe garment payments backed by milestone-triggered escrow vaults. Disbursed upon AQL 2.5 quality passes.
+            Secure garment payments backed by milestone-based releases. Payments are released after required quality checks.
           </p>
         </div>
 
         {!isSupplier ? (
           <Button variant="primary" icon="security" onClick={() => setIsDepositModalOpen(true)}>
-            Deposit Milestone Escrow
+            Add Secure Payment
           </Button>
         ) : (
           <Button variant="outline" icon="account_balance">
@@ -137,7 +137,7 @@ export default function PaymentsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div className="p-5 rounded-2xl bg-surface-container-lowest border border-outline-variant/30 shadow-sm">
-          <span className="text-xs font-semibold text-secondary uppercase font-sans">Total Escrow Balance</span>
+          <span className="text-xs font-semibold text-secondary uppercase font-sans">Total Secure Balance</span>
           <p className="text-2xl font-bold font-mono text-primary mt-2">
             ₹{(totalEscrow / 100000).toFixed(2)}L
           </p>
@@ -162,13 +162,13 @@ export default function PaymentsPage() {
       </div>
 
       <div className="bg-surface-container-lowest rounded-2xl p-5 border border-outline-variant/30 shadow-sm">
-        <h2 className="font-sans font-bold text-base text-on-surface mb-4">Escrow Ledger</h2>
+        <h2 className="font-sans font-bold text-base text-on-surface mb-4">Payment Ledger</h2>
         {loading ? (
           <div className="p-8 text-center text-xs font-mono text-secondary">Loading ledger transactions...</div>
         ) : transactions.length === 0 ? (
           <div className="p-8 text-center flex flex-col items-center justify-center">
             <span className="material-symbols-outlined text-[32px] text-secondary mb-2">account_balance_wallet</span>
-            <p className="text-sm font-bold text-on-surface">No escrow transactions found</p>
+            <p className="text-sm font-bold text-on-surface">No payment transactions found</p>
             <p className="text-xs text-secondary mt-0.5">Transactions will appear here when purchase order milestones are funded.</p>
           </div>
         ) : (
@@ -196,11 +196,11 @@ export default function PaymentsPage() {
         )}
       </div>
 
-      {/* Deposit Escrow Modal */}
+      {/* Secure Payment Modal */}
       <Modal
         isOpen={isDepositModalOpen}
         onClose={() => setIsDepositModalOpen(false)}
-        title="Deposit Milestone Escrow"
+        title="Add Secure Payment"
         description="Transfer funds into the STITCHGRID nodal vault for your active purchase order. Funds remain safe until you approve milestones."
       >
         <form onSubmit={handleDepositEscrow} className="space-y-4">
@@ -219,7 +219,7 @@ export default function PaymentsPage() {
           </div>
 
           <div className="p-3 rounded-xl bg-surface-container-low border border-surface-container-highest text-xs text-secondary">
-            <p className="font-semibold text-on-surface mb-1">Escrow Protection Guarantee:</p>
+            <p className="font-semibold text-on-surface mb-1">Secure Payment Protection:</p>
             <p>Funds cannot be withdrawn by the manufacturer until cutting, stitching, and AQL 2.5 quality certificates are uploaded and signed off by the buyer.</p>
           </div>
 
@@ -228,7 +228,7 @@ export default function PaymentsPage() {
               Cancel
             </Button>
             <Button variant="primary" size="sm" type="submit" loading={depositing} icon="lock">
-              Authorize Escrow Deposit
+              Confirm Secure Payment
             </Button>
           </div>
         </form>

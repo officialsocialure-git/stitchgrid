@@ -33,7 +33,7 @@ export interface SignupResponse {
   organizationId: string;
   verificationChannel: "email" | "sms";
   message: string;
-  devOtp?: string;
+  cooldownRemaining?: number;
 }
 
 export interface LoginResponse {
@@ -42,7 +42,7 @@ export interface LoginResponse {
   destination: string;
   verificationChannel: "email" | "sms";
   message: string;
-  devOtp?: string;
+  cooldownRemaining?: number;
 }
 
 export interface VerifyOtpResponse {
@@ -61,8 +61,8 @@ export const authService = {
     return api.post<LoginResponse>("/auth/login", { identifier, password });
   },
 
-  googleLogin: async (data: { credential?: string; email?: string; name?: string; googleId?: string }) => {
-    const res = await api.post<VerifyOtpResponse>("/auth/google", data);
+  googleLogin: async (data: { credential: string }) => {
+    const res = await api.post<VerifyOtpResponse & { requiresOnboarding: boolean }>("/auth/google", data);
     if (typeof window !== "undefined" && res.accessToken) {
       localStorage.setItem("sg_token", res.accessToken);
       localStorage.setItem("sg_user", JSON.stringify(res.user));
@@ -97,6 +97,16 @@ export const authService = {
     return res;
   },
 
+  completeGoogleOnboarding: async (data: { organizationName: string; accountType: "BUYER" | "SUPPLIER"; legalName?: string; businessType?: string; taxId?: string; address?: string; city?: string; country?: string; description?: string; yearsInBusiness?: number; productionCapacity?: number; categories?: string[] }) => {
+    const res = await api.post<{ accessToken: string; activeMembership: Membership }>("/auth/google/onboarding", data);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("sg_token", res.accessToken);
+      localStorage.setItem("sg_membership", JSON.stringify(res.activeMembership));
+      window.dispatchEvent(new CustomEvent("sg_workspace_changed", { detail: res.activeMembership }));
+    }
+    return res;
+  },
+
   switchContext: async (organizationId: string, role: "BUYER" | "SUPPLIER" | "ADMIN") => {
     const res = await api.post<{
       accessToken: string;
@@ -110,7 +120,7 @@ export const authService = {
   },
 
   resendOtp: async (destination: string) => {
-    return api.post<{ message: string }>("/auth/resend-otp", { destination });
+    return api.post<{ message: string; cooldownRemaining?: number }>("/auth/resend-otp", { destination });
   },
 
   me: async () => {

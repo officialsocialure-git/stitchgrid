@@ -71,12 +71,11 @@ export default function LoginPage() {
       }
 
       const res = await authService.login(trimmed, password);
-      const devOtpParam = res.devOtp ? `&devOtp=${encodeURIComponent(res.devOtp)}` : "";
       window.location.href = `/verify-otp?userId=${encodeURIComponent(
         res.challengeId || res.userId
       )}&channel=${encodeURIComponent(res.verificationChannel)}&dest=${encodeURIComponent(
-        trimmed
-      )}&mode=login${devOtpParam}`;
+        res.destination || trimmed
+      )}&mode=login`;
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -88,55 +87,84 @@ export default function LoginPage() {
     }
   };
 
-  const executeGoogleLogin = async (email: string, name?: string) => {
+  const handleGoogleCredential = async (credential: string) => {
     setError(null);
     setGoogleLoading(true);
     try {
-      const res = await authService.googleLogin({ email, name });
-      if (typeof window !== "undefined") {
-        localStorage.setItem("sg_token", res.accessToken);
-        localStorage.setItem("sg_user", JSON.stringify(res.user));
-        if (res.activeMembership) {
-          localStorage.setItem("sg_membership", JSON.stringify(res.activeMembership));
-        }
-        window.dispatchEvent(new CustomEvent("sg_workspace_changed", { detail: res.activeMembership }));
-        setShowGoogleModal(false);
-        // Force direct navigation so Next.js and useAuth hook mount fresh with the new token
-        window.location.href = "/dashboard";
+      const res = await authService.googleLogin({ credential });
+      localStorage.setItem("sg_user", JSON.stringify(res.user));
+      if (res.activeMembership) {
+        localStorage.setItem("sg_membership", JSON.stringify(res.activeMembership));
+      } else {
+        localStorage.removeItem("sg_membership");
       }
+      window.dispatchEvent(new CustomEvent("sg_workspace_changed", { detail: res.activeMembership }));
+      window.location.href = res.requiresOnboarding ? "/google-onboarding" : "/dashboard";
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Google login failed. Please try again.";
-      setError(msg);
-      setShowGoogleModal(false);
+      setError(err instanceof Error ? err.message : "Google sign-in failed. Please try again.");
       setGoogleLoading(false);
     }
   };
 
-  const handleGoogleLoginClick = (e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
+  const handleGoogleLoginClick = async (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     setError(null);
-
-    const currentInput = identifier.trim().toLowerCase();
-    // If user already typed an email address in the input, sign in directly with Google!
-    if (currentInput.includes("@")) {
-      executeGoogleLogin(currentInput);
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      setError("Google sign-in is not configured yet. Please try email and password or contact support.");
       return;
     }
-    // Otherwise open the Google Account Chooser
-    setShowGoogleModal(true);
+
+    setGoogleLoading(true);
+    try {
+      const googleWindow = window as typeof window & {
+        google?: { accounts?: { id?: {
+          initialize: (config: { client_id: string; callback: (response: { credential: string }) => void; auto_select?: boolean }) => void;
+          prompt: () => void;
+        } } };
+      };
+      const initializeGoogle = () => {
+        const googleId = googleWindow.google?.accounts?.id;
+        if (!googleId) throw new Error("Google sign-in could not be loaded. Please try again.");
+        googleId.initialize({
+          client_id: clientId,
+          callback: (response) => {
+            if (response.credential) void handleGoogleCredential(response.credential);
+            else setGoogleLoading(false);
+          },
+          auto_select: false,
+        });
+        googleId.prompt();
+        window.setTimeout(() => setGoogleLoading(false), 1000);
+      };
+
+      if (googleWindow.google?.accounts?.id) {
+        initializeGoogle();
+      } else {
+        const script = document.createElement("script");
+        script.src = "https://accounts.google.com/gsi/client";
+        script.async = true;
+        script.defer = true;
+        script.onload = initializeGoogle;
+        script.onerror = () => {
+          setError("Unable to load Google sign-in. Please check your internet connection.");
+          setGoogleLoading(false);
+        };
+        document.head.appendChild(script);
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Google sign-in could not be started.");
+      setGoogleLoading(false);
+    }
   };
 
+  // Legacy account-picker actions now route to the verified Google Identity Services flow.
+  const executeGoogleLogin = (_email?: string, _name?: string) => handleGoogleLoginClick();
   const handleCustomGoogleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const email = customGoogleEmail.trim().toLowerCase();
-    if (!email || !email.includes("@")) {
-      setError("Please provide a valid Google email address.");
-      return;
-    }
-    executeGoogleLogin(email, customGoogleName.trim() || undefined);
+    setError("Please use the secure Google account selector instead of entering an email manually.");
+    setShowGoogleModal(false);
   };
 
   const handleForgotPasswordSubmit = async (e: React.FormEvent) => {

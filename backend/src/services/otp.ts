@@ -4,7 +4,7 @@ import { env } from "../config/env";
 import { AppError } from "../utils/http";
 
 const redis = env.REDIS_URL ? new Redis(env.REDIS_URL) : null;
-const localOtp = new Map<string, { hash: string; plainOtp?: string; expires: number; attempts: number; sentAt: number }>();
+const localOtp = new Map<string, { hash: string; expires: number; attempts: number; sentAt: number }>();
 const hashOtp = (otp: string) => crypto.createHash("sha256").update(otp).digest("hex");
 
 export interface IssueOtpResult {
@@ -43,7 +43,7 @@ export async function issueOtp(
     inCooldown
   ) {
     return {
-      otp: existingRecord.plainOtp || "",
+      otp: "",
       isExisting: true,
       cooldownRemaining,
     };
@@ -60,11 +60,8 @@ export async function issueOtp(
 
   // Case 3: Issue a fresh 6-digit OTP
   const otp = crypto.randomInt(100000, 1000000).toString();
-  // Keep plaintext OTP accessible in memory when SMTP is not configured or in non-production, ensuring users are never blocked
-  const shouldStorePlain = !env.SMTP_HOST || env.NODE_ENV !== "production";
   const record = {
     hash: hashOtp(otp),
-    plainOtp: shouldStorePlain ? otp : undefined,
     expires: now + env.OTP_TTL_MINUTES * 60_000,
     attempts: 0,
     sentAt: now,
@@ -82,6 +79,16 @@ export async function issueOtp(
     isExisting: false,
     cooldownRemaining: env.OTP_RESEND_SECONDS,
   };
+}
+
+export async function invalidateOtp(destination: string) {
+  const key = `otp:${destination.toLowerCase().trim()}`;
+  if (redis) {
+    await redis.del(key);
+    await redis.del(`${key}:sent`);
+  } else {
+    localOtp.delete(key);
+  }
 }
 
 export async function verifyOtp(destination: string, otp: string) {

@@ -1081,7 +1081,7 @@ export function SupplierBuyerRequestsView({
                 </div>
                 <div className="py-2.5 flex items-center justify-between">
                   <span className="text-slate-500">Payment Security</span>
-                  <strong className="font-bold text-[#5B13EC]">100% Escrow Protected</strong>
+                  <strong className="font-bold text-[#5B13EC]">100% Payment Protected</strong>
                 </div>
               </div>
             )}
@@ -1250,7 +1250,7 @@ export function SupplierBuyerRequestsView({
                     >
                       <option value="50% Advance, 50% on QC Pass">50% Advance, 50% on QC Pass</option>
                       <option value="30% Advance, 70% before Dispatch">30% Advance, 70% before Dispatch</option>
-                      <option value="100% Escrow on PO">100% Escrow on PO</option>
+                      <option value="100% Secure Payment on PO">100% Secure Payment on PO</option>
                       <option value="Net 30 Days">Net 30 Days</option>
                     </select>
                   </div>

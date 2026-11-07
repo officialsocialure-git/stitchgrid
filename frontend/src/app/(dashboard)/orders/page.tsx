@@ -125,7 +125,7 @@ export default function OrdersPage() {
             <Badge variant="primary" size="sm" className="hidden sm:inline-flex">MySQL Live Sync</Badge>
           </div>
           <p className="hidden sm:block text-xs text-secondary mt-1">
-            Active and fulfilled B2B garment manufacturing contracts secured by escrow milestones.
+            Active and fulfilled B2B garment manufacturing contracts secured by payment milestones.
           </p>
         </div>
 
@@ -304,7 +304,7 @@ export default function OrdersPage() {
                           loading={updatingId === po.id}
                           onClick={() => handleStatusChange(po.id, "READY_TO_DISPATCH")}
                         >
-                          Log QC Passed
+                          Quality Check Passed
                         </Button>
                       )}
                       {po.status === "READY_TO_DISPATCH" && (
@@ -366,7 +366,7 @@ export default function OrdersPage() {
                           loading={updatingId === po.id}
                           onClick={() => handleStatusChange(po.id, "COMPLETED")}
                         >
-                          Release Escrow & Complete
+                          Release Payment & Complete
                         </Button>
                       )}
                       {po.status === "COMPLETED" && (
@@ -392,7 +392,7 @@ export default function OrdersPage() {
                     </Link>
                     <Link href="/payments">
                       <Button variant="ghost" size="sm" icon="account_balance_wallet" className="w-full h-[68px] sm:h-9 flex-col sm:flex-row justify-center gap-1 sm:gap-1.5 px-1 text-[10px] sm:text-xs leading-tight whitespace-normal">
-                        Escrow
+                        Secure Payment
                       </Button>
                     </Link>
                   </div>

@@ -1,235 +1,210 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import React, { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { authService } from "@/services/auth.service";
 import { StitchgridLogo } from "@/components/common/StitchgridLogo";
 
+type ToastState = { type: "success" | "error" | "warning"; message: string } | null;
+
 function VerifyOtpContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const userId = searchParams.get("userId") || "";
   const destination = searchParams.get("dest") || "";
-  const mode = searchParams.get("mode") || "signup"; // "login" | "signup"
-  const devOtp = searchParams.get("devOtp") || "";
+  const mode = searchParams.get("mode") || "signup";
+  const channel = searchParams.get("channel") || (destination.includes("@") ? "email" : "sms");
 
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [timer, setTimer] = useState(45);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (devOtp && devOtp.length === 6) {
-      setOtp(devOtp.split(""));
-    }
-  }, [devOtp]);
+  const [resending, setResending] = useState(false);
+  const [toast, setToast] = useState<ToastState>(null);
 
   useEffect(() => {
     if (timer <= 0) return;
-    const interval = setInterval(() => setTimer((t) => t - 1), 1000);
-    return () => clearInterval(interval);
+    const interval = window.setInterval(() => setTimer((current) => Math.max(0, current - 1)), 1000);
+    return () => window.clearInterval(interval);
   }, [timer]);
 
-  const handleOtpChange = (index: number, val: string) => {
-    if (val.length > 1) {
-      val = val.slice(-1);
-    }
-    const newOtp = [...otp];
-    newOtp[index] = val;
-    setOtp(newOtp);
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), toast.type === "success" ? 1600 : 4000);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
-    // Auto advance focus
-    if (val && index < 5) {
-      const nextInput = document.getElementById(`otp-input-${index + 1}`);
-      nextInput?.focus();
-    }
+  const showToast = (type: NonNullable<ToastState>["type"], message: string) => {
+    setToast({ type, message });
   };
 
-  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Backspace" && !otp[index] && index > 0) {
-      const prevInput = document.getElementById(`otp-input-${index - 1}`);
-      prevInput?.focus();
-    }
+  const focusInput = (index: number) => {
+    document.getElementById(`otp-input-${index}`)?.focus();
   };
 
-  const handlePaste = (e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
-    if (pasted.length === 6) {
-      setOtp(pasted.split(""));
-      const lastInput = document.getElementById("otp-input-5");
-      lastInput?.focus();
-    }
-  };
-
-  const handleVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const code = otp.join("");
-    if (code.length !== 6) {
-      setError("Please enter the complete 6-digit verification code");
+  const handleOtpChange = (index: number, value: string) => {
+    const digits = value.replace(/\\D/g, "");
+    if (!digits) {
+      setOtp((current) => current.map((digit, i) => i === index ? "" : digit));
       return;
     }
 
-    setError(null);
-    setLoading(true);
+    if (digits.length > 1) {
+      const pasted = digits.slice(0, 6).split("");
+      setOtp((current) => current.map((digit, i) => pasted[i] ?? digit));
+      focusInput(Math.min(pasted.length - 1, 5));
+      return;
+    }
 
+    setOtp((current) => current.map((digit, i) => i === index ? digits : digit));
+    if (index < 5) focusInput(index + 1);
+  };
+
+  const handleKeyDown = (index: number, event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Backspace" && !otp[index] && index > 0) focusInput(index - 1);
+    if (event.key === "ArrowLeft" && index > 0) focusInput(index - 1);
+    if (event.key === "ArrowRight" && index < 5) focusInput(index + 1);
+  };
+
+  const handlePaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const pasted = event.clipboardData.getData("text").replace(/\\D/g, "").slice(0, 6);
+    if (pasted.length) {
+      setOtp(pasted.split("").concat(Array(6 - pasted.length).fill("")));
+      focusInput(Math.min(pasted.length - 1, 5));
+    }
+  };
+
+  const handleVerify = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const code = otp.join("");
+    if (!userId || !destination) {
+      showToast("error", "Verification session expired. Please sign in again.");
+      return;
+    }
+    if (code.length !== 6) {
+      showToast("warning", "Please enter the complete 6-digit verification code.");
+      focusInput(otp.findIndex((digit) => !digit));
+      return;
+    }
+
+    setLoading(true);
     try {
       await authService.verifyOtp(userId, code, destination);
-      setSuccess("Verification successful! Opening your workspace...");
-      setTimeout(() => {
+      showToast("success", "OTP verified successfully! Welcome to STITCHGRID.");
+      window.setTimeout(() => {
         window.location.href = "/dashboard";
-      }, 500);
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Invalid OTP code. Please try again.");
-      }
+      }, 1500);
+    } catch (error) {
+      showToast("error", error instanceof Error ? error.message : "Invalid OTP. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleResend = async () => {
-    if (timer > 0 || !destination) return;
+    if (timer > 0 || resending || !destination) return;
+    setResending(true);
     try {
-      const res: any = await authService.resendOtp(destination);
-      const remainingSeconds = Number(res?.cooldownRemaining) || 45;
-      setTimer(remainingSeconds);
-      if (res?.devOtp) {
-        setOtp(String(res.devOtp).split(""));
-      }
-      setSuccess("A new 6-digit verification code has been sent!");
-      setTimeout(() => setSuccess(null), 3500);
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message);
-        // If error message contains remaining seconds, sync the timer immediately
-        const match = err.message.match(/(\d+)\s*s/i);
-        if (match && match[1]) {
-          setTimer(parseInt(match[1], 10));
-        }
-      } else {
-        setError("Could not resend code. Please try again.");
-      }
+      const response = await authService.resendOtp(destination);
+      setOtp(["", "", "", "", "", ""]);
+      setTimer(Number(response.cooldownRemaining) || 45);
+      showToast("success", "A new verification code has been sent.");
+      focusInput(0);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not resend the code. Please try again.";
+      const wait = message.match(/(\\d+)\\s*s/i);
+      if (wait?.[1]) setTimer(Number(wait[1]));
+      showToast("error", message);
+    } finally {
+      setResending(false);
     }
   };
 
-  const isEmail = destination.includes("@");
-  const formattedDest = isEmail
+  const isEmail = channel === "email" || destination.includes("@");
+  const formattedDestination = isEmail
     ? destination
-    : destination.startsWith("+")
-    ? destination
-    : `+91 ${destination}`;
+    : destination.startsWith("+") ? destination : `+91 ${destination}`;
+
+  const toastStyles = toast?.type === "success"
+    ? "border-emerald-200 bg-white text-emerald-900"
+    : toast?.type === "warning"
+      ? "border-amber-200 bg-white text-amber-900"
+      : "border-rose-200 bg-white text-rose-900";
 
   return (
-    <div className="flex flex-col items-center w-full max-w-md mx-auto">
-      {/* Main Card */}
-      <div className="w-full bg-white rounded-3xl shadow-sm border border-slate-200/80 p-7 sm:p-8 flex flex-col items-center text-center">
-        {/* Brand Header */}
-        <div className="mb-5">
+    <div className="relative z-10 flex w-full flex-col items-center px-0">
+      {toast && (
+        <div
+          role={toast.type === "error" ? "alert" : "status"}
+          aria-live="polite"
+          className={`fixed left-4 right-4 top-4 z-[100] mx-auto flex w-auto max-w-[390px] items-center gap-3 rounded-2xl border px-4 py-3 shadow-xl sm:left-auto sm:right-6 sm:top-6 sm:w-[390px] ${toastStyles}`}
+        >
+          <span className={`material-symbols-outlined text-[22px] ${toast.type === "success" ? "text-emerald-600" : toast.type === "warning" ? "text-amber-600" : "text-rose-600"}`}>
+            {toast.type === "success" ? "check_circle" : toast.type === "warning" ? "warning" : "error"}
+          </span>
+          <span className="flex-1 text-sm font-semibold">{toast.message}</span>
+          <button type="button" aria-label="Dismiss notification" onClick={() => setToast(null)} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+            <span className="material-symbols-outlined text-[18px]">close</span>
+          </button>
+        </div>
+      )}
+
+      <section className="w-full max-w-md rounded-3xl border border-slate-200/80 bg-white p-5 text-center shadow-sm sm:p-8">
+        <div className="mb-5 flex justify-center">
           <StitchgridLogo size="md" />
         </div>
 
-        {/* Title & Subtitle */}
-        <h1 className="font-sans font-bold text-xl sm:text-2xl text-slate-900 tracking-tight">
+        <h1 className="font-sans text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
           {isEmail ? "Verify Your Email Address" : "Verify Your Mobile Number"}
         </h1>
-        <p className="text-xs text-slate-500 mt-1.5 max-w-xs">
+        <p className="mx-auto mt-2 max-w-xs text-xs leading-5 text-slate-500 sm:text-sm">
           We&apos;ve sent a 6-digit OTP to{" "}
-          <strong className="text-slate-800 font-mono font-bold">{formattedDest}</strong>
+          <strong className="break-all font-mono font-bold text-slate-800">{formattedDestination}</strong>
         </p>
 
-        {error && (
-          <div className="w-full mt-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center justify-center gap-2">
-            <span className="material-symbols-outlined text-[18px]">error</span>
-            <span>{error}</span>
-          </div>
-        )}
+        <div className="mt-7 flex w-full items-center justify-between gap-1.5 sm:gap-2.5" onPaste={handlePaste}>
+          {otp.map((digit, index) => (
+            <input
+              key={index}
+              id={`otp-input-${index}`}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete={index === 0 ? "one-time-code" : "off"}
+              aria-label={`OTP digit ${index + 1}`}
+              maxLength={6}
+              value={digit}
+              onChange={(event) => handleOtpChange(index, event.target.value)}
+              onKeyDown={(event) => handleKeyDown(index, event)}
+              className="h-12 min-w-0 max-w-[52px] flex-1 rounded-xl border border-slate-200 bg-white text-center font-mono text-xl font-bold text-slate-900 shadow-sm outline-none transition focus:border-[#4f14e2] focus:ring-4 focus:ring-[#4f14e2]/10 sm:h-14 sm:rounded-2xl sm:text-2xl"
+            />
+          ))}
+        </div>
 
-        {success && (
-          <div className="w-full mt-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-center gap-2">
-            <span className="material-symbols-outlined text-[18px]">check_circle</span>
-            <span>{success}</span>
-          </div>
-        )}
-
-        {/* Dev OTP Helper */}
-        {devOtp && (
-          <div className="w-full mt-4 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between">
-            <div className="flex items-center gap-1.5 font-mono font-bold">
-              <span className="material-symbols-outlined text-[16px] text-amber-600">bolt</span>
-              <span>Dev OTP: {devOtp}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setOtp(devOtp.split(""))}
-              className="text-[11px] font-bold text-amber-700 underline hover:text-amber-900"
-            >
-              Fill Code
+        <div className="mt-6 text-xs text-slate-500 sm:text-sm">
+          <span>Didn&apos;t receive the OTP? </span>
+          {timer > 0 ? (
+            <span className="font-semibold text-[#4f14e2]">Resend in {timer}s</span>
+          ) : (
+            <button type="button" onClick={handleResend} disabled={resending} className="font-bold text-[#4f14e2] hover:underline disabled:opacity-60">
+              {resending ? "Sending..." : "Resend Code"}
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
-        <form onSubmit={handleVerify} className="w-full flex flex-col gap-5 mt-6">
-          {/* 6 OTP Input Boxes */}
-          <div className="flex items-center justify-between gap-2 sm:gap-2.5 w-full on-paste" onPaste={handlePaste}>
-            {otp.map((digit, idx) => (
-              <input
-                key={idx}
-                id={`otp-input-${idx}`}
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={1}
-                value={digit}
-                onChange={(e) => handleOtpChange(idx, e.target.value)}
-                onKeyDown={(e) => handleKeyDown(idx, e)}
-                className="w-12 h-14 sm:w-13 sm:h-15 text-center text-xl font-bold font-mono rounded-2xl bg-white border border-slate-200/90 text-slate-900 focus:border-[#4f14e2] focus:ring-3 focus:ring-[#4f14e2]/15 focus:outline-none transition-all shadow-xs"
-              />
-            ))}
-          </div>
-
-          {/* Resend Prompt */}
-          <div className="text-xs text-slate-500">
-            <span>Didn&apos;t receive the OTP? </span>
-            {timer > 0 ? (
-              <span className="text-[#4f14e2] font-semibold">Resend in {timer}s</span>
-            ) : (
-              <button
-                type="button"
-                onClick={handleResend}
-                className="text-[#4f14e2] font-bold hover:underline"
-              >
-                Resend Code
-              </button>
-            )}
-          </div>
-
-          {/* Main Action Button */}
+        <form onSubmit={handleVerify} className="mt-7">
           <button
             type="submit"
             disabled={loading}
-            className="w-full h-12 rounded-xl bg-[#4f14e2] hover:bg-[#4310c4] active:bg-[#380da5] text-white text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#4f14e2] text-sm font-semibold text-white shadow-md transition hover:bg-[#4310c4] active:bg-[#380da5] disabled:cursor-not-allowed disabled:opacity-60 sm:h-14"
           >
-            <span>
-              {loading
-                ? "Verifying..."
-                : mode === "login"
-                ? "Verify & Sign In"
-                : "Verify & Create Account"}
-            </span>
+            <span>{loading ? "Verifying..." : mode === "login" ? "Verify & Sign In" : "Verify & Create Account"}</span>
             <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
           </button>
         </form>
-      </div>
+      </section>
 
-      {/* Step Indicator Pill */}
-      <div className="mt-5 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200/80 shadow-xs">
-        <span className="w-5 h-5 rounded-full bg-[#4f14e2] text-white text-[11px] font-bold flex items-center justify-center">
-          4
-        </span>
+      <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-slate-100 px-3.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#4f14e2] text-[11px] font-bold text-white">4</span>
         <span className="font-semibold text-slate-800">OTP Verification</span>
       </div>
     </div>
@@ -238,9 +213,7 @@ function VerifyOtpContent() {
 
 export default function VerifyOtpPage() {
   return (
-    <Suspense
-      fallback={<div className="text-center p-8 text-xs font-mono text-slate-500">Loading verification...</div>}
-    >
+    <Suspense fallback={<div className="p-8 text-center text-xs text-slate-500">Loading verification...</div>}>
       <VerifyOtpContent />
     </Suspense>
   );

@@ -22,6 +22,8 @@ const schema = z.object({
   SMTP_FROM: z.string().default("STITCHGRID <no-reply@example.com>"),
   SMS_PROVIDER: z.string().optional(),
   SMS_API_KEY: z.string().optional(),
-  SMS_SENDER_ID: z.string().optional()
+  SMS_SENDER_ID: z.string().optional(),
+  SMS_TEMPLATE_ID: z.string().optional(),
+  GOOGLE_CLIENT_ID: z.string().optional()
 });
 export const env = schema.parse(process.env);

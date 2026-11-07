@@ -22,7 +22,7 @@ export function SubmitQuoteModal({
   const [unitPrice, setUnitPrice] = useState("185");
   const [leadTimeDays, setLeadTimeDays] = useState("21");
   const [sampleDays, setSampleDays] = useState("7");
-  const [terms, setTerms] = useState("50% Escrow deposit on PO confirmation, 50% on final AQL 2.5 pass");
+  const [terms, setTerms] = useState("50% payment on PO confirmation, 50% after final quality approval");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -161,7 +161,7 @@ export function SubmitQuoteModal({
 
         <div>
           <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-            Commercial Terms &amp; Escrow Milestones
+            Commercial Terms &amp; Payment Milestones
           </label>
           <textarea
             rows={2}

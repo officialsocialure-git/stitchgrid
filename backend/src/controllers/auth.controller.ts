@@ -1,12 +1,13 @@
 import { Request, Response, NextFunction } from "express";
+import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { prisma } from "../config/prisma";
 import { env } from "../config/env";
 import { AppError, sendOk } from "../utils/http";
-import { issueOtp, verifyOtp } from "../services/otp";
-import { sendEmailOtp, sendSmsOtp } from "../services/messaging";
+import { issueOtp, invalidateOtp, verifyOtp } from "../services/otp";
+import { assertOtpDeliveryConfigured, sendEmailOtp, sendSmsOtp } from "../services/messaging";
 import { audit } from "../services/audit";
 
 const signupSchema = z.object({
@@ -47,6 +48,7 @@ export async function signup(req: Request, res: Response, next: NextFunction) {
     const input = signupSchema.parse(req.body);
     const normalizedEmail = input.email && input.email.trim() ? input.email.trim().toLowerCase() : undefined;
     const rawPhone = input.phone && input.phone.trim() ? input.phone.trim().replace(/\s+/g, "") : undefined;
+    assertOtpDeliveryConfigured(normalizedEmail ? "email" : "sms");
 
     if (normalizedEmail && (await prisma.user.findUnique({ where: { email: normalizedEmail } }))) {
       throw new AppError(409, "Email already registered");
@@ -129,19 +131,24 @@ export async function signup(req: Request, res: Response, next: NextFunction) {
       });
     }
 
-    const destination = input.email ?? input.phone!;
+    const destination = normalizedEmail ?? rawPhone!;
     const otpRes = await issueOtp(destination, { allowExisting: true });
     if (!otpRes.isExisting && otpRes.otp) {
-      if (input.email) await sendEmailOtp(input.email, otpRes.otp); else await sendSmsOtp(input.phone!, otpRes.otp);
+      try {
+        if (normalizedEmail) await sendEmailOtp(normalizedEmail, otpRes.otp);
+        else await sendSmsOtp(rawPhone!, otpRes.otp);
+      } catch (error) {
+        await invalidateOtp(destination);
+        throw error;
+      }
     }
     await audit("AUTH_SIGNUP", "User", user.id, user.id, organization.id);
-    const shouldProvideDevOtp = !env.SMTP_HOST || env.NODE_ENV !== "production";
     return sendOk(res, {
       userId: user.id,
       organizationId: organization.id,
-      verificationChannel: input.email ? "email" : "sms",
+      verificationChannel: normalizedEmail ? "email" : "sms",
+      destination,
       message: "Account created. Verify the OTP to continue.",
-      devOtp: shouldProvideDevOtp && otpRes.otp ? otpRes.otp : undefined,
       cooldownRemaining: otpRes.cooldownRemaining
     }, 201);
   } catch (e) { next(e); }
@@ -183,11 +190,17 @@ export async function login(req: Request, res: Response, next: NextFunction) {
 
     const destination = isEmail ? user.email : user.phone;
     if (!destination) throw new AppError(400, "This login channel is not registered");
+    assertOtpDeliveryConfigured(isEmail ? "email" : "sms");
     const otpRes = await issueOtp(destination, { allowExisting: true });
     if (!otpRes.isExisting && otpRes.otp) {
-      if (isEmail) await sendEmailOtp(destination, otpRes.otp); else await sendSmsOtp(destination, otpRes.otp);
+      try {
+        if (isEmail) await sendEmailOtp(destination, otpRes.otp);
+        else await sendSmsOtp(destination, otpRes.otp);
+      } catch (error) {
+        await invalidateOtp(destination);
+        throw error;
+      }
     }
-    const shouldProvideDevOtp = !env.SMTP_HOST || env.NODE_ENV !== "production";
     return sendOk(res, {
       challengeId: user.id,
       userId: user.id,
@@ -196,7 +209,6 @@ export async function login(req: Request, res: Response, next: NextFunction) {
       message: otpRes.isExisting
         ? "Verification code already active. Enter code to continue."
         : "OTP sent. Verify to complete login.",
-      devOtp: shouldProvideDevOtp && otpRes.otp ? otpRes.otp : undefined,
       cooldownRemaining: otpRes.cooldownRemaining
     });
   } catch (e) { next(e); }
@@ -227,8 +239,12 @@ export async function verifyLoginOtp(req: Request, res: Response, next: NextFunc
       }
     });
     if (!user || !user.isActive) throw new AppError(401, "Invalid login challenge");
-    const destination = input.destination || (user.email ?? user.phone);
-    if (!destination) throw new AppError(400, "OTP destination not found for this account");
+    const registeredDestinations = [user.email, user.phone].filter((value): value is string => Boolean(value));
+    const requestedDestination = input.destination?.trim();
+    const destination = requestedDestination
+      ? registeredDestinations.find(value => value.toLowerCase() === requestedDestination.toLowerCase())
+      : (user.email ?? user.phone);
+    if (!destination) throw new AppError(403, "OTP destination does not belong to this account", "OTP_DESTINATION_MISMATCH");
     await verifyOtp(destination, input.otp);
 
     const isEmail = destination.includes("@");
@@ -284,16 +300,18 @@ export async function switchContext(req: Request, res: Response, next: NextFunct
 export async function resendOtp(req: Request, res: Response, next: NextFunction) {
   try {
     const input = z.object({ destination: z.string().min(3) }).parse(req.body);
+    const otpChannel = channel(input.destination) === "email" ? "email" : "sms";
+    assertOtpDeliveryConfigured(otpChannel);
     const otpRes = await issueOtp(input.destination, { allowExisting: false });
-    if (channel(input.destination) === "email") {
-      await sendEmailOtp(input.destination, otpRes.otp);
-    } else {
-      await sendSmsOtp(input.destination, otpRes.otp);
+    try {
+      if (otpChannel === "email") await sendEmailOtp(input.destination, otpRes.otp);
+      else await sendSmsOtp(input.destination, otpRes.otp);
+    } catch (error) {
+      await invalidateOtp(input.destination);
+      throw error;
     }
-    const shouldProvideDevOtp = !env.SMTP_HOST || env.NODE_ENV !== "production";
     return sendOk(res, {
       message: "A new 6-digit verification code has been sent.",
-      devOtp: shouldProvideDevOtp ? otpRes.otp : undefined,
       cooldownRemaining: otpRes.cooldownRemaining
     });
   } catch (e) { next(e); }
@@ -317,110 +335,153 @@ export async function me(req: Request, res: Response, next: NextFunction) {
 
 export async function googleLogin(req: Request, res: Response, next: NextFunction) {
   try {
-    const input = z.object({
-      credential: z.string().optional(),
-      email: z.string().email().optional(),
-      name: z.string().optional(),
-      googleId: z.string().optional()
-    }).refine(d => !!(d.credential || d.email), "Credential or email is required")
-      .parse(req.body);
-
-    let email = input.email ? input.email.trim().toLowerCase() : "";
-    let fullName = input.name || "";
-
-    if (input.credential) {
-      try {
-        const decoded = jwt.decode(input.credential) as any;
-        if (decoded?.email) {
-          email = decoded.email.trim().toLowerCase();
-          fullName = decoded.name || fullName;
-        }
-      } catch {
-        // fallback to provided email
-      }
+    const { credential } = z.object({ credential: z.string().min(20) }).parse(req.body);
+    if (!env.GOOGLE_CLIENT_ID) {
+      throw new AppError(503, "Google sign-in is not configured. Please contact the administrator.", "GOOGLE_NOT_CONFIGURED");
     }
 
-    if (!email) {
-      throw new AppError(400, "Unable to extract email from Google profile", "GOOGLE_AUTH_FAILED");
+    // Verify the Google ID token with Google's token-info endpoint; never trust a client-supplied email.
+    const verificationResponse = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`,
+      { method: "GET", headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8000) }
+    );
+    if (!verificationResponse.ok) {
+      throw new AppError(401, "Google sign-in could not be verified. Please try again.", "GOOGLE_AUTH_FAILED");
     }
 
-    let user: any = await prisma.user.findUnique({
+    const profile = await verificationResponse.json() as {
+      aud?: string; iss?: string; exp?: string; email?: string; email_verified?: string;
+      name?: string; sub?: string;
+    };
+    const validIssuer = profile.iss === "accounts.google.com" || profile.iss === "https://accounts.google.com";
+    const expiresAt = Number(profile.exp || 0);
+    if (
+      profile.aud !== env.GOOGLE_CLIENT_ID ||
+      !validIssuer ||
+      !profile.sub ||
+      !profile.email ||
+      profile.email_verified !== "true" ||
+      !Number.isFinite(expiresAt) ||
+      expiresAt <= Math.floor(Date.now() / 1000)
+    ) {
+      throw new AppError(401, "Google account verification failed. Use a verified Google account.", "GOOGLE_AUTH_FAILED");
+    }
+
+    const email = profile.email.trim().toLowerCase();
+    const fullName = (profile.name || email.split("@")[0] || "User").trim().slice(0, 100);
+    let user = await prisma.user.findUnique({
       where: { email },
       include: {
         memberships: {
           where: { isActive: true },
-          include: {
-            organization: {
-              include: {
-                supplierProfile: true
-              }
-            }
-          }
+          include: { organization: { include: { supplierProfile: true } } }
         }
       }
     });
 
     if (!user) {
-      const generatedName = fullName || email.split("@")[0] || "User";
-      const randomPassword = await bcrypt.hash(Math.random().toString(36) + Date.now(), 10);
-      const newUser = await prisma.user.create({
-        data: {
-          fullName: generatedName,
-          email,
-          passwordHash: randomPassword,
-          emailVerified: true,
-          isActive: true
-        }
-      });
-
-      const org = await prisma.organization.create({
-        data: {
-          name: `${generatedName}'s Enterprise`,
-          businessType: "Garments & Textiles",
-          verificationStatus: "APPROVED"
-        }
-      });
-
-      const membership = await prisma.organizationMember.create({
-        data: {
-          userId: newUser.id,
-          organizationId: org.id,
-          role: "BUYER"
-        },
+      const randomPassword = await bcrypt.hash(`${randomUUID()}${randomUUID()}`, 12);
+      user = await prisma.user.create({
+        data: { fullName, email, passwordHash: randomPassword, emailVerified: true, isActive: true },
         include: {
-          organization: {
-            include: {
-              supplierProfile: true
-            }
+          memberships: {
+            where: { isActive: true },
+            include: { organization: { include: { supplierProfile: true } } }
           }
         }
       });
-
-      user = {
-        ...newUser,
-        memberships: [membership]
-      };
     } else {
+      if (!user.isActive) {
+        throw new AppError(403, "This account is inactive. Please contact STITCHGRID support.", "ACCOUNT_INACTIVE");
+      }
       if (!user.emailVerified) {
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { emailVerified: true }
-        });
+        await prisma.user.update({ where: { id: user.id }, data: { emailVerified: true } });
       }
     }
 
-    if (!user) throw new AppError(500, "User not found or failed to create");
-
-    const membership = user.memberships && user.memberships.length > 0 ? user.memberships[0] : null;
+    const membership = user.memberships[0] || null;
     const accessToken = issueAccessToken(user.id, membership?.organizationId, membership?.role);
     await audit("AUTH_LOGIN_GOOGLE", "User", user.id, user.id, membership?.organizationId);
 
     return sendOk(res, {
       accessToken,
+      requiresOnboarding: !membership,
       user: { id: user.id, fullName: user.fullName, email: user.email, phone: user.phone },
       activeMembership: membership ? { organizationId: membership.organizationId, role: membership.role, organization: membership.organization } : null,
-      memberships: user.memberships.map((m: any) => ({ organizationId: m.organizationId, role: m.role, organization: m.organization }))
+      memberships: user.memberships.map((m) => ({ organizationId: m.organizationId, role: m.role, organization: m.organization }))
     });
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function completeGoogleOnboarding(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = z.object({
+      organizationName: z.string().trim().min(2).max(150),
+      accountType: z.enum(["BUYER", "SUPPLIER"]),
+      legalName: z.string().trim().max(150).optional(),
+      businessType: z.string().trim().max(80).optional(),
+      taxId: z.string().trim().max(30).optional(),
+      address: z.string().trim().max(300).optional(),
+      city: z.string().trim().max(100).optional(),
+      country: z.string().trim().max(80).default("India"),
+      description: z.string().trim().max(2000).optional(),
+      yearsInBusiness: z.coerce.number().int().min(0).max(200).optional(),
+      productionCapacity: z.coerce.number().int().min(0).optional(),
+      categories: z.array(z.string().trim().min(1).max(60)).max(30).optional()
+    }).parse(req.body);
+
+    const userId = req.auth!.userId;
+    const existingMembership = await prisma.organizationMember.findFirst({
+      where: { userId, isActive: true }
+    });
+    if (existingMembership) {
+      throw new AppError(409, "Your organization is already set up. Please continue to your dashboard.", "ONBOARDING_ALREADY_COMPLETED");
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const organization = await tx.organization.create({
+        data: {
+          name: input.organizationName,
+          legalName: input.legalName || undefined,
+          businessType: input.businessType || (input.accountType === "SUPPLIER" ? "Garments & Textiles" : "Brand / Buyer"),
+          taxId: input.taxId || undefined,
+          address: input.address || undefined,
+          city: input.city || undefined,
+          country: input.country
+        }
+      });
+      const membership = await tx.organizationMember.create({
+        data: { userId, organizationId: organization.id, role: input.accountType },
+        include: { organization: { include: { supplierProfile: true } } }
+      });
+      if (input.accountType === "SUPPLIER") {
+        await tx.supplierProfile.create({
+          data: {
+            organizationId: organization.id,
+            description: input.description || undefined,
+            yearsInBusiness: input.yearsInBusiness,
+            productionCapacity: input.productionCapacity,
+            categories: input.categories?.length
+              ? { create: input.categories.map((category) => ({ category })) }
+              : undefined
+          }
+        });
+      }
+      return { organization, membership };
+    });
+
+    const accessToken = issueAccessToken(userId, result.membership.organizationId, result.membership.role);
+    await audit("AUTH_GOOGLE_ONBOARDING_COMPLETED", "Organization", result.organization.id, userId, result.organization.id);
+    return sendOk(res, {
+      accessToken,
+      activeMembership: {
+        organizationId: result.membership.organizationId,
+        role: result.membership.role,
+        organization: result.membership.organization
+      }
+    }, 201);
   } catch (e) {
     next(e);
   }

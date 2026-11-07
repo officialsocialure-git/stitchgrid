@@ -139,7 +139,7 @@ export function Sidebar() {
             </div>
             <div className="flex flex-col min-w-0">
               <span className="text-xs font-bold text-slate-900 truncate">GST &amp; Tirupur Verified</span>
-              <span className="text-[10px] text-slate-500 font-medium">B2B Escrow Protected</span>
+              <span className="text-[10px] text-slate-500 font-medium">B2B Payments Protected</span>
             </div>
           </div>
         )}

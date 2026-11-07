@@ -109,7 +109,7 @@ function QuotationsContent() {
               totalAmount: total || 0,
               leadTime: q.leadTimeDays || 0,
               sampleTime: q.sampleLeadDays || 7,
-              paymentTerms: q.terms || "Escrow Protected",
+              paymentTerms: q.terms || "Secure Payment Protected",
               fabricSpec: rfq.fabricSpec || rfq.title || "Garment Specification",
               moq: q.moq || 300,
               rating: 5.0,
