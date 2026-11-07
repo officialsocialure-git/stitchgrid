@@ -3,9 +3,85 @@ import Redis from "ioredis";
 import { env } from "../config/env";
 import { AppError } from "../utils/http";
 
-const redis = env.REDIS_URL ? new Redis(env.REDIS_URL) : null;
+let redis: Redis | null = null;
+
+if (env.REDIS_URL && env.REDIS_URL.trim()) {
+  try {
+    redis = new Redis(env.REDIS_URL.trim(), {
+      maxRetriesPerRequest: 2,
+      retryStrategy(times) {
+        if (times > 5) return null; // stop retry loop after 5 attempts, memory fallback takes over
+        return Math.min(times * 200, 2000);
+      },
+      lazyConnect: false,
+    });
+
+    redis.on("connect", () => {
+      console.log("[REDIS] Successfully connected to Redis OTP store");
+    });
+
+    redis.on("error", (err) => {
+      console.error("[REDIS ERROR]", err.message);
+    });
+  } catch (err: any) {
+    console.error("[REDIS INIT ERROR] Failed to instantiate Redis client:", err?.message);
+    redis = null;
+  }
+}
+
 const localOtp = new Map<string, { hash: string; expires: number; attempts: number; sentAt: number }>();
 const hashOtp = (otp: string) => crypto.createHash("sha256").update(otp).digest("hex");
+
+async function getStoredRecord(key: string): Promise<{ hash: string; expires: number; attempts: number; sentAt: number } | null> {
+  if (redis) {
+    try {
+      const raw = await redis.get(key);
+      if (raw) {
+        return typeof raw === "string" ? JSON.parse(raw) : raw;
+      }
+    } catch (err: any) {
+      console.warn("[REDIS GET ERROR - USING MEMORY]", err.message);
+    }
+  }
+  return localOtp.get(key) || null;
+}
+
+async function getStoredSentTime(key: string): Promise<number | null> {
+  if (redis) {
+    try {
+      const sent = await redis.get(`${key}:sent`);
+      if (sent) return Number(sent);
+    } catch (err: any) {
+      console.warn("[REDIS SENT TIME ERROR - USING MEMORY]", err.message);
+    }
+  }
+  const mem = localOtp.get(key);
+  return mem ? mem.sentAt : null;
+}
+
+async function saveRecord(key: string, record: { hash: string; expires: number; attempts: number; sentAt: number }, ttlSeconds: number) {
+  localOtp.set(key, record);
+  if (redis) {
+    try {
+      await redis.set(key, JSON.stringify(record), "EX", ttlSeconds);
+      await redis.set(`${key}:sent`, record.sentAt.toString(), "EX", env.OTP_RESEND_SECONDS);
+    } catch (err: any) {
+      console.warn("[REDIS SET ERROR - STORED IN MEMORY]", err.message);
+    }
+  }
+}
+
+async function removeRecord(key: string) {
+  localOtp.delete(key);
+  if (redis) {
+    try {
+      await redis.del(key);
+      await redis.del(`${key}:sent`);
+    } catch (err: any) {
+      console.warn("[REDIS DEL ERROR]", err.message);
+    }
+  }
+}
 
 export interface IssueOtpResult {
   otp: string;
@@ -22,15 +98,9 @@ export async function issueOtp(
   const cooldownMs = env.OTP_RESEND_SECONDS * 1000;
 
   // Retrieve any existing active record
-  const rawRecord = redis ? await redis.get(key) : localOtp.get(key);
-  const existingRecord = rawRecord
-    ? typeof rawRecord === "string"
-      ? JSON.parse(rawRecord)
-      : rawRecord
-    : null;
-
-  const previousSent = redis ? await redis.get(`${key}:sent`) : localOtp.get(key)?.sentAt;
-  const elapsed = previousSent ? now - Number(previousSent) : Infinity;
+  const existingRecord = await getStoredRecord(key);
+  const previousSent = await getStoredSentTime(key);
+  const elapsed = previousSent ? now - previousSent : Infinity;
   const inCooldown = elapsed < cooldownMs;
   const cooldownRemaining = inCooldown ? Math.max(1, Math.ceil((cooldownMs - elapsed) / 1000)) : 0;
 
@@ -67,12 +137,7 @@ export async function issueOtp(
     sentAt: now,
   };
 
-  if (redis) {
-    await redis.set(key, JSON.stringify(record), "EX", env.OTP_TTL_MINUTES * 60);
-    await redis.set(`${key}:sent`, now.toString(), "EX", env.OTP_RESEND_SECONDS);
-  } else {
-    localOtp.set(key, record);
-  }
+  await saveRecord(key, record, env.OTP_TTL_MINUTES * 60);
 
   return {
     otp,
@@ -83,31 +148,39 @@ export async function issueOtp(
 
 export async function invalidateOtp(destination: string) {
   const key = `otp:${destination.toLowerCase().trim()}`;
-  if (redis) {
-    await redis.del(key);
-    await redis.del(`${key}:sent`);
-  } else {
-    localOtp.delete(key);
-  }
+  await removeRecord(key);
 }
 
 export async function verifyOtp(destination: string, otp: string) {
   const key = `otp:${destination.toLowerCase().trim()}`;
-  const raw = redis ? await redis.get(key) : localOtp.get(key);
-  if (!raw) throw new AppError(400, "OTP missing or expired", "OTP_EXPIRED");
-  const record = typeof raw === "string" ? JSON.parse(raw) : raw;
-  if (record.expires < Date.now()) throw new AppError(400, "OTP expired", "OTP_EXPIRED");
-  if (record.attempts >= env.OTP_MAX_ATTEMPTS) throw new AppError(429, "Too many failed OTP attempts. Please request a new code.", "OTP_LOCKED");
-  if (record.hash !== hashOtp(otp)) {
+  const record = await getStoredRecord(key);
+
+  if (!record) {
+    throw new AppError(400, "OTP missing or expired. Please request a new code.", "OTP_EXPIRED");
+  }
+
+  if (record.expires < Date.now()) {
+    await removeRecord(key);
+    throw new AppError(400, "OTP expired. Please request a new code.", "OTP_EXPIRED");
+  }
+
+  if (record.attempts >= env.OTP_MAX_ATTEMPTS) {
+    await removeRecord(key);
+    throw new AppError(429, "Too many failed OTP attempts. Please request a new code.", "OTP_LOCKED");
+  }
+
+  if (record.hash !== hashOtp(otp.trim())) {
     record.attempts++;
-    if (redis) await redis.set(key, JSON.stringify(record), "EX", Math.max(1, Math.ceil((record.expires - Date.now()) / 1000)));
-    else localOtp.set(key, record);
-    throw new AppError(400, "Incorrect 6-digit OTP code", "OTP_INVALID");
+    const ttlSeconds = Math.max(1, Math.ceil((record.expires - Date.now()) / 1000));
+    await saveRecord(key, record, ttlSeconds);
+    const remaining = env.OTP_MAX_ATTEMPTS - record.attempts;
+    throw new AppError(
+      400,
+      `Incorrect 6-digit OTP code. ${remaining > 0 ? `${remaining} attempt(s) remaining.` : "Please request a new code."}`,
+      "OTP_INVALID"
+    );
   }
-  if (redis) {
-    await redis.del(key);
-    await redis.del(`${key}:sent`);
-  } else {
-    localOtp.delete(key);
-  }
+
+  // Code verified successfully: invalidate immediately to prevent replay attacks
+  await removeRecord(key);
 }

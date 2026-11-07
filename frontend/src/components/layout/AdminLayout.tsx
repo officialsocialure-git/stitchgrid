@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useNotifications } from "@/hooks/useNotifications";
 import {
   Bell, ChevronDown, FileText, Headset, Home, Layers3, Menu, Package,
-  Search, Settings, ShieldCheck, Users, X
+  Search, Settings, ShieldCheck, Users, Wallet, X
 } from "lucide-react";
 
 const links = [

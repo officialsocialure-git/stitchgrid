@@ -44,17 +44,27 @@ function issueAccessToken(userId: string, organizationId?: string, role?: string
 function channel(identifier: string) { return identifier.includes("@") ? "email" : "phone"; }
 
 export async function signup(req: Request, res: Response, next: NextFunction) {
+  let createdUserId: string | null = null;
+  let createdOrgId: string | null = null;
+  let destination = "";
+
   try {
     const input = signupSchema.parse(req.body);
     const normalizedEmail = input.email && input.email.trim() ? input.email.trim().toLowerCase() : undefined;
     const rawPhone = input.phone && input.phone.trim() ? input.phone.trim().replace(/\s+/g, "") : undefined;
     assertOtpDeliveryConfigured(normalizedEmail ? "email" : "sms");
+    destination = (normalizedEmail ?? rawPhone)!;
 
-    if (normalizedEmail && (await prisma.user.findUnique({ where: { email: normalizedEmail } }))) {
-      throw new AppError(409, "Email already registered");
+    // 1. Check for existing account
+    let existingUser: any = null;
+    if (normalizedEmail) {
+      existingUser = await prisma.user.findUnique({
+        where: { email: normalizedEmail },
+        include: { memberships: true },
+      });
     }
 
-    if (rawPhone) {
+    if (!existingUser && rawPhone) {
       const digitsOnly = rawPhone.replace(/\D/g, "");
       const phoneVariants = Array.from(new Set([
         rawPhone,
@@ -65,19 +75,54 @@ export async function signup(req: Request, res: Response, next: NextFunction) {
         `+${digitsOnly}`
       ].filter(Boolean) as string[]));
 
-      const existingPhone = await prisma.user.findFirst({
-        where: { OR: phoneVariants.map(p => ({ phone: p })) }
+      existingUser = await prisma.user.findFirst({
+        where: { OR: phoneVariants.map(p => ({ phone: p })) },
+        include: { memberships: true },
       });
-      if (existingPhone) throw new AppError(409, "Phone already registered");
+    }
+
+    if (existingUser) {
+      // If user has already verified their email or phone, prevent duplicate signup
+      if (existingUser.emailVerified || existingUser.phoneVerified) {
+        throw new AppError(409, "This account is already registered. Please sign in instead.", "ACCOUNT_ALREADY_REGISTERED");
+      }
+
+      // If user exists but is UNVERIFIED (e.g. prior signup failed during OTP delivery):
+      // Clean up the incomplete unverified account so this fresh signup succeeds cleanly!
+      console.warn(`[SIGNUP] Found incomplete unverified user ${existingUser.id} for ${destination}. Cleaning up prior draft.`);
+      try {
+        for (const m of existingUser.memberships || []) {
+          const memberCount = await prisma.organizationMember.count({
+            where: { organizationId: m.organizationId },
+          });
+          if (memberCount <= 1) {
+            await prisma.supplierProfile.deleteMany({ where: { organizationId: m.organizationId } }).catch(() => {});
+            await prisma.organizationMember.deleteMany({ where: { organizationId: m.organizationId } }).catch(() => {});
+            await prisma.organization.delete({ where: { id: m.organizationId } }).catch(() => {});
+          }
+        }
+        await prisma.organizationMember.deleteMany({ where: { userId: existingUser.id } }).catch(() => {});
+        await prisma.user.delete({ where: { id: existingUser.id } }).catch(() => {});
+      } catch (cleanupErr) {
+        console.warn("[SIGNUP DRAFT CLEANUP WARNING]", cleanupErr);
+      }
     }
     
-    const user = await prisma.user.create({ data: {
-      fullName: input.fullName.trim(),
-      email: normalizedEmail,
-      phone: rawPhone,
-      passwordHash: await bcrypt.hash(input.password, 12)
-    }});
+    // 2. Create the User record
+    const user = await prisma.user.create({
+      data: {
+        fullName: input.fullName.trim(),
+        email: normalizedEmail,
+        phone: rawPhone,
+        passwordHash: await bcrypt.hash(input.password, 12),
+        emailVerified: false,
+        phoneVerified: false,
+        isActive: true,
+      },
+    });
+    createdUserId = user.id;
 
+    // 3. Create Organization & Memberships
     const taxId = input.gstNumber || input.taxId || undefined;
     const city = input.factoryLocation || input.city || undefined;
     const address = input.serviceableRegions || input.address || undefined;
@@ -93,9 +138,16 @@ export async function signup(req: Request, res: Response, next: NextFunction) {
         country: input.country || "India",
       },
     });
+    createdOrgId = organization.id;
 
     const roles = input.accountType === "BOTH" ? ["BUYER", "SUPPLIER"] : [input.accountType];
-    await prisma.organizationMember.createMany({ data: roles.map(role => ({ userId: user.id, organizationId: organization.id, role: role as "BUYER" | "SUPPLIER" })) });
+    await prisma.organizationMember.createMany({
+      data: roles.map(role => ({
+        userId: user.id,
+        organizationId: organization.id,
+        role: role as "BUYER" | "SUPPLIER",
+      })),
+    });
     
     if (roles.includes("SUPPLIER")) {
       const allCategories = Array.from(new Set([
@@ -131,25 +183,52 @@ export async function signup(req: Request, res: Response, next: NextFunction) {
       });
     }
 
-    const destination = normalizedEmail ?? rawPhone!;
+    // 4. Issue and deliver OTP
     const otpRes = await issueOtp(destination, { allowExisting: true });
+    let deliveryResult: any = null;
+
     if (!otpRes.isExisting && otpRes.otp) {
       try {
-        if (normalizedEmail) await sendEmailOtp(normalizedEmail, otpRes.otp);
-        else await sendSmsOtp(rawPhone!, otpRes.otp);
-      } catch (error) {
+        if (normalizedEmail) {
+          deliveryResult = await sendEmailOtp(normalizedEmail, otpRes.otp);
+        } else {
+          deliveryResult = await sendSmsOtp(rawPhone!, otpRes.otp);
+        }
+      } catch (deliveryError) {
         await invalidateOtp(destination);
-        throw error;
+
+        // ATOMIC ROLLBACK: Purge unverified user & organization so database is never left in an incomplete state
+        console.error(`[SIGNUP ERROR] OTP delivery failed for ${destination}. Rolling back created account records.`);
+        try {
+          if (createdOrgId) {
+            await prisma.supplierProfile.deleteMany({ where: { organizationId: createdOrgId } }).catch(() => {});
+            await prisma.organizationMember.deleteMany({ where: { organizationId: createdOrgId } }).catch(() => {});
+            await prisma.organization.delete({ where: { id: createdOrgId } }).catch(() => {});
+          }
+          if (createdUserId) {
+            await prisma.organizationMember.deleteMany({ where: { userId: createdUserId } }).catch(() => {});
+            await prisma.user.delete({ where: { id: createdUserId } }).catch(() => {});
+          }
+        } catch (rollbackErr) {
+          console.error("[SIGNUP ROLLBACK CLEANUP ERROR]", rollbackErr);
+        }
+
+        throw deliveryError;
       }
     }
+
     await audit("AUTH_SIGNUP", "User", user.id, user.id, organization.id);
     return sendOk(res, {
       userId: user.id,
       organizationId: organization.id,
       verificationChannel: normalizedEmail ? "email" : "sms",
       destination,
-      message: "Account created. Verify the OTP to continue.",
-      cooldownRemaining: otpRes.cooldownRemaining
+      message: deliveryResult?.devOtp
+        ? `Account created. (Testing mode: OTP is ${deliveryResult.devOtp})`
+        : "Account created. Verify the OTP to continue.",
+      cooldownRemaining: otpRes.cooldownRemaining,
+      ...(deliveryResult?.devOtp ? { devOtp: deliveryResult.devOtp } : {}),
+      ...(deliveryResult?.sandboxNotice ? { sandboxNotice: deliveryResult.sandboxNotice } : {}),
     }, 201);
   } catch (e) { next(e); }
 }
@@ -192,10 +271,11 @@ export async function login(req: Request, res: Response, next: NextFunction) {
     if (!destination) throw new AppError(400, "This login channel is not registered");
     assertOtpDeliveryConfigured(isEmail ? "email" : "sms");
     const otpRes = await issueOtp(destination, { allowExisting: true });
+    let deliveryResult: any = null;
     if (!otpRes.isExisting && otpRes.otp) {
       try {
-        if (isEmail) await sendEmailOtp(destination, otpRes.otp);
-        else await sendSmsOtp(destination, otpRes.otp);
+        if (isEmail) deliveryResult = await sendEmailOtp(destination, otpRes.otp);
+        else deliveryResult = await sendSmsOtp(destination, otpRes.otp);
       } catch (error) {
         await invalidateOtp(destination);
         throw error;
@@ -208,8 +288,12 @@ export async function login(req: Request, res: Response, next: NextFunction) {
       verificationChannel: isEmail ? "email" : "sms",
       message: otpRes.isExisting
         ? "Verification code already active. Enter code to continue."
+        : deliveryResult?.devOtp
+        ? `OTP sent. (Testing mode: OTP is ${deliveryResult.devOtp})`
         : "OTP sent. Verify to complete login.",
-      cooldownRemaining: otpRes.cooldownRemaining
+      cooldownRemaining: otpRes.cooldownRemaining,
+      ...(deliveryResult?.devOtp ? { devOtp: deliveryResult.devOtp } : {}),
+      ...(deliveryResult?.sandboxNotice ? { sandboxNotice: deliveryResult.sandboxNotice } : {}),
     });
   } catch (e) { next(e); }
 }
@@ -303,16 +387,21 @@ export async function resendOtp(req: Request, res: Response, next: NextFunction)
     const otpChannel = channel(input.destination) === "email" ? "email" : "sms";
     assertOtpDeliveryConfigured(otpChannel);
     const otpRes = await issueOtp(input.destination, { allowExisting: false });
+    let deliveryResult: any = null;
     try {
-      if (otpChannel === "email") await sendEmailOtp(input.destination, otpRes.otp);
-      else await sendSmsOtp(input.destination, otpRes.otp);
+      if (otpChannel === "email") deliveryResult = await sendEmailOtp(input.destination, otpRes.otp);
+      else deliveryResult = await sendSmsOtp(input.destination, otpRes.otp);
     } catch (error) {
       await invalidateOtp(input.destination);
       throw error;
     }
     return sendOk(res, {
-      message: "A new 6-digit verification code has been sent.",
-      cooldownRemaining: otpRes.cooldownRemaining
+      message: deliveryResult?.devOtp
+        ? `A new verification code has been sent. (Testing mode: OTP is ${deliveryResult.devOtp})`
+        : "A new 6-digit verification code has been sent.",
+      cooldownRemaining: otpRes.cooldownRemaining,
+      ...(deliveryResult?.devOtp ? { devOtp: deliveryResult.devOtp } : {}),
+      ...(deliveryResult?.sandboxNotice ? { sandboxNotice: deliveryResult.sandboxNotice } : {}),
     });
   } catch (e) { next(e); }
 }
