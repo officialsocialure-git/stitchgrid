@@ -64,9 +64,9 @@ All routes below require a valid JWT with an active `ADMIN` membership.
 - GET /api/admin/audit-logs
 
 ### Admin setup and schema update
-1. From `backend`, apply the additive catalogue moderation migration with `npx prisma migrate deploy`.
-2. Run `npx prisma generate`.
-3. Create a normal user account, then edit `prisma/admin-bootstrap.sql` and replace the email placeholder. Run that SQL only from a trusted database session to grant the `ADMIN` membership. Public signup intentionally does not allow users to select ADMIN.
+- **Render production:** the start command runs `npx prisma migrate deploy` before starting the API, so committed migrations are applied during service startup. Confirm the Render `DATABASE_URL` points to the intended production database and keep a backup before the first deployment with schema changes.
+- **Local development:** from `backend`, run `npx prisma migrate deploy` and then `npx prisma generate` after reviewing your local `DATABASE_URL`.
+- Create a normal user account, then edit `prisma/admin-bootstrap.sql` and replace the email placeholder. Run that SQL only from a trusted database session to grant the `ADMIN` membership. Public signup intentionally does not allow users to select ADMIN.
 
 ## Production limitations / next integrations
 Payment provider checkout and signed webhook verification are not enabled. Do not treat this service as a payment processor or money-holding service. Add official provider SDK and signature validation before production. Also finish real SMS adapter, password reset, refresh-token rotation/revocation, admin MFA, upload/object storage, full notifications, pagination, broader authorization tests, and automated tests before production. Never commit .env. Celery requires a separate Python worker when paired with this Node backend; Redis stores OTP state when configured.
