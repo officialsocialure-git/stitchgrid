@@ -7,68 +7,101 @@ import { audit } from "../services/audit";
 export async function supplierSearch(req: Request, res: Response, next: NextFunction) {
   try {
     const q = typeof req.query.q === "string" ? req.query.q.trim() : undefined;
-    const category = typeof req.query.category === "string" && req.query.category !== "All" ? req.query.category.trim() : undefined;
+    const category =
+      typeof req.query.category === "string" && req.query.category !== "All"
+        ? req.query.category.trim()
+        : undefined;
     const city = typeof req.query.city === "string" ? req.query.city.trim() : undefined;
 
-    const where: any = {
-      verificationStatus: { in: ["APPROVED", "PENDING"] },
-    };
-
-    if (city) {
-      where.organization = { ...where.organization, city: { contains: city } };
-    }
+    // Use supplier memberships as the source of truth. Older/Google-onboarded
+    // accounts can have a valid SUPPLIER membership even if their profile row
+    // was not created, so searching SupplierProfile alone hides those accounts.
+    const filters: any[] = [];
+    if (city) filters.push({ city: { contains: city } });
 
     if (category) {
-      where.OR = [
-        { categories: { some: { category: { contains: category } } } },
-        { organization: { businessType: { contains: category } } },
-      ];
+      filters.push({
+        OR: [
+          { businessType: { contains: category } },
+          {
+            supplierProfile: {
+              is: { categories: { some: { category: { contains: category } } } },
+            },
+          },
+        ],
+      });
     }
 
     if (q) {
-      const searchFilter = {
+      filters.push({
         OR: [
-          { organization: { name: { contains: q } } },
-          { organization: { city: { contains: q } } },
-          { organization: { address: { contains: q } } },
-          { description: { contains: q } },
-          { categories: { some: { category: { contains: q } } } },
-        ]
-      };
-      if (where.OR) {
-        where.AND = [
-          { OR: where.OR },
-          searchFilter
-        ];
-        delete where.OR;
-      } else {
-        where.OR = searchFilter.OR;
-      }
+          { name: { contains: q } },
+          { legalName: { contains: q } },
+          { city: { contains: q } },
+          { address: { contains: q } },
+          {
+            supplierProfile: {
+              is: {
+                OR: [
+                  { description: { contains: q } },
+                  { categories: { some: { category: { contains: q } } } },
+                ],
+              },
+            },
+          },
+        ],
+      });
     }
 
-    const rows = await prisma.supplierProfile.findMany({
-      where,
-      include: {
-        organization: {
-          select: {
-            id: true,
-            name: true,
-            legalName: true,
-            businessType: true,
-            taxId: true,
-            address: true,
-            city: true,
-            country: true,
-            verificationStatus: true,
-          }
-        },
-        categories: true,
-        catalogItems: { where: { moderationStatus: "APPROVED" } },
+    const organizations = await prisma.organization.findMany({
+      where: {
+        verificationStatus: { in: ["APPROVED", "PENDING"] },
+        members: { some: { role: "SUPPLIER", isActive: true } },
+        AND: filters,
       },
-      take: 50
+      include: {
+        supplierProfile: {
+          include: {
+            categories: true,
+            catalogItems: { where: { moderationStatus: "APPROVED" } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
     });
+
+    // Keep the existing frontend response shape while safely handling
+    // supplier organizations whose profile row is missing.
+    const rows = organizations.map((organization) => {
+      const profile = organization.supplierProfile;
+      return {
+        id: profile?.id ?? organization.id,
+        organizationId: organization.id,
+        description: profile?.description ?? null,
+        yearsInBusiness: profile?.yearsInBusiness ?? null,
+        productionCapacity: profile?.productionCapacity ?? null,
+        verificationStatus: organization.verificationStatus,
+        organization: {
+          id: organization.id,
+          name: organization.name,
+          legalName: organization.legalName,
+          businessType: organization.businessType,
+          taxId: organization.taxId,
+          address: organization.address,
+          city: organization.city,
+          country: organization.country,
+          verificationStatus: organization.verificationStatus,
+        },
+        categories: profile?.categories ?? [],
+        catalogItems: profile?.catalogItems ?? [],
+      };
+    });
+
     return sendOk(res, rows);
-  } catch (e) { next(e); }
+  } catch (e) {
+    next(e);
+  }
 }
 
 export async function upsertSupplierProfile(req: Request, res: Response, next: NextFunction) {
