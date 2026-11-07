@@ -449,7 +449,7 @@ export function SupplierSamplesView({
 
             {/* Tabs Row under Hero Card */}
             <div className="border-b border-slate-200">
-              <div className="flex items-center gap-6 overflow-x-auto scrollbar-none text-xs sm:text-sm">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs sm:text-sm">
                 <button
                   type="button"
                   onClick={() => setActiveDetailsTab("PHOTOS")}
@@ -813,7 +813,7 @@ export function SupplierSamplesView({
       </div>
 
       {/* Desktop keeps its existing quick filters; mobile uses the consolidated filter sheet */}
-      <div className="hidden sm:flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+      <div className="hidden sm:flex flex-wrap items-center gap-2 pb-1">
         {tabsList.map((tab) => (
           <button
             key={tab}
@@ -1068,7 +1068,7 @@ export function SupplierSamplesView({
               </div>
 
               {/* Middle Column: Order ID, Sample Type, Quantity, Due Date */}
-              <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs text-slate-600 md:border-x md:border-slate-100 md:px-6 shrink-0 min-w-[260px]">
+              <div className="grid w-full min-w-0 grid-cols-2 gap-x-3 sm:gap-x-6 gap-y-1.5 text-xs text-slate-600 md:w-auto md:min-w-[260px] md:shrink-0 md:border-x md:border-slate-100 md:px-6">
                 <div className="flex items-center gap-1.5 font-mono">
                   <span className="material-symbols-outlined text-[15px] text-slate-400">receipt_long</span>
                   <span>

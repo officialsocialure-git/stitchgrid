@@ -858,7 +858,7 @@ export default function DashboardPage() {
       </div>
 
       {/* 3. CATEGORY FILTER PILLS (Desktop View - hidden on mobile) */}
-      <div className="hidden md:flex items-center gap-2.5 overflow-x-auto pb-1 no-scrollbar">
+      <div className="hidden md:flex flex-wrap items-center gap-2.5 pb-1">
         {categories.map((cat) => {
           const isActive = selectedCategory === cat;
           return (

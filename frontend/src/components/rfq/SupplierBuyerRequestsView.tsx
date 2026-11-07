@@ -417,7 +417,7 @@ export function SupplierBuyerRequestsView({
       {/* 2. Underline Filter Tabs (Matches Reference Images)           */}
       {/* ------------------------------------------------------------- */}
       <div className="border-b border-slate-200">
-        <div className="flex items-center gap-6 overflow-x-auto scrollbar-none text-xs sm:text-sm">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs sm:text-sm">
           <button
             type="button"
             onClick={() => setActiveTab("ALL")}

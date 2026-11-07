@@ -8,10 +8,37 @@
     --foreground: 11 28 48;
   }
 
+  html,
+  body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
   body {
     background-color: #f8f9ff;
     color: #0b1c30;
     font-family: 'Inter', sans-serif;
+  }
+
+  #__next,
+  main,
+  section {
+    min-width: 0;
+  }
+
+  img,
+  video,
+  canvas,
+  svg {
+    max-width: 100%;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    max-width: 100%;
   }
 }
 
