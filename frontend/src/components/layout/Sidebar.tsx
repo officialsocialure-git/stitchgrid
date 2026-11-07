@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { NAVIGATION_LINKS, APP_NAME } from "@/constants";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/utils";
+import { useNotifications } from "@/hooks/useNotifications";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -13,17 +14,18 @@ export function Sidebar() {
   const role = membership?.role || "BUYER";
   const isBuyer = role === "BUYER";
   const isSupplier = role === "SUPPLIER";
+  const { unreadSampleCount } = useNotifications();
 
   // Navigation Links configuration
   let navLinks: { name: string; href: string; icon: string }[] = [];
 
   if (isSupplier) {
     // Supplier navigation with simple English labels:
-    // Home, Buyer Requests, My Quotes, My Orders, Tracking, Samples, Chats, Payments
+    // Home, Buyer Requests, My Offers, My Orders, Tracking, Samples, Chats, Payments
     navLinks = [
       { name: "Home", href: "/dashboard", icon: "dashboard" },
       { name: "Buyer Requests", href: "/rfqs", icon: "request_quote" },
-      { name: "My Quotes", href: "/quotations", icon: "description" },
+      { name: "My Offers", href: "/quotations", icon: "description" },
       { name: "My Orders", href: "/orders", icon: "inventory_2" },
       { name: "Tracking", href: "/production", icon: "factory" },
       { name: "Samples", href: "/samples", icon: "checkroom" },
@@ -33,8 +35,9 @@ export function Sidebar() {
   } else {
     // Buyer navigation with simplified names
     const BUYER_NAME_MAP: Record<string, string> = {
+      "Dashboard": "Home",
       "RFQs": "My Requests",
-      "Quotations": "Supplier Quotes",
+      "Quotations": "My Offers",
       "Purchase Orders": "My Orders",
       "Production Tracking": "Order Tracking",
       "Samples Workflow": "Samples",
@@ -103,6 +106,11 @@ export function Sidebar() {
                 {item.icon}
               </span>
               <span>{item.name}</span>
+              {!isSupplier && item.name === "Samples" && unreadSampleCount > 0 && (
+                <span className="ml-auto min-w-5 h-5 px-1 rounded-full bg-[#5B13EC] text-white text-[10px] font-extrabold flex items-center justify-center">
+                  {unreadSampleCount > 99 ? "99+" : unreadSampleCount}
+                </span>
+              )}
             </Link>
           );
         })}

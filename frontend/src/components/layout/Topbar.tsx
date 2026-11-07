@@ -8,6 +8,7 @@ import { authService } from "@/services/auth.service";
 import { NAVIGATION_LINKS, APP_NAME } from "@/constants";
 import { Role } from "@/types";
 import { cn } from "@/utils";
+import { useNotifications } from "@/hooks/useNotifications";
 
 export function Topbar() {
   const { user, membership } = useAuth();
@@ -15,6 +16,20 @@ export function Topbar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const { notifications, unreadCount, markRead } = useNotifications();
+
+  const openNotification = async (notification: { id: string; title: string }) => {
+    try {
+      if (!notifications.find((item) => item.id === notification.id)?.readAt) {
+        await markRead(notification.id);
+      }
+    } catch (error) {
+      console.error("Failed to mark notification as read:", error);
+    }
+    setNotificationsOpen(false);
+    router.push(notification.title === "Sample received" ? "/samples" : "/messages");
+  };
 
   const activeRole: Role = (membership?.role as Role) || "BUYER";
   const isBuyer = activeRole === "BUYER";
@@ -34,7 +49,7 @@ export function Topbar() {
   const SUPPLIER_NAV_LINKS = [
     { name: "Home", href: "/dashboard", icon: "dashboard" },
     { name: "Buyer Requests", href: "/rfqs", icon: "request_quote" },
-    { name: "My Quotes", href: "/quotations", icon: "description" },
+    { name: "My Offers", href: "/quotations", icon: "description" },
     { name: "My Orders", href: "/orders", icon: "inventory_2" },
     { name: "Tracking", href: "/production", icon: "factory" },
     { name: "Samples", href: "/samples", icon: "checkroom" },
@@ -44,8 +59,9 @@ export function Topbar() {
 
   // Simple names mapping for Buyer section in mobile menu
   const BUYER_NAME_MAP: Record<string, string> = {
+    "Dashboard": "Home",
     "RFQs": "My Requests",
-    "Quotations": "Supplier Quotes",
+    "Quotations": "My Offers",
     "Purchase Orders": "My Orders",
     "Production Tracking": "Order Tracking",
     "Samples Workflow": "Samples",
@@ -103,15 +119,17 @@ export function Topbar() {
       <div className="flex items-center">
         {/* MOBILE VIEW (Matches Reference Image 1 & 2) */}
         <div className="flex items-center gap-2 md:hidden relative">
-          {/* Circular Notification Bell with Green Dot */}
-          <Link
-            href="/messages"
+          {/* Notifications */}
+          <button
+            type="button"
+            onClick={() => setNotificationsOpen((open) => !open)}
             className="w-10 h-10 rounded-full bg-[#f4effc] text-[#5B13EC] relative flex items-center justify-center border border-purple-100/60 shadow-2xs hover:bg-purple-100 transition-colors"
             title="Notifications"
+            aria-label="Open notifications"
           >
             <span className="material-symbols-outlined text-[20px]">notifications</span>
-            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white"></span>
-          </Link>
+            {unreadCount > 0 && <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center">{unreadCount > 99 ? "99+" : unreadCount}</span>}
+          </button>
 
           {/* Circular Profile Avatar Button (Toggles Dropdown from Reference Image 2) */}
           <button
@@ -166,15 +184,17 @@ export function Topbar() {
 
         {/* DESKTOP VIEW (hidden md:flex) */}
         <div className="hidden md:flex items-center">
-          {/* Notification Bell with Green Dot */}
-          <Link
-            href="/messages"
+          {/* Notifications */}
+          <button
+            type="button"
+            onClick={() => setNotificationsOpen((open) => !open)}
             className="p-2 rounded-xl text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors relative flex items-center justify-center"
             title="Notifications"
+            aria-label="Open notifications"
           >
             <span className="material-symbols-outlined text-[22px]">notifications</span>
-            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white"></span>
-          </Link>
+            {unreadCount > 0 && <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center">{unreadCount > 99 ? "99+" : unreadCount}</span>}
+          </button>
 
           {/* Vertical Divider */}
           <div className="h-7 w-[1px] bg-slate-200 mx-2 sm:mx-3"></div>
@@ -207,6 +227,29 @@ export function Topbar() {
           </button>
         </div>
       </div>
+
+      {notificationsOpen && (
+        <div className="absolute right-3 sm:right-6 top-[calc(100%-2px)] z-50 w-[min(92vw,380px)] rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="font-bold text-slate-900">Notifications</h3>
+            <span className="text-xs text-slate-500">{unreadCount} unread</span>
+          </div>
+          <div className="max-h-80 overflow-y-auto">
+            {notifications.length === 0 ? (
+              <p className="p-5 text-sm text-slate-500 text-center">You are all caught up.</p>
+            ) : notifications.slice(0, 8).map((notification) => (
+              <button key={notification.id} type="button" onClick={() => openNotification(notification)} className={`w-full text-left px-4 py-3 border-b border-slate-100 hover:bg-purple-50 transition-colors ${notification.readAt ? "bg-white" : "bg-purple-50/70"}`}>
+                <span className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-bold text-slate-900">{notification.title}</span>
+                  {!notification.readAt && <span className="w-2 h-2 rounded-full bg-[#5B13EC] shrink-0" />}
+                </span>
+                <span className="block mt-1 text-xs text-slate-600">{notification.body}</span>
+                <span className="block mt-1 text-[10px] text-slate-400">{new Date(notification.createdAt).toLocaleString()}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Mobile Navigation Drawer */}
       {mobileMenuOpen && (
@@ -241,6 +284,11 @@ export function Topbar() {
                     {item.icon}
                   </span>
                   <span>{item.name}</span>
+                  {isBuyer && item.name === "Samples" && notifications.filter((notification) => notification.title === "Sample received" && !notification.readAt).length > 0 && (
+                    <span className="ml-auto min-w-5 h-5 px-1 rounded-full bg-[#5B13EC] text-white text-[10px] font-extrabold flex items-center justify-center">
+                      {notifications.filter((notification) => notification.title === "Sample received" && !notification.readAt).length}
+                    </span>
+                  )}
                 </Link>
               );
             })}

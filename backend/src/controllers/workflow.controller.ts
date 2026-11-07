@@ -160,6 +160,33 @@ export async function updateSample(req: Request, res: Response, next: NextFuncti
       }
     });
 
+    // Notify every active buyer member once the supplier submits the sample to the buyer.
+    if (supplier && newStatus === "DISPATCHED" && (updatedMeta.photos || []).length > 0 && !existingMeta.sampleSubmittedAt) {
+      const buyerMembers = await prisma.organizationMember.findMany({
+        where: {
+          organizationId: sample.purchaseOrder.buyerOrgId,
+          role: "BUYER",
+          isActive: true,
+        },
+        select: { userId: true },
+      });
+      const buyerUserIds = [...new Set(buyerMembers.map((member) => member.userId))];
+      if (buyerUserIds.length > 0) {
+        await prisma.notification.createMany({
+          data: buyerUserIds.map((userId) => ({
+            userId,
+            title: "Sample received",
+            body: `Your supplier has submitted sample photos for order ${sample.purchaseOrder.poNumber}.`,
+          })),
+        });
+      }
+      updatedMeta.sampleSubmittedAt = new Date().toISOString();
+      await prisma.sample.update({
+        where: { id: sample.id },
+        data: { notes: JSON.stringify(updatedMeta) },
+      });
+    }
+
     // Record in order event timeline
     await prisma.orderEvent.create({
       data: {

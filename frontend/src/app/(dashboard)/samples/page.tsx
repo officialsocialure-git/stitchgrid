@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useNotifications } from "@/hooks/useNotifications";
 import { marketplaceService } from "@/services/marketplace.service";
 import { SampleDetailsModal } from "@/components/samples/SampleDetailsModal";
 import { RequestSampleModal } from "@/components/samples/RequestSampleModal";
@@ -30,6 +31,7 @@ interface SampleRow {
 export default function SamplesPage() {
   const { membership } = useAuth();
   const isSupplier = membership?.role === "SUPPLIER";
+  const { notifications, markRead } = useNotifications();
   const [rawSamples, setRawSamples] = useState<any[]>([]);
   const [samples, setSamples] = useState<SampleRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -133,6 +135,16 @@ export default function SamplesPage() {
   useEffect(() => {
     loadSamples();
   }, [loadSamples]);
+
+  // Opening the buyer Samples area acknowledges its sample-received alerts.
+  useEffect(() => {
+    if (isSupplier) return;
+    notifications
+      .filter((notification) => notification.title === "Sample received" && !notification.readAt)
+      .forEach((notification) => {
+        markRead(notification.id).catch((error) => console.error("Failed to mark sample alert as read:", error));
+      });
+  }, [isSupplier, notifications, markRead]);
 
   // Keep the status filter sheet keyboard-accessible and prevent background scrolling.
   useEffect(() => {
