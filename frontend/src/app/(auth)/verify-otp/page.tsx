@@ -21,6 +21,12 @@ function VerifyOtpContent() {
   const [toast, setToast] = useState<ToastState>(null);
 
   useEffect(() => {
+    // OTP verification is deprecated; redirect to dashboard or login
+    const token = typeof window !== "undefined" ? localStorage.getItem("sg_token") : null;
+    window.location.href = token ? "/dashboard" : "/login";
+  }, []);
+
+  useEffect(() => {
     if (timer <= 0) return;
     const interval = window.setInterval(() => setTimer((current) => Math.max(0, current - 1)), 1000);
     return () => window.clearInterval(interval);

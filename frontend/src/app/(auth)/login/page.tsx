@@ -72,11 +72,17 @@ export default function LoginPage() {
       }
 
       const res = await authService.login(trimmed, password);
-      window.location.href = `/verify-otp?userId=${encodeURIComponent(
-        res.challengeId || res.userId
-      )}&channel=${encodeURIComponent(res.verificationChannel)}&dest=${encodeURIComponent(
-        res.destination || trimmed
-      )}&mode=login`;
+      const adminMembership = res.memberships?.find((membership) => membership.role === "ADMIN");
+      if (adminMembership) {
+        await authService.switchContext(adminMembership.organizationId, "ADMIN");
+      }
+      const chosenMembership = adminMembership || res.activeMembership;
+      localStorage.setItem("sg_user", JSON.stringify(res.user));
+      if (chosenMembership) {
+        localStorage.setItem("sg_membership", JSON.stringify(chosenMembership));
+      }
+      window.dispatchEvent(new CustomEvent("sg_workspace_changed", { detail: chosenMembership }));
+      window.location.href = adminMembership ? "/admin" : "/dashboard";
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -215,10 +221,10 @@ export default function LoginPage() {
 
     setForgotLoading(true);
     try {
-      await authService.resendOtp(trimmed);
+      const res = await authService.forgotPassword(trimmed);
       setForgotMsg({
         type: "success",
-        text: `A password reset verification OTP has been sent to ${trimmed}. Please proceed to verification.`,
+        text: res.message || `Password reset instructions have been generated for ${trimmed}.`,
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unable to initiate password reset for this identifier.";
@@ -394,7 +400,7 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full h-12 mt-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 active:bg-purple-900 text-white text-sm sm:text-[15px] font-medium flex items-center justify-center gap-2 transition-all shadow-md shadow-purple-600/20 hover:shadow-lg hover:shadow-purple-600/30 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
           >
-            <span>{loading ? "Sending Verification OTP..." : "Send 6-Digit Verification OTP"}</span>
+            <span>{loading ? "Signing In..." : "Sign In"}</span>
             {!loading && <span className="material-symbols-outlined text-[19px]">arrow_forward</span>}
           </button>
 
@@ -654,7 +660,7 @@ export default function LoginPage() {
             </div>
 
             <p className="text-xs sm:text-sm text-gray-600 mt-3 leading-relaxed">
-              Enter your registered email address or mobile number. We will send a 6-digit OTP to verify your identity.
+              Enter your registered email address or mobile number to receive password reset instructions.
             </p>
 
             {forgotMsg && (
@@ -703,7 +709,7 @@ export default function LoginPage() {
                   disabled={forgotLoading}
                   className="px-5 py-2 text-xs sm:text-sm font-semibold text-white bg-purple-700 hover:bg-purple-800 rounded-xl transition-all shadow-sm disabled:opacity-60"
                 >
-                  {forgotLoading ? "Sending OTP..." : "Send Reset OTP"}
+                  {forgotLoading ? "Submitting..." : "Reset Password"}
                 </button>
               </div>
             </form>

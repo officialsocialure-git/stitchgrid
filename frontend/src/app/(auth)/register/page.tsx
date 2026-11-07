@@ -173,12 +173,17 @@ export default function RegisterPage() {
       };
 
       const res = await authService.signup(payload);
-      const dest = email.trim() || phone.trim();
-      window.location.href = `/verify-otp?userId=${encodeURIComponent(
-        res.userId
-      )}&channel=${encodeURIComponent(res.verificationChannel)}&dest=${encodeURIComponent(
-        dest
-      )}&mode=signup`;
+      const adminMembership = res.memberships?.find((membership) => membership.role === "ADMIN");
+      if (adminMembership) {
+        await authService.switchContext(adminMembership.organizationId, "ADMIN");
+      }
+      const chosenMembership = adminMembership || res.activeMembership;
+      localStorage.setItem("sg_user", JSON.stringify(res.user));
+      if (chosenMembership) {
+        localStorage.setItem("sg_membership", JSON.stringify(chosenMembership));
+      }
+      window.dispatchEvent(new CustomEvent("sg_workspace_changed", { detail: chosenMembership }));
+      window.location.href = adminMembership ? "/admin" : "/dashboard";
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
