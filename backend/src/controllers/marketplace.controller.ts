@@ -4,60 +4,67 @@ import { prisma } from "../config/prisma";
 import { AppError, sendOk } from "../utils/http";
 import { audit } from "../services/audit";
 
+const GARMENT_SYNONYMS = [
+  "garment", "apparel", "t-shirt", "shirt", "hoodie", "activewear", "denim",
+  "jeans", "polo", "dress", "trouser", "knitwear", "kids", "woven"
+];
+const FABRIC_SYNONYMS = [
+  "fabric", "woven", "mill", "cotton", "linen", "polyester", "silk", "yarn", "knitted fabric", "textile"
+];
+const TRIMS_SYNONYMS = [
+  "trim", "trims", "button", "buttons", "zipper", "zippers", "label", "labels", "accessories", "elastic", "thread"
+];
+const JOBWORK_SYNONYMS = [
+  "job work", "jobwork", "cutting", "stitching", "printing", "washing", "embroidery", "finishing", "packing", "dyeing"
+];
+
+function matchesCategoryFilter(
+  filter: string,
+  categoryNames: string[],
+  businessType: string | null | undefined,
+  description: string | null | undefined
+): boolean {
+  const norm = filter.toLowerCase().trim();
+  if (!norm || norm === "all") return true;
+
+  const combined = [
+    ...categoryNames,
+    businessType || "",
+    description || ""
+  ].join(" ").toLowerCase();
+
+  if (norm.includes("garment")) {
+    return GARMENT_SYNONYMS.some((syn) => combined.includes(syn));
+  }
+  if (norm.includes("fabric")) {
+    return FABRIC_SYNONYMS.some((syn) => combined.includes(syn));
+  }
+  if (norm.includes("trim")) {
+    return TRIMS_SYNONYMS.some((syn) => combined.includes(syn));
+  }
+  if (norm.includes("job")) {
+    return JOBWORK_SYNONYMS.some((syn) => combined.includes(syn));
+  }
+
+  return combined.includes(norm);
+}
+
 export async function supplierSearch(req: Request, res: Response, next: NextFunction) {
   try {
-    const q = typeof req.query.q === "string" ? req.query.q.trim() : undefined;
+    const q = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
     const category =
       typeof req.query.category === "string" && req.query.category !== "All"
-        ? req.query.category.trim()
-        : undefined;
-    const city = typeof req.query.city === "string" ? req.query.city.trim() : undefined;
+        ? req.query.category.trim().toLowerCase()
+        : "";
+    const city = typeof req.query.city === "string" ? req.query.city.trim().toLowerCase() : "";
 
-    // Use supplier memberships as the source of truth. Older/Google-onboarded
-    // accounts can have a valid SUPPLIER membership even if their profile row
-    // was not created, so searching SupplierProfile alone hides those accounts.
-    const filters: any[] = [];
-    if (city) filters.push({ city: { contains: city } });
-
-    if (category) {
-      filters.push({
-        OR: [
-          { businessType: { contains: category } },
-          {
-            supplierProfile: {
-              is: { categories: { some: { category: { contains: category } } } },
-            },
-          },
-        ],
-      });
-    }
-
-    if (q) {
-      filters.push({
-        OR: [
-          { name: { contains: q } },
-          { legalName: { contains: q } },
-          { city: { contains: q } },
-          { address: { contains: q } },
-          {
-            supplierProfile: {
-              is: {
-                OR: [
-                  { description: { contains: q } },
-                  { categories: { some: { category: { contains: q } } } },
-                ],
-              },
-            },
-          },
-        ],
-      });
-    }
-
+    // Fetch supplier organizations first, then apply optional text filters in
+    // memory. This avoids fragile nested relation filters and includes older
+    // supplier accounts that do not yet have a SupplierProfile row.
     const organizations = await prisma.organization.findMany({
       where: {
         verificationStatus: { in: ["APPROVED", "PENDING"] },
         members: { some: { role: "SUPPLIER", isActive: true } },
-        AND: filters,
       },
       include: {
         supplierProfile: {
@@ -68,35 +75,57 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
         },
       },
       orderBy: { createdAt: "desc" },
-      take: 100,
+      take: 250,
     });
 
-    // Keep the existing frontend response shape while safely handling
-    // supplier organizations whose profile row is missing.
-    const rows = organizations.map((organization) => {
-      const profile = organization.supplierProfile;
-      return {
-        id: profile?.id ?? organization.id,
-        organizationId: organization.id,
-        description: profile?.description ?? null,
-        yearsInBusiness: profile?.yearsInBusiness ?? null,
-        productionCapacity: profile?.productionCapacity ?? null,
-        verificationStatus: organization.verificationStatus,
-        organization: {
-          id: organization.id,
-          name: organization.name,
-          legalName: organization.legalName,
-          businessType: organization.businessType,
-          taxId: organization.taxId,
-          address: organization.address,
-          city: organization.city,
-          country: organization.country,
+    const rows = organizations
+      .filter((organization) => {
+        const profile = organization.supplierProfile;
+        const categoryNames = profile?.categories.map((item) => item.category.toLowerCase()) ?? [];
+        const searchable = [
+          organization.name,
+          organization.legalName,
+          organization.businessType,
+          organization.city,
+          organization.address,
+          profile?.description,
+          ...categoryNames,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        if (city && !(organization.city ?? "").toLowerCase().includes(city)) return false;
+        if (category && !matchesCategoryFilter(category, categoryNames, organization.businessType, profile?.description)) {
+          return false;
+        }
+        if (q && !searchable.includes(q)) return false;
+        return true;
+      })
+      .map((organization) => {
+        const profile = organization.supplierProfile;
+        return {
+          id: profile?.id ?? organization.id,
+          organizationId: organization.id,
+          description: profile?.description ?? null,
+          yearsInBusiness: profile?.yearsInBusiness ?? null,
+          productionCapacity: profile?.productionCapacity ?? null,
           verificationStatus: organization.verificationStatus,
-        },
-        categories: profile?.categories ?? [],
-        catalogItems: profile?.catalogItems ?? [],
-      };
-    });
+          organization: {
+            id: organization.id,
+            name: organization.name,
+            legalName: organization.legalName,
+            businessType: organization.businessType,
+            taxId: organization.taxId,
+            address: organization.address,
+            city: organization.city,
+            country: organization.country,
+            verificationStatus: organization.verificationStatus,
+          },
+          categories: profile?.categories ?? [],
+          catalogItems: profile?.catalogItems ?? [],
+        };
+      });
 
     return sendOk(res, rows);
   } catch (e) {
