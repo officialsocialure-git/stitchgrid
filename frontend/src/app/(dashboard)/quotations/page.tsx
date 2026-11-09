@@ -8,6 +8,7 @@ import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Modal } from "@/components/common/Modal";
 import { marketplaceService } from "@/services/marketplace.service";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 
 interface QuoteItem {
   id: string;
@@ -135,6 +136,12 @@ function QuotationsContent() {
   useEffect(() => {
     loadQuotes();
   }, [loadQuotes]);
+
+  useRealtimeSync({
+    topics: ["quotation:created", "quotation:updated", "order:created"],
+    onSync: loadQuotes,
+    pollIntervalMs: 20000,
+  });
 
   const handleIssuePo = async () => {
     if (!selectedQuoteId) return;

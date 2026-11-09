@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/services/api";
+import { realtime } from "@/services/realtime.service";
 
 export interface AppNotification {
   id: string;
@@ -25,9 +26,14 @@ export function useNotifications() {
 
   useEffect(() => {
     refresh();
-    const interval = window.setInterval(refresh, 15000);
+    const unsubscribe = realtime.subscribe(
+      ["notification:new", "order:updated", "sample:updated", "quotation:created"],
+      refresh
+    );
+    const interval = window.setInterval(refresh, 25000);
     window.addEventListener("focus", refresh);
     return () => {
+      unsubscribe();
       window.clearInterval(interval);
       window.removeEventListener("focus", refresh);
     };

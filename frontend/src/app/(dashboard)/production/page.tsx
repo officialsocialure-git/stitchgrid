@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { marketplaceService } from "@/services/marketplace.service";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 
 interface MilestoneItem {
   id: string;
@@ -74,6 +75,12 @@ function ProductionContent() {
   useEffect(() => {
     loadMilestones();
   }, [loadMilestones]);
+
+  useRealtimeSync({
+    topics: ["milestone:updated", "order:updated"],
+    onSync: loadMilestones,
+    pollIntervalMs: 20000,
+  });
 
   const handleUpdateMilestone = async (milestoneId: string, newStatus: string) => {
     try {

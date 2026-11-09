@@ -6,6 +6,7 @@ import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Modal } from "@/components/common/Modal";
 import { marketplaceService } from "@/services/marketplace.service";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 
 interface TransactionItem {
   id: string;
@@ -85,6 +86,12 @@ export default function PaymentsPage() {
   useEffect(() => {
     loadPayments();
   }, [loadPayments]);
+
+  useRealtimeSync({
+    topics: ["payment:created", "payment:updated", "order:updated"],
+    onSync: loadPayments,
+    pollIntervalMs: 25000,
+  });
 
   const handleDepositEscrow = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { marketplaceService } from "@/services/marketplace.service";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 
 interface LiveOrder {
   id: string;
@@ -94,6 +95,12 @@ export default function OrdersPage() {
   useEffect(() => {
     loadOrders();
   }, [loadOrders]);
+
+  useRealtimeSync({
+    topics: ["order:created", "order:updated", "milestone:updated"],
+    onSync: loadOrders,
+    pollIntervalMs: 25000,
+  });
 
   const filteredOrders = orders.filter((po) => {
     const query = searchQuery.trim().toLowerCase();

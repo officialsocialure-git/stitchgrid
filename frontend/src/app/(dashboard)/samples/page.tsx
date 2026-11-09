@@ -10,6 +10,7 @@ import {
   SupplierSamplesView,
   SupplierSampleItem,
 } from "@/components/samples/SupplierSamplesView";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 
 type FilterTab = "All" | "New Samples" | "Checking" | "Approved" | "Changes Needed";
 
@@ -135,6 +136,12 @@ export default function SamplesPage() {
   useEffect(() => {
     loadSamples();
   }, [loadSamples]);
+
+  useRealtimeSync({
+    topics: ["sample:created", "sample:updated", "order:updated"],
+    onSync: loadSamples,
+    pollIntervalMs: 25000,
+  });
 
   // Opening the buyer Samples area acknowledges its sample-received alerts.
   useEffect(() => {

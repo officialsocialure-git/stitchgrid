@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Boxes, FileText, Package, ShieldCheck, Users, ArrowUpRight, RefreshCw } from "lucide-react";
 import { adminService } from "@/features/admin/admin.service";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 
 const metrics = [
   { key: "suppliers", label: "Suppliers", icon: Boxes, tone: "text-green-600", href: "/admin/users" },
@@ -23,6 +24,12 @@ export default function AdminOverviewPage() {
     finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
+
+  useRealtimeSync({
+    topics: ["admin:verification_updated", "admin:stats_updated", "order:created", "rfq:created", "supplier:updated"],
+    onSync: load,
+    pollIntervalMs: 30000,
+  });
 
   const pending = [
     { label: "Supplier verification", count: data?.pendingVerifications ?? 0, href: "/admin/verification", icon: ShieldCheck },

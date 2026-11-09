@@ -9,6 +9,7 @@ import { RfqDetailsModal } from "@/components/rfq/RfqDetailsModal";
 import { InviteSuppliersModal } from "@/components/rfq/InviteSuppliersModal";
 import { SubmitQuoteModal } from "@/components/dashboard/SubmitQuoteModal";
 import { SupplierBuyerRequestsView } from "@/components/rfq/SupplierBuyerRequestsView";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { Rfq } from "@/types";
 
 export default function RfqsPage() {
@@ -46,6 +47,12 @@ export default function RfqsPage() {
   useEffect(() => {
     loadRfqs();
   }, [loadRfqs]);
+
+  useRealtimeSync({
+    topics: ["rfq:created", "rfq:updated", "quotation:created"],
+    onSync: loadRfqs,
+    pollIntervalMs: 25000,
+  });
 
   // Close three dots dropdown when clicking outside
   useEffect(() => {

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "../config/prisma";
 import { AppError, sendOk } from "../utils/http";
 import { audit } from "../services/audit";
+import { emitToChannel, emitToOrg } from "../services/realtime";
 
 async function orderAccess(orderId: string, userId: string) {
   const order = await prisma.purchaseOrder.findUnique({ where: { id: orderId } });
@@ -90,6 +91,9 @@ export async function createSample(req: Request, res: Response, next: NextFuncti
         actorUserId: req.auth!.userId
       }
     }).catch(() => {});
+
+    emitToOrg(order.buyerOrgId, "sample:created", { orderId: order.id, sampleId: sample.id });
+    emitToOrg(order.supplierOrgId, "sample:created", { orderId: order.id, sampleId: sample.id });
 
     return sendOk(res, sample, 201);
   } catch (e) { next(e); }
@@ -198,6 +202,8 @@ export async function updateSample(req: Request, res: Response, next: NextFuncti
     }).catch(() => {});
 
     await audit("SAMPLE_STATUS_UPDATED", "Sample", sample.id, req.auth!.userId);
+    emitToOrg(sample.purchaseOrder.buyerOrgId, "sample:updated", { orderId: sample.purchaseOrderId, sampleId: sample.id, status: newStatus });
+    emitToOrg(sample.purchaseOrder.supplierOrgId, "sample:updated", { orderId: sample.purchaseOrderId, sampleId: sample.id, status: newStatus });
     return sendOk(res, {
       ...updated,
       parsedNotes: updatedMeta,
@@ -216,6 +222,8 @@ export async function updateMilestone(req: Request, res: Response, next: NextFun
     if (!membership) throw new AppError(403, "Supplier membership required");
     const updated = await prisma.orderMilestone.update({ where: { id: milestone.id }, data: { status: input.status, dueDate: input.dueDate, completedAt: input.status === "COMPLETED" ? new Date() : null } });
     await prisma.orderEvent.create({ data: { purchaseOrderId: milestone.purchaseOrderId, eventType: "MILESTONE_" + input.status, note: milestone.title, actorUserId: req.auth!.userId } });
+    emitToOrg(milestone.purchaseOrder.buyerOrgId, "milestone:updated", { orderId: milestone.purchaseOrderId, milestoneId: milestone.id, status: input.status });
+    emitToOrg(milestone.purchaseOrder.supplierOrgId, "milestone:updated", { orderId: milestone.purchaseOrderId, milestoneId: milestone.id, status: input.status });
     return sendOk(res, updated);
   } catch (e) { next(e); }
 }
@@ -494,6 +502,9 @@ export async function sendMessage(req: Request, res: Response, next: NextFunctio
     const member = await prisma.organizationMember.findFirst({ where: { userId: req.auth!.userId, organizationId: { in: [conversation.buyerOrgId, conversation.supplierOrgId] }, isActive: true } });
     if (!member) throw new AppError(403, "Conversation access denied");
     const message = await prisma.message.create({ data: { conversationId: conversation.id, senderUserId: req.auth!.userId, body: input.body } });
+    emitToChannel(`conversation:${conversation.id}`, "message:new", message);
+    emitToOrg(conversation.buyerOrgId, "message:new", message);
+    emitToOrg(conversation.supplierOrgId, "message:new", message);
     return sendOk(res, message, 201);
   } catch (e) { next(e); }
 }

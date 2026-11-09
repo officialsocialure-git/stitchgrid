@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate, requireRole } from "../middleware/auth";
+import { authenticate, optionalAuthenticate, requireRole } from "../middleware/auth";
 import { createCatalogItem } from "../controllers/catalog.controller";
 import {
   adminVerification, createPurchaseOrder, createRfq, deleteRfq, getPurchaseOrderDetails,
@@ -8,8 +8,12 @@ import {
   updateOrganizationProfile
 } from "../controllers/marketplace.controller";
 const router = Router();
+
+// Public / optional auth routes for supplier discovery
+router.get("/suppliers", optionalAuthenticate, supplierSearch);
+
+// Protected routes below
 router.use(authenticate);
-router.get("/suppliers", supplierSearch);
 router.put("/supplier-profile", upsertSupplierProfile);
 router.post("/catalog-items", createCatalogItem);
 router.put("/organization-profile", updateOrganizationProfile);

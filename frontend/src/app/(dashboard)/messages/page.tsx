@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/common/Button";
 import { marketplaceService } from "@/services/marketplace.service";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 
 interface ConvItem {
   id: string;
@@ -96,13 +97,20 @@ export default function MessagesPage() {
     loadConversations();
   }, [loadConversations]);
 
+  useRealtimeSync({
+    topics: ["message:new"],
+    onSync: () => {
+      loadConversations();
+      if (activeChatId) {
+        loadMessages(activeChatId);
+      }
+    },
+    pollIntervalMs: 15000,
+  });
+
   useEffect(() => {
     if (activeChatId) {
       loadMessages(activeChatId);
-      const pollTimer = setInterval(() => {
-        loadMessages(activeChatId);
-      }, 4000);
-      return () => clearInterval(pollTimer);
     } else {
       setMessages([]);
     }
