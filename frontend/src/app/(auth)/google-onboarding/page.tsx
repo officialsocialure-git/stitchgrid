@@ -59,8 +59,8 @@ export default function GoogleOnboardingPage() {
     <main className="w-full max-w-xl mx-auto px-2">
       <section className="bg-white rounded-3xl border border-purple-100 shadow-xl p-6 sm:p-9">
         <div className="mb-6"><StitchgridLogo subtitle="Complete your business profile to get started." size="md" /></div>
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Set up your organization</h1>
-        <p className="text-sm text-slate-500 mt-1 mb-6">Choose how you will use STITCHGRID. You can continue once your organization details are saved.</p>
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 leading-[1.2]">Set up your organization</h1>
+        <p className="text-sm text-slate-500 mt-1 mb-6 leading-[1.5]">Choose how you will use STITCHGRID. You can continue once your organization details are saved.</p>
 
         {error && <div role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-700">{error}</div>}
 

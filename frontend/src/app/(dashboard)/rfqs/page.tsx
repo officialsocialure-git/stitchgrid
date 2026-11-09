@@ -151,14 +151,14 @@ export default function RfqsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight font-sans">
+            <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight leading-[1.2]">
               {isSupplier ? "RFQs" : "My Requests"}
             </h1>
             <span className="inline-flex items-center px-3 py-0.5 rounded-full bg-[#f4effc] text-[#5B13EC] text-xs font-semibold">
               {isSupplier ? "Supplier RFQ Feed" : "Buyer Sourcing Hub"}
             </span>
           </div>
-          <p className="text-xs sm:text-sm text-gray-500 mt-1">
+          <p className="text-sm text-gray-500 mt-1 leading-[1.5]">
             {isSupplier
               ? "Browse active production tenders from verified buyers, review specs, and submit factory quotes."
               : "Create and manage your production requests (RFQs), compare supplier quotes, and move to order."}
@@ -169,7 +169,7 @@ export default function RfqsPage() {
           <Link href="/quotations">
             <button
               type="button"
-              className="self-start sm:self-center px-5 py-2.5 rounded-xl bg-[#5B13EC] hover:bg-[#4d0ecf] text-white font-bold text-xs sm:text-sm shadow-md transition-all flex items-center gap-1.5 active:scale-98"
+              className="self-start sm:self-center px-5 py-2.5 rounded-xl bg-[#5B13EC] hover:bg-[#4d0ecf] text-white font-semibold text-sm shadow-md transition-all flex items-center gap-1.5 active:scale-98 leading-[1.4]"
             >
               <span className="material-symbols-outlined text-[18px]">description</span>
               <span>View My Quotes</span>
@@ -178,7 +178,7 @@ export default function RfqsPage() {
         ) : (
           <button
             onClick={() => setIsPostModalOpen(true)}
-            className="self-start sm:self-center px-5 py-2.5 rounded-xl bg-[#5B13EC] hover:bg-[#4d0ecf] text-white font-bold text-xs sm:text-sm shadow-md transition-all flex items-center gap-1.5 active:scale-98"
+            className="self-start sm:self-center px-5 py-2.5 rounded-xl bg-[#5B13EC] hover:bg-[#4d0ecf] text-white font-semibold text-sm shadow-md transition-all flex items-center gap-1.5 active:scale-98 leading-[1.4]"
           >
             <span className="material-symbols-outlined text-[18px]">add</span>
             <span>Post New Request</span>

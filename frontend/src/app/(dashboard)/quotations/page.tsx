@@ -231,10 +231,10 @@ function QuotationsContent() {
               </select>
             )}
           </div>
-          <h1 className="font-sans font-bold text-2xl text-on-surface">
+          <h1 className="font-extrabold text-3xl text-on-surface leading-[1.2]">
             {rfqTitle}
           </h1>
-          <p className="text-xs text-secondary mt-1">
+          <p className="text-sm text-secondary mt-1 leading-[1.5]">
             Target Delivery: 30 Nov 2026 • Destination: Mumbai Central Fulfillment Center • AQL 2.5 Standard
           </p>
         </div>

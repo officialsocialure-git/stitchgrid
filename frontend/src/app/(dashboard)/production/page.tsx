@@ -99,10 +99,10 @@ function ProductionContent() {
             <span className="font-mono text-xs font-bold text-primary">{poNumber}</span>
             <Badge variant="primary" size="sm">LIVE PRODUCTION LINE</Badge>
           </div>
-          <h1 className="font-sans font-bold text-2xl text-on-surface">
+          <h1 className="font-extrabold text-3xl text-on-surface leading-[1.2]">
             {isSupplier ? "Factory Floor Milestone Tracker" : "Order Tracking"}
           </h1>
-          <p className="text-xs text-secondary mt-0.5">
+          <p className="text-sm text-secondary mt-1 leading-[1.5]">
             {supplierName} • {productDesc}
           </p>
         </div>

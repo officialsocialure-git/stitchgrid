@@ -1,19 +1,32 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
-import { MetricCard } from "@/components/dashboard/MetricCard";
-import { ActivityList, ActivityItem } from "@/components/dashboard/ActivityList";
-import { Badge } from "@/components/common/Badge";
 import { Modal } from "@/components/common/Modal";
-import { GARMENT_CLUSTERS } from "@/constants";
 import { marketplaceService } from "@/services/marketplace.service";
-import { PostRfqModal } from "@/components/rfq/PostRfqModal";
-import { UpdateCatalogModal } from "@/components/dashboard/UpdateCatalogModal";
-import { CompleteProfileModal } from "@/components/dashboard/CompleteProfileModal";
-import { SubmitQuoteModal } from "@/components/dashboard/SubmitQuoteModal";
-import { RfqDetailsModal } from "@/components/rfq/RfqDetailsModal";
+import dynamic from "next/dynamic";
+
+const PostRfqModal = dynamic(
+  () => import("@/components/rfq/PostRfqModal").then((mod) => mod.PostRfqModal),
+  { ssr: false }
+);
+const UpdateCatalogModal = dynamic(
+  () => import("@/components/dashboard/UpdateCatalogModal").then((mod) => mod.UpdateCatalogModal),
+  { ssr: false }
+);
+const CompleteProfileModal = dynamic(
+  () => import("@/components/dashboard/CompleteProfileModal").then((mod) => mod.CompleteProfileModal),
+  { ssr: false }
+);
+const SubmitQuoteModal = dynamic(
+  () => import("@/components/dashboard/SubmitQuoteModal").then((mod) => mod.SubmitQuoteModal),
+  { ssr: false }
+);
+const RfqDetailsModal = dynamic(
+  () => import("@/components/rfq/RfqDetailsModal").then((mod) => mod.RfqDetailsModal),
+  { ssr: false }
+);
 
 interface LiveSupplier {
   id: string;
@@ -33,9 +46,8 @@ interface LiveSupplier {
 }
 
 export default function DashboardPage() {
-  const { user, membership } = useAuth();
+  const { membership } = useAuth();
   const isSupplier = membership?.role === "SUPPLIER";
-  const orgName = membership?.organization?.name || "Your Organization";
 
   // Supplier Operational states
   const [supplierRfqs, setSupplierRfqs] = useState<any[]>([]);
@@ -48,14 +60,6 @@ export default function DashboardPage() {
   const [isCompleteProfileModalOpen, setIsCompleteProfileOpen] = useState(false);
   const [selectedRfqForDetails, setSelectedRfqForDetails] = useState<any | null>(null);
   const [selectedRfqForQuote, setSelectedRfqForQuote] = useState<any | null>(null);
-
-  const [rfqCount, setRfqCount] = useState(0);
-  const [quotationCount, setQuotationCount] = useState(0);
-  const [orderCount, setOrderCount] = useState(0);
-  const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
-  const [escrowTotal, setEscrowTotal] = useState("₹0");
-  const [recentOrders, setRecentOrders] = useState<any[]>([]);
-  const [activities, setActivities] = useState<ActivityItem[]>([]);
 
   // Buyer Marketplace Discovery states
   const [suppliers, setSuppliers] = useState<LiveSupplier[]>([]);
@@ -176,16 +180,14 @@ export default function DashboardPage() {
   const loadDashboardData = useCallback(async () => {
     if (!isSupplier) return;
     try {
-      const [rfqs, orders, payments, samples] = await Promise.all([
+      const [rfqs, orders, samples] = await Promise.all([
         marketplaceService.listMyRfqs(membership?.organizationId).catch(() => []),
         marketplaceService.listOrders().catch(() => []),
-        marketplaceService.listPayments().catch(() => []),
         marketplaceService.listSamples().catch(() => []),
       ]);
 
       const rfqList = Array.isArray(rfqs) ? rfqs : [];
       const orderList = Array.isArray(orders) ? orders : [];
-      const paymentList = Array.isArray(payments) ? payments : [];
       const sampleList = Array.isArray(samples) ? samples : [];
 
       setSupplierRfqs(rfqList);
@@ -209,23 +211,6 @@ export default function DashboardPage() {
         ["REQUESTED", "IN_PROGRESS", "REVISION_REQUIRED", "DISPATCHED"].includes(s.status)
       ).length;
       setSamplesPendingCount(pendingSamples);
-
-      setRfqCount(rfqList.length);
-      const totalQuotes = rfqList.reduce((acc: number, r: any) => acc + (r.quotations?.length || 0), 0);
-      setQuotationCount(totalQuotes);
-      setOrderCount(orderList.length);
-      const pendingCount = orderList.filter(
-        (o: any) => o.status === "PO_CREATED" || o.status === "PENDING_ACCEPTANCE"
-      ).length;
-      setPendingOrdersCount(pendingCount);
-      setRecentOrders(orderList.slice(0, 3));
-
-      if (paymentList.length > 0) {
-        const sum = paymentList.reduce((acc: number, p: any) => acc + (Number(p.amount) || 0), 0);
-        setEscrowTotal(sum > 0 ? `₹${(sum / 100000).toFixed(1)}L` : "₹0");
-      } else {
-        setEscrowTotal("₹0");
-      }
     } catch (err) {
       console.error("Dashboard fetch error:", err);
     }
@@ -260,78 +245,6 @@ export default function DashboardPage() {
   // SUPPLIER WORKSPACE VIEW (Matches Reference Image)
   // -------------------------------------------------------------
   if (isSupplier) {
-    const fallbackRfqs = [
-      {
-        id: "rfq_demo_1042",
-        rfqIdDisplay: "RFQ-2026-1042",
-        buyerName: "Demo Fashion Brand",
-        productName: "Oversized T-shirt",
-        quantity: "1,000 pcs",
-        deliveryDate: "25 Nov 2026",
-        status: "New RFQ",
-        statusStyle: "bg-purple-50 text-purple-700 border-purple-200",
-        actionType: "view_rfq" as const,
-        targetQuantity: 1000,
-        title: "1,000 Oversized T-Shirts",
-        raw: {
-          id: "rfq_demo_1042",
-          title: "1,000 Oversized T-Shirts",
-          targetQuantity: 1000,
-          garmentType: "T-Shirt",
-          fabricSpec: "240 GSM 100% Combed Cotton Single Jersey",
-          targetDate: "2026-11-25T00:00:00.000Z",
-          status: "OPEN",
-          buyer: { name: "Demo Fashion Brand", city: "Mumbai" },
-        },
-      },
-      {
-        id: "rfq_demo_1038",
-        rfqIdDisplay: "RFQ-2026-1038",
-        buyerName: "Studio 27",
-        productName: "Women's Co-ord Set",
-        quantity: "500 sets",
-        deliveryDate: "20 Nov 2026",
-        status: "Quote Due",
-        statusStyle: "bg-amber-50 text-amber-700 border-amber-200",
-        actionType: "send_quote" as const,
-        targetQuantity: 500,
-        title: "500 Women's Co-ord Sets",
-        raw: {
-          id: "rfq_demo_1038",
-          title: "500 Women's Co-ord Sets",
-          targetQuantity: 500,
-          garmentType: "Co-ord Set",
-          fabricSpec: "Cotton Linen Blend 210 GSM",
-          targetDate: "2026-11-20T00:00:00.000Z",
-          status: "OPEN",
-          buyer: { name: "Studio 27", city: "Delhi" },
-        },
-      },
-      {
-        id: "rfq_demo_1035",
-        rfqIdDisplay: "RFQ-2026-1035",
-        buyerName: "Northstar Apparel",
-        productName: "Hoodie",
-        quantity: "800 pcs",
-        deliveryDate: "28 Nov 2026",
-        status: "In Review",
-        statusStyle: "bg-blue-50 text-blue-700 border-blue-200",
-        actionType: "view_details" as const,
-        targetQuantity: 800,
-        title: "800 Heavyweight Blank Hoodies",
-        raw: {
-          id: "rfq_demo_1035",
-          title: "800 Heavyweight Blank Hoodies",
-          targetQuantity: 800,
-          garmentType: "Hoodie",
-          fabricSpec: "French Terry 400 GSM",
-          targetDate: "2026-11-28T00:00:00.000Z",
-          status: "OPEN",
-          buyer: { name: "Northstar Apparel", city: "Noida" },
-        },
-      },
-    ];
-
     const dbMappedRfqs = supplierRfqs.map((r: any, idx: number) => {
       const rfqIdDisplay = `RFQ-2026-${(r.id || "1042").slice(-4).replace(/\D/g, "").padStart(4, "0") || (1040 + idx).toString()}`;
       const buyerName = r.buyer?.name || "Enterprise Buyer";
@@ -395,19 +308,19 @@ export default function DashboardPage() {
             <div className="absolute right-8 bottom-5 h-3 w-24 rounded-full bg-white/55 blur-sm" />
           </div>
           <div className="relative z-10 max-w-[76%]">
-            <span className="inline-block text-[10px] font-mono uppercase font-extrabold tracking-[0.2em] text-[#5B13EC] mb-2">
+            <span className="inline-block text-xs uppercase font-extrabold tracking-[0.2em] text-[#5B13EC] mb-2">
               Supplier Dashboard
             </span>
-            <h1 className="font-sans font-extrabold text-[25px] leading-[1.12] tracking-tight text-slate-950">
+            <h1 className="font-extrabold text-3xl leading-[1.2] tracking-tight text-slate-950">
               Your Factory,<br />More Opportunities.
             </h1>
-            <p className="text-[12px] leading-relaxed text-slate-600 mt-2.5">
+            <p className="text-sm leading-[1.5] text-slate-600 mt-2.5">
               Get RFQs, send quotes, manage orders and samples in one place.
             </p>
             <button
               type="button"
               onClick={() => setIsUpdateCatalogOpen(true)}
-              className="mt-4 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#5B13EC] hover:bg-[#4d0ecf] text-white text-xs font-bold shadow-md transition-all active:scale-95"
+              className="mt-4 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#5B13EC] hover:bg-[#4d0ecf] text-white text-sm font-semibold shadow-md transition-all active:scale-95 leading-[1.4]"
             >
               <span className="material-symbols-outlined text-[18px]">add</span>
               <span>Update Catalogue</span>
@@ -418,13 +331,13 @@ export default function DashboardPage() {
         {/* Desktop hero retained exactly as before. */}
         <div className="hidden md:flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <span className="inline-block text-[11px] font-mono uppercase font-bold text-[#5B13EC] tracking-wider mb-1">
+            <span className="inline-block text-xs uppercase font-bold text-[#5B13EC] tracking-wider mb-1">
               SUPPLIER DASHBOARD
             </span>
-            <h1 className="font-sans font-extrabold text-2xl sm:text-3xl lg:text-4xl text-slate-900 tracking-tight">
+            <h1 className="font-extrabold text-3xl text-slate-900 tracking-tight leading-[1.2]">
               Your Factory, More Opportunities.
             </h1>
-            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            <p className="text-sm text-slate-500 mt-1 leading-[1.5]">
               Get RFQs, send quotes, manage orders and samples in one place.
             </p>
           </div>
@@ -757,17 +670,21 @@ export default function DashboardPage() {
         </div>
 
         {/* Modals for Supplier Actions */}
-        <UpdateCatalogModal
-          isOpen={isUpdateCatalogModalOpen}
-          onClose={() => setIsUpdateCatalogOpen(false)}
-          onSuccess={loadDashboardData}
-        />
+        {isUpdateCatalogModalOpen && (
+          <UpdateCatalogModal
+            isOpen={isUpdateCatalogModalOpen}
+            onClose={() => setIsUpdateCatalogOpen(false)}
+            onSuccess={loadDashboardData}
+          />
+        )}
 
-        <CompleteProfileModal
-          isOpen={isCompleteProfileModalOpen}
-          onClose={() => setIsCompleteProfileOpen(false)}
-          onSuccess={loadDashboardData}
-        />
+        {isCompleteProfileModalOpen && (
+          <CompleteProfileModal
+            isOpen={isCompleteProfileModalOpen}
+            onClose={() => setIsCompleteProfileOpen(false)}
+            onSuccess={loadDashboardData}
+          />
+        )}
 
         {selectedRfqForDetails && (
           <RfqDetailsModal
@@ -798,20 +715,20 @@ export default function DashboardPage() {
       <div className="relative overflow-hidden rounded-3xl bg-[#5B13EC] text-white p-7 sm:p-9 shadow-lg">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative z-10">
           <div className="space-y-2">
-            <div className="inline-flex items-center px-3 py-1 rounded-full bg-black/20 text-white text-[11px] font-bold tracking-wider uppercase backdrop-blur-xs">
+            <div className="inline-flex items-center px-3 py-1 rounded-full bg-black/20 text-white text-xs font-bold tracking-wider uppercase backdrop-blur-xs">
               FIND SUPPLIERS
             </div>
-            <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
+            <h1 className="text-3xl font-extrabold tracking-tight text-white leading-[1.2]">
               Find the right production partner.
             </h1>
-            <p className="text-purple-100 text-xs sm:text-sm font-normal max-w-xl">
+            <p className="text-purple-100 text-sm sm:text-base font-normal max-w-xl leading-[1.5]">
               Explore verified businesses by category, location and capability.
             </p>
           </div>
 
           <button
             onClick={() => openRfqModalWithSupplier()}
-            className="self-start sm:self-center px-5 py-3 rounded-xl bg-white text-[#5B13EC] font-bold text-xs sm:text-sm shadow-md hover:bg-purple-50 transition-all flex items-center gap-2 shrink-0 active:scale-95"
+            className="self-start sm:self-center px-5 py-3 rounded-xl bg-white text-[#5B13EC] font-semibold text-sm sm:text-base shadow-md hover:bg-purple-50 transition-all flex items-center gap-2 shrink-0 active:scale-95 cursor-pointer leading-[1.4]"
           >
             <span className="material-symbols-outlined text-[18px]">add</span>
             <span>Post RFQ</span>
@@ -961,12 +878,12 @@ export default function DashboardPage() {
                     <div className="flex-1 min-w-0">
                       <h3
                         onClick={() => setSelectedSupplierForModal(supplier)}
-                        className="font-bold text-base text-gray-900 truncate hover:text-primary transition-colors cursor-pointer"
+                        className="font-bold text-lg text-gray-900 truncate hover:text-primary transition-colors cursor-pointer leading-[1.2]"
                       >
                         {supplier.name}
                       </h3>
-                      <div className="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
-                        <span className="material-symbols-outlined text-[14px] text-gray-400">location_on</span>
+                      <div className="flex items-center gap-1 text-sm text-gray-500 mt-0.5 leading-[1.5]">
+                        <span className="material-symbols-outlined text-[15px] text-gray-400">location_on</span>
                         <span className="truncate">{supplier.city}</span>
                       </div>
                     </div>
@@ -975,25 +892,25 @@ export default function DashboardPage() {
                   {/* Stats Row: Minimum order | Capacity/range | View supplier profile */}
                   <div className="flex items-center justify-between gap-2 py-3 border-t border-gray-100">
                     <div className="min-w-0">
-                      <span className="text-[11px] text-gray-500 block">Minimum order</span>
-                      <span className="text-xs sm:text-sm font-bold text-gray-900 block truncate">
+                      <span className="text-xs text-gray-500 block leading-[1.4]">Minimum order</span>
+                      <span className="text-sm font-bold text-gray-900 block truncate leading-[1.4]">
                         {supplier.moq}
                       </span>
                     </div>
 
                     <div className="min-w-0">
-                      <span className="text-[11px] text-gray-500 block">Capacity / range</span>
-                      <span className="text-xs sm:text-sm font-bold text-gray-900 block truncate">
+                      <span className="text-xs text-gray-500 block leading-[1.4]">Capacity / range</span>
+                      <span className="text-sm font-bold text-gray-900 block truncate leading-[1.4]">
                         {supplier.capacity}
                       </span>
                     </div>
 
                     <button
                       onClick={() => setSelectedSupplierForModal(supplier)}
-                      className="px-3 py-1.5 rounded-xl border border-purple-200 text-[#5B13EC] hover:bg-purple-50 text-xs font-semibold transition-all flex items-center gap-1 shrink-0 ml-auto whitespace-nowrap"
+                      className="px-3 py-1.5 rounded-xl border border-purple-200 text-[#5B13EC] hover:bg-purple-50 text-sm font-semibold transition-all flex items-center gap-1 shrink-0 ml-auto whitespace-nowrap leading-[1.4]"
                     >
                       <span>View supplier profile</span>
-                      <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                      <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
                     </button>
                   </div>
                 </div>
@@ -1123,19 +1040,21 @@ export default function DashboardPage() {
       )}
 
       {/* 6. POST RFQ MODAL */}
-      <PostRfqModal
-        isOpen={isRfqModalOpen}
-        onClose={() => {
-          setIsRfqModalOpen(false);
-          setTargetSupplierOrgId(undefined);
-          setTargetSupplierName(undefined);
-        }}
-        initialSupplierOrgId={targetSupplierOrgId}
-        initialSupplierName={targetSupplierName}
-        onSuccess={() => {
-          loadSuppliers();
-        }}
-      />
+      {isRfqModalOpen && (
+        <PostRfqModal
+          isOpen={isRfqModalOpen}
+          onClose={() => {
+            setIsRfqModalOpen(false);
+            setTargetSupplierOrgId(undefined);
+            setTargetSupplierName(undefined);
+          }}
+          initialSupplierOrgId={targetSupplierOrgId}
+          initialSupplierName={targetSupplierName}
+          onSuccess={() => {
+            loadSuppliers();
+          }}
+        />
+      )}
 
       {/* 7. CATEGORY FILTER BOTTOM SHEET: Matches Reference Image 1 on Mobile View */}
       {isCategoryFilterModalOpen && (
@@ -1166,7 +1085,7 @@ export default function DashboardPage() {
 
             {/* Category Options List with Checkboxes */}
             <div className="flex flex-col my-3">
-              {filterCategories.map((cat, idx) => {
+              {filterCategories.map((cat) => {
                 const isSelected =
                   tempCategory === cat.value ||
                   (cat.value === "All" && (tempCategory === "All" || tempCategory === "All Categories"));

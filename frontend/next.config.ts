@@ -7,6 +7,10 @@ const backendUrl =
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  compress: true,
+  experimental: {
+    optimizePackageImports: ["lucide-react"],
+  },
   images: {
     remotePatterns: [
       {

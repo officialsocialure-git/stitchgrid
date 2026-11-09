@@ -10,7 +10,7 @@ import { cn } from "@/utils";
 import { AdminLayout } from "./AdminLayout";
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user, membership, loading } = useAuth();
+  const { membership, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 

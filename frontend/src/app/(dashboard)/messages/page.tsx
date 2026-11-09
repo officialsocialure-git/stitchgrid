@@ -144,10 +144,10 @@ export default function MessagesPage() {
       {/* Conversation list: mobile buyer sees this until a conversation is opened. */}
       <div className={`w-full md:w-80 border-r border-surface-container-high flex flex-col shrink-0 ${isBuyer && isMobileChatOpen ? "hidden md:flex" : "flex"}`}>
         <div className="p-4 border-b border-surface-container-high">
-          <h2 className="font-sans font-bold text-base text-on-surface">
+          <h2 className="font-bold text-lg sm:text-xl text-on-surface leading-[1.2]">
             {isSupplier ? "Factory Communications" : "Chat"}
           </h2>
-          <p className="text-xs text-secondary mt-0.5">Live Direct Messages</p>
+          <p className="text-sm text-secondary mt-0.5 leading-[1.5]">Live Direct Messages</p>
         </div>
 
         <div className="flex-1 overflow-y-auto divide-y divide-surface-container-high">

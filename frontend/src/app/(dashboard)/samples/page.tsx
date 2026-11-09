@@ -279,7 +279,7 @@ export default function SamplesPage() {
       return [];
     }
 
-    return rawSamples.map((s: any, idx: number) => {
+    return rawSamples.map((s: any) => {
       const po = s.purchaseOrder || {};
       const buyer = po.buyer || {};
       const item = po.items?.[0] || {};
@@ -397,10 +397,10 @@ export default function SamplesPage() {
       {/* Header Section: Matches Reference Image 1 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="font-sans font-extrabold text-2xl sm:text-3xl text-slate-900 tracking-tight">
+          <h1 className="font-extrabold text-3xl text-slate-900 tracking-tight leading-[1.2]">
             Samples
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+          <p className="text-sm text-slate-500 mt-1 leading-[1.5]">
             {isSupplier
               ? "Review prototype specifications, inspect buyer feedback, and dispatch physical samples."
               : "Check product samples and approve them before making bulk order."}

@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 
 export default function DisputesPage() {
@@ -9,8 +8,8 @@ export default function DisputesPage() {
     <div className="space-y-6 max-w-5xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-surface-container-high">
         <div>
-          <h1 className="font-sans font-bold text-2xl text-on-surface">Mediation & Quality Disputes</h1>
-          <p className="text-xs text-secondary mt-1">
+          <h1 className="font-extrabold text-3xl text-on-surface leading-[1.2]">Mediation & Quality Disputes</h1>
+          <p className="text-sm text-secondary mt-1 leading-[1.5]">
             Fair resolution backed by independent fabric lab reports and AQL standards.
           </p>
         </div>

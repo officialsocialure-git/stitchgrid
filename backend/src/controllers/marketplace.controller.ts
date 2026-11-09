@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../config/prisma";
 import { AppError, sendOk } from "../utils/http";
 import { audit } from "../services/audit";
+import { getCache, setCache, invalidateCachePattern } from "../services/cache";
 
 const GARMENT_SYNONYMS = [
   "garment", "apparel", "t-shirt", "shirt", "hoodie", "activewear", "denim",
@@ -58,9 +59,14 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
         : "";
     const city = typeof req.query.city === "string" ? req.query.city.trim().toLowerCase() : "";
 
-    // Fetch supplier organizations first, then apply optional text filters in
-    // memory. This avoids fragile nested relation filters and includes older
-    // supplier accounts that do not yet have a SupplierProfile row.
+    // 1. Check Redis / Memory Cache first (sub-5ms response)
+    const cacheKey = `cache:suppliers:${category || "all"}:${city || "all"}:${q || "all"}`;
+    const cachedRows = await getCache<any[]>(cacheKey);
+    if (cachedRows) {
+      return sendOk(res, cachedRows);
+    }
+
+    // 2. Fetch supplier organizations if cache miss
     const organizations = await prisma.organization.findMany({
       where: {
         verificationStatus: { in: ["APPROVED", "PENDING"] },
@@ -127,6 +133,9 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
         };
       });
 
+    // Cache the filtered supplier results for 60 seconds
+    await setCache(cacheKey, rows, 60);
+
     return sendOk(res, rows);
   } catch (e) {
     next(e);
@@ -179,6 +188,7 @@ export async function upsertSupplierProfile(req: Request, res: Response, next: N
       await prisma.supplierCategory.deleteMany({ where: { supplierProfileId: profile.id } });
       await prisma.supplierCategory.createMany({ data: input.categories.map(category => ({ supplierProfileId: profile.id, category })), skipDuplicates: true });
     }
+    await invalidateCachePattern("cache:suppliers:");
     await audit("SUPPLIER_PROFILE_UPDATED", "SupplierProfile", profile.id, req.auth!.userId, input.organizationId);
     return sendOk(res, profile);
   } catch (e) { next(e); }
@@ -245,6 +255,7 @@ export async function updateOrganizationProfile(req: Request, res: Response, nex
       }
     }
 
+    await invalidateCachePattern("cache:suppliers:");
     await audit("ORGANIZATION_PROFILE_UPDATED", "Organization", org.id, req.auth!.userId, org.id);
     return sendOk(res, org);
   } catch (e) { next(e); }
@@ -596,7 +607,6 @@ export async function createPurchaseOrder(req: Request, res: Response, next: Nex
     if (!buyer) throw new AppError(403, "Buyer membership required to accept quotes");
 
     const buyerName = quote.rfq?.buyer?.name || "Enterprise Buyer";
-    const supplierName = quote.supplier?.name || "Supplier";
     const garmentTitle = quote.rfq?.title || "Garment Order";
 
     const order = await prisma.$transaction(async tx => {
@@ -820,12 +830,13 @@ export async function adminVerification(req: Request, res: Response, next: NextF
     const organizationId = Array.isArray(req.params.organizationId) ? req.params.organizationId[0] : req.params.organizationId;
     const org = await prisma.organization.update({ where: { id: organizationId }, data: { verificationStatus: input.status } });
     await prisma.supplierProfile.updateMany({ where: { organizationId: org.id }, data: { verificationStatus: input.status } });
+    await invalidateCachePattern("cache:suppliers:");
     await audit("BUSINESS_VERIFICATION", "Organization", org.id, req.auth!.userId, undefined, { status: input.status, note: input.note });
     return sendOk(res, org);
   } catch (e) { next(e); }
 }
 
-export async function listAdminOrganizations(req: Request, res: Response, next: NextFunction) {
+export async function listAdminOrganizations(_req: Request, res: Response, next: NextFunction) {
   try {
     const orgs = await prisma.organization.findMany({
       include: {

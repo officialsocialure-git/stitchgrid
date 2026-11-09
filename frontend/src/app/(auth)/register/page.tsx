@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { authService } from "@/services/auth.service";
 import { StitchgridLogo } from "@/components/common/StitchgridLogo";
 
@@ -53,8 +52,6 @@ const MOQ_OPTIONS = [
 ];
 
 export default function RegisterPage() {
-  const router = useRouter();
-
   // Multi-step: 1 = Basic Info (Step 2 in diagram), 2 = Manufacturer Details (Step 3 in diagram)
   const [step, setStep] = useState<1 | 2>(1);
 
@@ -227,7 +224,7 @@ export default function RegisterPage() {
 
           <form onSubmit={handleStep2Submit} className="flex flex-col gap-3.5">
             <div>
-              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+              <label className="block text-xs sm:text-sm font-semibold text-slate-700 uppercase tracking-wider mb-1 leading-[1.4]">
                 CONTACT PERSON FULL NAME *
               </label>
               <input
@@ -236,12 +233,12 @@ export default function RegisterPage() {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="Amit Sharma"
-                className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:border-[#4f14e2] focus:ring-2 focus:ring-[#4f14e2]/15 shadow-sm transition-all"
+                className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-sm sm:text-base text-slate-900 focus:outline-none focus:border-[#4f14e2] focus:ring-2 focus:ring-[#4f14e2]/15 shadow-sm transition-all"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+              <label className="block text-xs sm:text-sm font-semibold text-slate-700 uppercase tracking-wider mb-1 leading-[1.4]">
                 REGISTERED ORGANIZATION NAME *
               </label>
               <input
@@ -250,12 +247,12 @@ export default function RegisterPage() {
                 value={organizationName}
                 onChange={(e) => setOrganizationName(e.target.value)}
                 placeholder="Asha Apparel Mills Pvt Ltd"
-                className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:border-[#4f14e2] focus:ring-2 focus:ring-[#4f14e2]/15 shadow-sm transition-all"
+                className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-sm sm:text-base text-slate-900 focus:outline-none focus:border-[#4f14e2] focus:ring-2 focus:ring-[#4f14e2]/15 shadow-sm transition-all"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              <label className="block text-xs sm:text-sm font-semibold text-slate-700 uppercase tracking-wider mb-1.5 leading-[1.4]">
                 ORGANIZATION ROLE *
               </label>
               <div className="grid grid-cols-3 gap-2 bg-slate-100/90 p-1 rounded-2xl border border-slate-200/60">
@@ -266,7 +263,7 @@ export default function RegisterPage() {
                       key={r}
                       type="button"
                       onClick={() => setRole(r)}
-                      className={`py-2 px-2 rounded-xl text-xs font-semibold text-center transition-all ${
+                      className={`py-2 px-2 rounded-xl text-xs sm:text-sm font-semibold text-center transition-all leading-[1.4] ${
                         isActive
                           ? "bg-[#4f14e2] text-white shadow-sm font-bold"
                           : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
@@ -281,7 +278,7 @@ export default function RegisterPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label className="block text-xs sm:text-sm font-semibold text-slate-700 uppercase tracking-wider mb-1 leading-[1.4]">
                   WORK EMAIL *
                 </label>
                 <input
@@ -290,12 +287,12 @@ export default function RegisterPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="amit@ashapparel.in"
-                  className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:border-[#4f14e2] focus:ring-2 focus:ring-[#4f14e2]/15 shadow-sm transition-all"
+                  className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-sm sm:text-base text-slate-900 focus:outline-none focus:border-[#4f14e2] focus:ring-2 focus:ring-[#4f14e2]/15 shadow-sm transition-all"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label className="block text-xs sm:text-sm font-semibold text-slate-700 uppercase tracking-wider mb-1 leading-[1.4]">
                   MOBILE NUMBER *
                 </label>
                 <div className="relative flex items-center w-full bg-white rounded-xl border border-slate-200 focus-within:border-[#4f14e2] focus-within:ring-2 focus-within:ring-[#4f14e2]/15 shadow-sm transition-all">
@@ -308,14 +305,14 @@ export default function RegisterPage() {
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="9876543210"
-                    className="flex-1 h-11 pr-3 text-sm text-slate-900 bg-transparent focus:outline-none font-mono"
+                    className="flex-1 h-11 pr-3 text-sm sm:text-base text-slate-900 bg-transparent focus:outline-none font-mono"
                   />
                 </div>
               </div>
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+              <label className="block text-xs sm:text-sm font-semibold text-slate-700 uppercase tracking-wider mb-1 leading-[1.4]">
                 PASSWORD (MIN 10 CHARACTERS) *
               </label>
               <div className="relative flex items-center w-full bg-white rounded-xl border border-slate-200 focus-within:border-[#4f14e2] focus-within:ring-2 focus-within:ring-[#4f14e2]/15 shadow-sm transition-all">
@@ -326,7 +323,7 @@ export default function RegisterPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
-                  className="flex-1 h-11 px-3.5 text-sm text-slate-900 bg-transparent focus:outline-none font-mono"
+                  className="flex-1 h-11 px-3.5 text-sm sm:text-base text-slate-900 bg-transparent focus:outline-none font-mono"
                 />
                 <button
                   type="button"
@@ -345,7 +342,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full h-12 mt-2 rounded-xl bg-[#4f14e2] hover:bg-[#4310c4] active:bg-[#380da5] text-white text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full h-12 mt-2 rounded-xl bg-[#4f14e2] hover:bg-[#4310c4] active:bg-[#380da5] text-white text-sm sm:text-base font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed leading-[1.4]"
             >
               <span>{role === "Brand / Buyer" ? (loading ? "Creating..." : "Create Account & Verify") : "Create Account & Continue"}</span>
               <span className="material-symbols-outlined text-[18px]">arrow_forward</span>

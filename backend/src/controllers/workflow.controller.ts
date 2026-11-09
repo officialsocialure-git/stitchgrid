@@ -548,14 +548,14 @@ export async function createReview(req: Request, res: Response, next: NextFuncti
   } catch (e) { next(e); }
 }
 
-export async function adminListOrganizations(req: Request, res: Response, next: NextFunction) {
+export async function adminListOrganizations(_req: Request, res: Response, next: NextFunction) {
   try {
     const data = await prisma.organization.findMany({ include: { members: true, supplierProfile: true }, orderBy: { createdAt: "desc" }, take: 100 });
     return sendOk(res, data);
   } catch (e) { next(e); }
 }
 
-export async function adminAuditLogs(req: Request, res: Response, next: NextFunction) {
+export async function adminAuditLogs(_req: Request, res: Response, next: NextFunction) {
   try {
     const data = await prisma.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 100 });
     return sendOk(res, data);

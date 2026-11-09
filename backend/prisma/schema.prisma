@@ -111,6 +111,7 @@ model Organization {
   quotes             Quotation[]
   buyerOrders        PurchaseOrder[] @relation("BuyerOrganization")
   supplierOrders     PurchaseOrder[] @relation("SupplierOrganization")
+  @@index([verificationStatus, createdAt])
 }
 
 model OrganizationMember {
@@ -125,6 +126,7 @@ model OrganizationMember {
   @@unique([userId, organizationId, role])
   @@index([userId])
   @@index([organizationId])
+  @@index([role, isActive])
 }
 
 model RefreshToken {

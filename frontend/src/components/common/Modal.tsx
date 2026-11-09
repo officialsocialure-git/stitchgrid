@@ -48,9 +48,9 @@ export function Modal({
       >
         <div className="flex min-w-0 items-start justify-between gap-3 pb-4 border-b border-surface-container-high">
           <div className="min-w-0 flex-1">
-            <h3 className="font-sans font-bold text-lg text-on-surface break-words">{title}</h3>
+            <h3 className="font-bold text-lg sm:text-xl leading-[1.2] text-on-surface break-words">{title}</h3>
             {description && (
-              <p className="text-xs text-on-surface-variant mt-0.5 break-words">{description}</p>
+              <p className="text-sm text-on-surface-variant leading-[1.5] mt-1 break-words">{description}</p>
             )}
           </div>
           <button

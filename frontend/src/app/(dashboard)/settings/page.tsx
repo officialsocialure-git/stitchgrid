@@ -91,10 +91,10 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="pb-4 border-b border-surface-container-high">
-        <h1 className="font-sans font-bold text-2xl text-on-surface">
+        <h1 className="font-extrabold text-3xl text-on-surface leading-[1.2]">
           {isSupplier ? "Company Profile & Factory Settings" : "Organization Profile & Compliance"}
         </h1>
-        <p className="text-xs text-secondary mt-1">
+        <p className="text-sm text-secondary mt-1 leading-[1.5]">
           {isSupplier
             ? "Manage your factory details, production capacities, GST verification, and manufacturing clusters."
             : "Manage your enterprise credentials, GST verification, and delivery locations."}
@@ -104,8 +104,8 @@ export default function SettingsPage() {
       <div className="bg-surface-container-lowest rounded-2xl p-6 border border-outline-variant/30 shadow-sm space-y-6">
         <div className="flex items-center justify-between pb-4 border-b border-surface-container-high">
           <div>
-            <h2 className="font-sans font-bold text-base text-on-surface">Verification Status</h2>
-            <p className="text-xs text-secondary mt-0.5">
+            <h2 className="font-bold text-xl text-on-surface leading-[1.2]">Verification Status</h2>
+            <p className="text-sm text-secondary mt-0.5 leading-[1.5]">
               {status === "APPROVED" ? "Enterprise identity verified" : "Pending identity & GST verification"}
             </p>
           </div>

@@ -330,7 +330,7 @@ export async function forgotPassword(req: Request, res: Response, next: NextFunc
       );
 
       console.info(`[PASSWORD RESET] Generated reset token for user ${user.id} (${trimmed})`);
-      await audit("AUTH_PASSWORD_RESET_REQUESTED", "User", user.id, user.id);
+      await audit("AUTH_PASSWORD_RESET_REQUESTED", "User", user.id, user.id, undefined, { hasToken: Boolean(resetToken) });
     }
 
     // Always respond with a generic message to prevent account enumeration
@@ -636,13 +636,13 @@ export async function me(req: Request, res: Response, next: NextFunction) {
 /**
  * 5. Deprecated OTP Endpoints (Maintained as graceful no-ops)
  */
-export async function legacyVerifyOtp(req: Request, res: Response) {
+export async function legacyVerifyOtp(_req: Request, res: Response) {
   return sendOk(res, {
     message: "OTP verification is deprecated. Please sign in directly with your email/mobile and password.",
   });
 }
 
-export async function legacyResendOtp(req: Request, res: Response) {
+export async function legacyResendOtp(_req: Request, res: Response) {
   return sendOk(res, {
     message: "OTP sending is deprecated. Please sign in directly with your email/mobile and password.",
   });

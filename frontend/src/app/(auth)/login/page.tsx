@@ -2,12 +2,10 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { authService } from "@/services/auth.service";
 import { StitchgridLogo } from "@/components/common/StitchgridLogo";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -293,7 +291,7 @@ export default function LoginPage() {
           <div>
             <label
               htmlFor="identifier-input"
-              className="block text-[11px] sm:text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5"
+              className="block text-xs sm:text-sm font-semibold text-gray-700 uppercase tracking-wider mb-1.5 leading-[1.4]"
             >
               REGISTERED EMAIL OR MOBILE NUMBER
             </label>
@@ -319,7 +317,7 @@ export default function LoginPage() {
                 onBlur={() => setFocusedField(null)}
                 onChange={(e) => setIdentifier(e.target.value)}
                 placeholder="name@company.com or 9842188302"
-                className="flex-1 h-12 pl-2.5 pr-3.5 text-sm sm:text-[15px] text-gray-900 placeholder:text-gray-400 bg-transparent focus:outline-none"
+                className="flex-1 h-12 pl-2.5 pr-3.5 text-sm sm:text-base text-gray-900 placeholder:text-gray-400 bg-transparent focus:outline-none"
               />
             </div>
           </div>
@@ -328,7 +326,7 @@ export default function LoginPage() {
           <div>
             <label
               htmlFor="password-input"
-              className="block text-[11px] sm:text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5"
+              className="block text-xs sm:text-sm font-semibold text-gray-700 uppercase tracking-wider mb-1.5 leading-[1.4]"
             >
               ACCOUNT PASSWORD
             </label>
@@ -354,7 +352,7 @@ export default function LoginPage() {
                 onBlur={() => setFocusedField(null)}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••••"
-                className="flex-1 h-12 pl-2.5 pr-3 text-sm sm:text-[15px] text-gray-900 placeholder:text-gray-400 bg-transparent focus:outline-none font-mono"
+                className="flex-1 h-12 pl-2.5 pr-3 text-sm sm:text-base text-gray-900 placeholder:text-gray-400 bg-transparent focus:outline-none font-mono"
               />
               <button
                 type="button"
@@ -398,7 +396,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full h-12 mt-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 active:bg-purple-900 text-white text-sm sm:text-[15px] font-medium flex items-center justify-center gap-2 transition-all shadow-md shadow-purple-600/20 hover:shadow-lg hover:shadow-purple-600/30 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+            className="w-full h-12 mt-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 active:bg-purple-900 text-white text-sm sm:text-base font-semibold leading-[1.4] flex items-center justify-center gap-2 transition-all shadow-md shadow-purple-600/20 hover:shadow-lg hover:shadow-purple-600/30 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
           >
             <span>{loading ? "Signing In..." : "Sign In"}</span>
             {!loading && <span className="material-symbols-outlined text-[19px]">arrow_forward</span>}
@@ -407,7 +405,7 @@ export default function LoginPage() {
           {/* OR Divider */}
           <div className="relative my-2.5 flex items-center justify-center">
             <div className="w-full h-[1px] bg-gray-200 absolute"></div>
-            <span className="relative px-3 py-0.5 bg-gray-100 rounded-full text-[11px] text-gray-500 uppercase tracking-widest font-semibold">
+            <span className="relative px-3 py-0.5 bg-gray-100 rounded-full text-xs text-gray-500 uppercase tracking-widest font-semibold">
               OR
             </span>
           </div>
@@ -417,7 +415,7 @@ export default function LoginPage() {
             type="button"
             onClick={handleGoogleLoginClick}
             disabled={googleLoading}
-            className="w-full h-11 sm:h-12 rounded-xl bg-white text-gray-800 text-xs sm:text-sm font-medium flex items-center justify-center gap-2.5 hover:bg-gray-50 active:bg-gray-100 transition-colors shadow-2xs border border-gray-200 cursor-pointer disabled:opacity-60"
+            className="w-full h-11 sm:h-12 rounded-xl bg-white text-gray-800 text-sm font-semibold leading-[1.4] flex items-center justify-center gap-2.5 hover:bg-gray-50 active:bg-gray-100 transition-colors shadow-2xs border border-gray-200 cursor-pointer disabled:opacity-60"
           >
             <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
               <path

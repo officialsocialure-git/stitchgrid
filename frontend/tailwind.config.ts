@@ -8,6 +8,14 @@ const config: Config = {
     "./src/features/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
+    screens: {
+      xs: "375px",
+      sm: "480px",
+      md: "768px",
+      lg: "1024px",
+      xl: "1440px",
+      "2xl": "1920px",
+    },
     extend: {
       colors: {
         primary: {
@@ -43,9 +51,33 @@ const config: Config = {
         }
       },
       fontFamily: {
-        sans: ["var(--font-plus-jakarta)", "Plus Jakarta Sans", "Inter", "sans-serif"],
-        body: ["var(--font-inter)", "Inter", "sans-serif"]
-      }
+        sans: ["var(--font-inter)", "Inter", "-apple-system", "BlinkMacSystemFont", "sans-serif"],
+        body: ["var(--font-inter)", "Inter", "-apple-system", "BlinkMacSystemFont", "sans-serif"],
+        heading: ["var(--font-inter)", "Inter", "-apple-system", "BlinkMacSystemFont", "sans-serif"],
+      },
+      fontSize: {
+        xs: ["12px", { lineHeight: "1.5" }],
+        sm: ["14px", { lineHeight: "1.4" }],
+        base: ["16px", { lineHeight: "1.5" }],
+        lg: ["18px", { lineHeight: "1.2" }],
+        xl: ["20px", { lineHeight: "1.2" }],
+        "2xl": ["clamp(22px, 1.2vw + 17px, 24px)", { lineHeight: "1.2" }],
+        "3xl": ["clamp(28px, 1.8vw + 20px, 32px)", { lineHeight: "1.2" }],
+        "4xl": ["clamp(32px, 2.5vw + 22px, 36px)", { lineHeight: "1.2" }],
+      },
+      fontWeight: {
+        regular: "400",
+        normal: "400",
+        medium: "500",
+        semibold: "600",
+        bold: "700",
+      },
+      lineHeight: {
+        heading: "1.2",
+        body: "1.5",
+        compact: "1.4",
+        caption: "1.5",
+      },
     },
   },
   plugins: [],

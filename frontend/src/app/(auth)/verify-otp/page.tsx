@@ -163,10 +163,10 @@ function VerifyOtpContent() {
           <StitchgridLogo size="md" />
         </div>
 
-        <h1 className="font-sans text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 leading-[1.2]">
           {isEmail ? "Verify Your Email Address" : "Verify Your Mobile Number"}
         </h1>
-        <p className="mx-auto mt-2 max-w-xs text-xs leading-5 text-slate-500 sm:text-sm">
+        <p className="mx-auto mt-2 max-w-xs text-sm leading-[1.5] text-slate-500">
           We&apos;ve sent a 6-digit OTP to{" "}
           <strong className="break-all font-mono font-bold text-slate-800">{formattedDestination}</strong>
         </p>

@@ -6,6 +6,45 @@
   :root {
     --background: 248 249 255;
     --foreground: 11 28 48;
+
+    /* Centralized Typography Design Tokens */
+    --font-family: var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    --font-plus-jakarta: var(--font-family);
+
+    /* Industry Standard Font Scale (Responsive with clamp) */
+    --text-xs: 12px;
+    --text-sm: 14px;
+    --text-base: 16px;
+    --text-lg: 18px;
+    --text-xl: 20px;
+    --text-2xl: clamp(22px, 1.2vw + 17px, 24px);
+    --text-3xl: clamp(28px, 1.8vw + 20px, 32px);
+    --text-4xl: clamp(32px, 2.5vw + 22px, 36px);
+
+    /* Standardized Semantic Hierarchy */
+    --text-h1: clamp(28px, 1.8vw + 20px, 32px); /* H1 – Page Heading: Desktop 32px, Mobile 28px */
+    --text-h2: clamp(22px, 1.2vw + 17px, 24px); /* H2 – Section Heading: Desktop 24px, Mobile 22px */
+    --text-h3: 20px;                             /* H3 – Subheading: Desktop 20px, Mobile 20px */
+    --text-h4: 18px;                             /* H4 – Card Heading: Desktop 18px, Mobile 18px */
+    --text-h5: 16px;                             /* H5 – Small Heading: Desktop 16px, Mobile 16px */
+    --text-body: 16px;                           /* Body Text: Desktop 16px, Mobile 16px */
+    --text-secondary: 14px;                      /* Secondary Text: Desktop 14px, Mobile 14px */
+    --text-label: clamp(13px, 0.4vw + 12px, 14px); /* Labels: Desktop 14px, Mobile 13px */
+    --text-table: 14px;                          /* Table Content: Desktop 14px, Mobile 14px */
+    --text-button: clamp(14px, 0.5vw + 13px, 16px); /* Buttons: 14-16px */
+    --text-caption: 12px;                        /* Captions: Desktop 12px, Mobile 12px */
+
+    /* Standardized Font Weights */
+    --font-regular: 400;
+    --font-medium: 500;
+    --font-semibold: 600;
+    --font-bold: 700;
+
+    /* Standardized Line Heights */
+    --line-heading: 1.2;
+    --line-body: 1.5;
+    --line-compact: 1.4;
+    --line-caption: 1.5;
   }
 
   html,
@@ -18,7 +57,13 @@
   body {
     background-color: #f8f9ff;
     color: #0b1c30;
-    font-family: 'Inter', sans-serif;
+    font-family: var(--font-family);
+    font-size: var(--text-body);
+    line-height: var(--line-body);
+    font-weight: var(--font-regular);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
   #__next,
@@ -39,6 +84,88 @@
   textarea,
   button {
     max-width: 100%;
+    font-family: var(--font-family);
+  }
+
+  /* HTML Headings Standardized */
+  h1 {
+    font-family: var(--font-family);
+    font-size: var(--text-h1);
+    line-height: var(--line-heading);
+    font-weight: var(--font-bold);
+    letter-spacing: -0.02em;
+  }
+
+  h2 {
+    font-family: var(--font-family);
+    font-size: var(--text-h2);
+    line-height: var(--line-heading);
+    font-weight: var(--font-bold);
+    letter-spacing: -0.015em;
+  }
+
+  h3 {
+    font-family: var(--font-family);
+    font-size: var(--text-h3);
+    line-height: var(--line-heading);
+    font-weight: var(--font-semibold);
+    letter-spacing: -0.01em;
+  }
+
+  h4 {
+    font-family: var(--font-family);
+    font-size: var(--text-h4);
+    line-height: var(--line-heading);
+    font-weight: var(--font-semibold);
+  }
+
+  h5 {
+    font-family: var(--font-family);
+    font-size: var(--text-h5);
+    line-height: var(--line-heading);
+    font-weight: var(--font-semibold);
+  }
+
+  p {
+    font-family: var(--font-family);
+    line-height: var(--line-body);
+  }
+
+  label {
+    font-family: var(--font-family);
+    font-size: var(--text-label);
+    line-height: var(--line-compact);
+    font-weight: var(--font-medium);
+  }
+
+  table {
+    font-family: var(--font-family);
+    font-size: var(--text-table);
+    line-height: var(--line-compact);
+  }
+
+  th {
+    font-family: var(--font-family);
+    font-size: var(--text-secondary);
+    font-weight: var(--font-semibold);
+    line-height: var(--line-compact);
+  }
+
+  td {
+    font-family: var(--font-family);
+    font-size: var(--text-table);
+    line-height: var(--line-compact);
+  }
+
+  button {
+    font-family: var(--font-family);
+    line-height: var(--line-compact);
+  }
+
+  caption {
+    font-family: var(--font-family);
+    font-size: var(--text-caption);
+    line-height: var(--line-caption);
   }
 }
 

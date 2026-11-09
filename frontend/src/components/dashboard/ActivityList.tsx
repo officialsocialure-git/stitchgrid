@@ -1,5 +1,4 @@
 import React from "react";
-import { Badge } from "@/components/common/Badge";
 
 export interface ActivityItem {
   id: string;

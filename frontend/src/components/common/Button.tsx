@@ -20,7 +20,7 @@ export function Button({
   disabled,
   ...props
 }: ButtonProps) {
-  const baseStyles = "inline-flex items-center justify-center font-medium rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none";
+  const baseStyles = "inline-flex items-center justify-center font-semibold leading-[1.4] rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none";
 
   const variants = {
     primary: "bg-primary text-white hover:bg-primary-container shadow-sm focus:ring-primary",
@@ -31,8 +31,8 @@ export function Button({
   };
 
   const sizes = {
-    sm: "h-9 px-3 text-xs gap-1.5",
-    md: "h-11 px-4 text-sm gap-2",
+    sm: "h-9 px-3 text-sm gap-1.5",
+    md: "h-11 px-4 text-sm sm:text-base gap-2",
     lg: "h-12 px-6 text-base gap-2.5",
   };
 

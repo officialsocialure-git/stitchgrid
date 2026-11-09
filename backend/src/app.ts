@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import cors from "cors";
 import helmet from "helmet";
+import compression from "compression";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import { env } from "./config/env";
@@ -18,6 +19,7 @@ const app = express();
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+app.use(compression());
 const allowedOrigins = new Set([
   ...env.CLIENT_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean),
   "https://stitchgrid-three.vercel.app",

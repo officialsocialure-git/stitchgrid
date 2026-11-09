@@ -114,12 +114,12 @@ export default function PaymentsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-surface-container-high">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="font-sans font-bold text-2xl text-on-surface">
+            <h1 className="font-extrabold text-3xl text-on-surface leading-[1.2]">
               {isSupplier ? "Secure Payments & Milestone Releases" : "Payments"}
             </h1>
             <Badge variant="primary" size="sm">B2B Vault Protected</Badge>
           </div>
-          <p className="text-xs text-secondary mt-1">
+          <p className="text-sm text-secondary mt-1 leading-[1.5]">
             Secure garment payments backed by milestone-based releases. Payments are released after required quality checks.
           </p>
         </div>
