@@ -115,35 +115,6 @@ export function Sidebar() {
           );
         })}
       </nav>
-
-      {/* Verified Status Badge Footer - Matches Reference Image */}
-      <div className="p-4 border-t border-slate-100">
-        {isSupplier ? (
-          <div className="p-3 rounded-2xl bg-emerald-50/60 border border-emerald-100 flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <span className="material-symbols-outlined text-[18px]">
-                check
-              </span>
-            </div>
-            <div className="flex flex-col min-w-0">
-              <span className="text-xs font-bold text-slate-900 truncate">GST Verified</span>
-              <span className="text-[10px] text-slate-500 font-medium">Supplier Account</span>
-            </div>
-          </div>
-        ) : (
-          <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-purple-100 text-[#5B13EC] flex items-center justify-center shrink-0">
-              <span className="material-symbols-outlined text-[18px]">
-                verified
-              </span>
-            </div>
-            <div className="flex flex-col min-w-0">
-              <span className="text-xs font-bold text-slate-900 truncate">GST &amp; Tirupur Verified</span>
-              <span className="text-[10px] text-slate-500 font-medium">B2B Payments Protected</span>
-            </div>
-          </div>
-        )}
-      </div>
     </aside>
   );
 }
