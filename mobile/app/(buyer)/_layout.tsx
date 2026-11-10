@@ -15,8 +15,8 @@ export default function BuyerTabsLayout() {
           backgroundColor: Colors.surface,
           borderTopWidth: 1,
           borderTopColor: Colors.border,
-          height: Platform.OS === "ios" ? 88 : 64,
-          paddingBottom: Platform.OS === "ios" ? 28 : 10,
+          height: Platform.OS === "ios" ? 92 : 72,
+          paddingBottom: Platform.OS === "ios" ? 30 : 16,
           paddingTop: 8,
         },
         tabBarLabelStyle: {

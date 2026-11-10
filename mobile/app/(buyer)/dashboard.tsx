@@ -281,7 +281,11 @@ export default function BuyerDashboardScreen() {
         Platform.OS === "android" ? { paddingTop: StatusBar.currentHeight || 0 } : null,
       ]}
     >
-      <Header showMenuButton hideActions onMenuPress={() => setNavigationMenuOpen(true)} />
+      <Header
+        showMenuButton
+        hideProfileButton
+        onMenuPress={() => setNavigationMenuOpen(true)}
+      />
 
       <Modal
         visible={navigationMenuOpen}
@@ -394,28 +398,8 @@ export default function BuyerDashboardScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* 3. CATEGORY FILTER PILLS (Horizontal Scroll) */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryScroll}
-        >
-          {CATEGORIES.map((cat) => {
-            const isActive = selectedCategory === cat;
-            return (
-              <TouchableOpacity
-                key={cat}
-                style={[styles.categoryPill, isActive && styles.categoryPillActive]}
-                onPress={() => setSelectedCategory(cat)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.categoryText, isActive && styles.categoryTextActive]}>
-                  {cat}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        {/* Category chips are intentionally hidden; category filtering remains available
+            through the filter button above. */}
 
         {/* 4. SUPPLIER CARDS (Matches Web Marketplace Card Design) */}
         <View style={styles.cardSection}>

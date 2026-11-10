@@ -124,6 +124,8 @@ export interface PurchaseOrder {
   buyerOrg?: { id: string; name: string; city?: string };
   supplier?: { id: string; name: string; city?: string };
   supplierOrg?: { id: string; name: string; city?: string };
+  styleName?: string;
+  notes?: string;
   createdAt: string;
   expectedDate?: string;
 }

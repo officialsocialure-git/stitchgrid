@@ -7,7 +7,6 @@ import {
   RefreshControl,
   TouchableOpacity,
   SafeAreaView,
-  ScrollView,
   Alert,
   Platform,
 } from "react-native";
@@ -16,7 +15,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../src/constants/colors";
 import { Header } from "../../src/components/common/Header";
 import { Button } from "../../src/components/common/Button";
-import { Input } from "../../src/components/common/Input";
 import { EmptyState } from "../../src/components/common/EmptyState";
 import { marketplaceService } from "../../src/services/marketplace.service";
 import { useRealtimeSync } from "../../src/hooks/useRealtimeSync";
@@ -27,8 +25,6 @@ export default function BuyerOrdersScreen() {
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [statusFilter, setStatusFilter] = useState("ALL");
-  const [searchQuery, setSearchQuery] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const loadOrders = useCallback(async () => {
@@ -68,86 +64,54 @@ export default function BuyerOrdersScreen() {
     }
   };
 
-  const filteredOrders = orders.filter((o) => {
-    const matchesFilter =
-      statusFilter === "ALL" ||
-      (statusFilter === "ACTIVE" && o.status !== "COMPLETED" && o.status !== "CANCELLED") ||
-      o.status === statusFilter;
-    const matchesQuery =
-      !searchQuery.trim() ||
-      (o.poNumber && o.poNumber.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (o.supplierOrg?.name && o.supplierOrg.name.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesFilter && matchesQuery;
-  });
-
   const getProgressPercentage = (status: string) => {
     switch (status) {
+      case "PO_CREATED":
+      case "PENDING_ACCEPTANCE":
       case "ISSUED":
-        return 15;
+        return 10;
       case "ACCEPTED":
+        return 20;
       case "SAMPLE_PENDING":
         return 30;
       case "SAMPLE_APPROVED":
+        return 45;
       case "PRODUCTION_STARTED":
       case "IN_PRODUCTION":
         return 65;
+      case "QC_PENDING":
       case "QC":
         return 80;
-      case "DISPATCHED":
+      case "READY_TO_DISPATCH":
         return 90;
+      case "DISPATCHED":
+        return 95;
+      case "DELIVERED":
       case "COMPLETED":
         return 100;
       default:
-        return 20;
+        return 10;
     }
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <Header
-        title="Purchase Orders"
-        subtitle="Active manufacturing production lines"
-      />
-
-      {/* Filter Row */}
-      <View style={styles.filterSection}>
-        <View style={styles.searchInputWrap}>
-          <Ionicons name="search" size={17} color={Colors.textMuted} style={{ marginRight: 8 }} />
-          <Input
-            placeholder="Search orders by PO#, supplier..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            containerStyle={{ flex: 1, marginBottom: 0 }}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery("")} style={{ padding: 4 }}>
-              <Ionicons name="close-circle" size={16} color={Colors.textMuted} />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterPills}
-        >
-          {["ALL", "ACTIVE", "IN_PRODUCTION", "COMPLETED"].map((st) => (
-            <TouchableOpacity
-              key={st}
-              onPress={() => setStatusFilter(st)}
-              style={[styles.pill, statusFilter === st && styles.pillActive]}
-            >
-              <Text style={[styles.pillText, statusFilter === st && styles.pillTextActive]}>
-                {st}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
+      <Header />
 
       <FlatList
-        data={filteredOrders}
+        data={orders}
         keyExtractor={(item) => item.id}
+        ListHeaderComponent={
+          <View style={styles.pageHeader}>
+            <Text style={styles.pageTitle}>My Orders</Text>
+            <Button
+              title="Issue New Purchase Order"
+              onPress={() => router.push("/(buyer)/rfqs")}
+              size="lg"
+              style={styles.newOrderButton}
+            />
+          </View>
+        }
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -170,81 +134,86 @@ export default function BuyerOrdersScreen() {
             />
           ) : undefined
         }
-        renderItem={({ item, index }) => {
-          const poDisplay = item.poNumber || `PO-2026-${(item.id || "100").slice(-4).replace(/\D/g, "").padStart(4, "0") || (1000 + index).toString()}`;
+        renderItem={({ item }) => {
           const progress = getProgressPercentage(item.status);
-          const isSamplePending = item.status === "SAMPLE_PENDING" || item.status === "ACCEPTED";
+          const isSamplePending = item.status === "SAMPLE_PENDING";
           const isCompleted = item.status === "COMPLETED";
+          const itemTitle = item.items?.length
+            ? item.items.map((part) => `${Number(part.quantity || 0).toLocaleString()} pcs ${part.description || "Apparel"}`).join(", ")
+            : "Apparel Production Order";
+          const buyerName = item.buyerOrg?.name || item.buyer?.name || "Buyer";
+          const deliveryDate = item.expectedDate
+            ? new Date(item.expectedDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+            : "Not specified";
+          const currentMilestone = item.milestones?.find((milestone) => milestone.status === "IN_PROGRESS")?.title
+            || (isCompleted ? "Order Fulfilled & Payment Released"
+            : item.status === "DISPATCHED" ? "In Transit"
+            : item.status === "QC" || item.status === "QC_PENDING" ? "Quality Inspection (AQL 2.5)"
+            : item.status === "PRODUCTION_STARTED" || item.status === "IN_PRODUCTION" ? "Bulk Production Lines Active"
+            : item.status === "SAMPLE_APPROVED" ? "Pre-Production Sample Approved"
+            : item.status === "SAMPLE_PENDING" ? "PP Sample in Review"
+            : item.status === "ACCEPTED" ? "Order Accepted by Factory"
+            : "Purchase Order Generated");
 
           return (
             <View style={styles.orderCard}>
-              <View style={styles.topRow}>
-                <Text style={styles.poNumberText}>{poDisplay}</Text>
-                <View
-                  style={[
-                    styles.statusPill,
-                    isCompleted
-                      ? { backgroundColor: Colors.successLight, borderColor: Colors.successBorder }
-                      : { backgroundColor: Colors.primaryLight, borderColor: Colors.borderPrimary },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.statusPillText,
-                      isCompleted ? { color: Colors.successText } : { color: Colors.primary },
-                    ]}
-                  >
-                    {item.status.replace("_", " ")}
-                  </Text>
+              <View style={styles.cardTopRow}>
+                <Text style={styles.poNumberText}>{item.poNumber || "Purchase Order"}</Text>
+                <View style={[
+                  styles.statusPill,
+                  isCompleted
+                    ? { backgroundColor: Colors.successLight, borderColor: Colors.successBorder }
+                    : { backgroundColor: Colors.primaryLight, borderColor: Colors.borderPrimary },
+                ]}>
+                  <Text style={[
+                    styles.statusPillText,
+                    isCompleted ? { color: Colors.successText } : { color: Colors.primary },
+                  ]}>{item.status.replace(/_/g, " ")}</Text>
                 </View>
               </View>
 
-              <Text style={styles.supplierText}>
-                Factory: <Text style={{ color: Colors.textHeading, fontWeight: "800" }}>{item.supplierOrg?.name || "Verified Mill"}</Text>
-              </Text>
+              <Text style={styles.orderTitle}>{itemTitle}</Text>
+              <Text style={styles.buyerText}>Buyer: <Text style={styles.buyerName}>{buyerName}</Text></Text>
 
-              <View style={styles.pricingRow}>
-                <View>
-                  <Text style={styles.label}>Total Contract Value</Text>
-                  <Text style={styles.amountText}>₹{item.totalAmount.toLocaleString()}</Text>
+              <View style={styles.amountDateRow}>
+                <Text style={styles.orderAmount}>₹{(Number(item.totalAmount) / 100000).toFixed(2)}L</Text>
+                <Text style={styles.deliveryDate}>Target: {deliveryDate}</Text>
+              </View>
+
+              <View style={styles.milestonePanel}>
+                <View style={styles.milestoneTopRow}>
+                  <Text style={styles.currentMilestone} numberOfLines={1}>{currentMilestone}</Text>
+                  <Text style={styles.completedText}>{progress}% Completed</Text>
                 </View>
-                <View style={{ alignItems: "flex-end" }}>
-                  <Text style={styles.label}>Progress</Text>
-                  <Text style={styles.progressPercentText}>{progress}%</Text>
+                <View style={styles.webProgressTrack}>
+                  <View style={[styles.webProgressFill, { width: `${progress}%` }]} />
                 </View>
               </View>
 
-              {/* Progress Bar (Matching Web) */}
-              <View style={styles.progressBarTrack}>
-                <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
-              </View>
-
-              <View style={styles.stageLabelsRow}>
-                <Text style={styles.stageText}>Deposit</Text>
-                <Text style={styles.stageText}>Sample</Text>
-                <Text style={styles.stageText}>Bulk Cut</Text>
-                <Text style={styles.stageText}>QC Pass</Text>
-                <Text style={styles.stageText}>Dispatched</Text>
-              </View>
-
-              {/* Action Buttons */}
-              <View style={styles.actionRow}>
-                {isSamplePending && (
-                  <Button
-                    title={updatingId === item.id ? "Approving..." : "Approve Sample"}
-                    size="sm"
-                    loading={updatingId === item.id}
-                    onPress={() => handleApproveSample(item.id)}
-                    style={{ flex: 1 }}
-                  />
-                )}
+              <View style={styles.actionsDivider} />
+              {isSamplePending && (
                 <Button
-                  title="Track Milestones"
-                  variant="outline"
-                  size="sm"
-                  onPress={() => router.push("/(buyer)/production")}
-                  style={{ flex: 1 }}
+                  title={updatingId === item.id ? "Approving..." : "Approve PP Sample"}
+                  size="md"
+                  loading={updatingId === item.id}
+                  onPress={() => handleApproveSample(item.id)}
+                  style={styles.approveButton}
                 />
+              )}
+
+              <View style={styles.quickActions}>
+                <TouchableOpacity style={styles.quickAction} onPress={() => router.push(`/(buyer)/production?orderId=${item.id}`)}>
+                  <Ionicons name="business-outline" size={24} color={Colors.textHeading} />
+                  <Text style={styles.quickActionText}>Track Milestones</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.quickAction} onPress={() => router.push("/(buyer)/samples")}>
+                  <Ionicons name="shirt-outline" size={24} color={Colors.textHeading} />
+                  <Text style={styles.quickActionText}>View Samples</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.quickAction} onPress={() => router.push("/(buyer)/payments")}>
+                  <Ionicons name="wallet-outline" size={24} color={Colors.textHeading} />
+                  <Text style={styles.quickActionText}>Secure Payment</Text>
+                </TouchableOpacity>
               </View>
             </View>
           );
@@ -304,8 +273,26 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   listContent: {
-    padding: 16,
-    paddingBottom: 40,
+    paddingHorizontal: 16,
+    paddingTop: 22,
+    paddingBottom: 112,
+  },
+  pageHeader: {
+    paddingBottom: 18,
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    gap: 16,
+  },
+  pageTitle: {
+    fontSize: 30,
+    lineHeight: 38,
+    fontWeight: "900",
+    color: Colors.textHeading,
+  },
+  newOrderButton: {
+    alignSelf: "flex-start",
+    minWidth: 0,
   },
   orderCard: {
     backgroundColor: Colors.surface,
@@ -319,6 +306,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.03,
     shadowRadius: 6,
     elevation: 1,
+  },
+  cardTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 10,
   },
   topRow: {
     flexDirection: "row",
@@ -347,6 +342,112 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textSecondary,
     marginBottom: 12,
+  },
+  orderTitle: {
+    fontSize: 21,
+    lineHeight: 27,
+    fontWeight: "800",
+    color: Colors.textHeading,
+    marginBottom: 8,
+  },
+  buyerText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    marginBottom: 16,
+  },
+  buyerName: {
+    color: Colors.textHeading,
+    fontWeight: "800",
+  },
+  amountDateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 16,
+  },
+  orderAmount: {
+    fontSize: 27,
+    fontWeight: "900",
+    color: Colors.primary,
+  },
+  deliveryDate: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    fontWeight: "600",
+  },
+  milestonePanel: {
+    backgroundColor: "#F7F2FF",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#E9DFFF",
+    padding: 14,
+  },
+  milestoneTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 9,
+  },
+  currentMilestone: {
+    flex: 1,
+    color: Colors.primary,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  completedText: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  webProgressTrack: {
+    height: 9,
+    borderRadius: 8,
+    backgroundColor: "#DCE8FF",
+    overflow: "hidden",
+  },
+  webProgressFill: {
+    height: "100%",
+    borderRadius: 8,
+    backgroundColor: Colors.primary,
+  },
+  actionsDivider: {
+    height: 1,
+    backgroundColor: Colors.borderLight,
+    marginTop: 18,
+    marginBottom: 14,
+  },
+  approveButton: {
+    alignSelf: "flex-start",
+    marginBottom: 14,
+  },
+  quickActions: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  quickAction: {
+    flex: 1,
+    minHeight: 84,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 13,
+    backgroundColor: Colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    paddingVertical: 10,
+    gap: 7,
+  },
+  quickActionText: {
+    color: Colors.textHeading,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "700",
+    textAlign: "center",
   },
   pricingRow: {
     flexDirection: "row",
