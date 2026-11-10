@@ -6,6 +6,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "admin:create": "node scripts/create-admin.cjs",
     "build": "tsc",
     "start": "node dist/server.js",
     "db:generate": "prisma generate",

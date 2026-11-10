@@ -21,6 +21,9 @@ interface HeaderProps {
   subtitle?: string;
   showBack?: boolean;
   rightAction?: React.ReactNode;
+  showMenuButton?: boolean;
+  hideActions?: boolean;
+  onMenuPress?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -28,6 +31,9 @@ export const Header: React.FC<HeaderProps> = ({
   subtitle,
   showBack = false,
   rightAction,
+  showMenuButton = false,
+  hideActions = false,
+  onMenuPress,
 }) => {
   const router = useRouter();
   const { user, activeMembership, isBuyer, isSupplier, switchRole, logout, memberships } = useAuth();
@@ -66,6 +72,16 @@ export const Header: React.FC<HeaderProps> = ({
     <View style={styles.container}>
       {/* Left Section: Logo or Back Button */}
       <View style={styles.leftRow}>
+        {showMenuButton && !showBack && (
+          <TouchableOpacity
+            onPress={onMenuPress}
+            style={styles.menuButton}
+            activeOpacity={0.75}
+            accessibilityLabel="Open navigation menu"
+          >
+            <Ionicons name="menu" size={27} color={Colors.slate600} />
+          </TouchableOpacity>
+        )}
         {showBack ? (
           <TouchableOpacity
             onPress={() => router.back()}
@@ -103,7 +119,7 @@ export const Header: React.FC<HeaderProps> = ({
       </View>
 
       {/* Right Section: Notification & Profile Button */}
-      <View style={styles.rightRow}>
+      {!hideActions && <View style={styles.rightRow}>
         {rightAction ? (
           rightAction
         ) : (
@@ -136,7 +152,7 @@ export const Header: React.FC<HeaderProps> = ({
             </TouchableOpacity>
           </>
         )}
-      </View>
+      </View>}
 
       {/* Profile Dropdown Modal (Matching Web Topbar Mobile Menu) */}
       <Modal
@@ -261,6 +277,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
+  },
+  menuButton: {
+    width: 36,
+    height: 40,
+    alignItems: "flex-start",
+    justifyContent: "center",
+    marginRight: 10,
   },
   logoWrap: {
     paddingVertical: 4,

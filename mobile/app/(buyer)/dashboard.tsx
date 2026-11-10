@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  StatusBar,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -122,6 +123,7 @@ export default function BuyerDashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [navigationMenuOpen, setNavigationMenuOpen] = useState(false);
 
   // Modals
   const [selectedSupplier, setSelectedSupplier] = useState<any | null>(null);
@@ -273,8 +275,68 @@ export default function BuyerDashboardScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <Header />
+    <SafeAreaView
+      style={[
+        styles.safeArea,
+        Platform.OS === "android" ? { paddingTop: StatusBar.currentHeight || 0 } : null,
+      ]}
+    >
+      <Header showMenuButton hideActions onMenuPress={() => setNavigationMenuOpen(true)} />
+
+      <Modal
+        visible={navigationMenuOpen}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setNavigationMenuOpen(false)}
+      >
+        <View style={styles.navigationOverlay}>
+          <TouchableOpacity
+            style={styles.navigationBackdrop}
+            activeOpacity={1}
+            onPress={() => setNavigationMenuOpen(false)}
+          />
+          <View style={styles.navigationDrawer}>
+            <View style={styles.navigationHeader}>
+              <Text style={styles.navigationTitle}>STITCHGRID</Text>
+              <TouchableOpacity
+                onPress={() => setNavigationMenuOpen(false)}
+                style={styles.navigationCloseButton}
+                accessibilityLabel="Close navigation menu"
+              >
+                <Ionicons name="close" size={22} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.navigationSubtitle}>Buyer Workspace</Text>
+            {[
+              { label: "Dashboard", icon: "grid-outline", route: "/(buyer)/dashboard" },
+              { label: "Buyer Requests", icon: "document-text-outline", route: "/(buyer)/rfqs" },
+              { label: "My Offers", icon: "pricetags-outline", route: "/(buyer)/offers" },
+              { label: "Orders", icon: "cube-outline", route: "/(buyer)/orders" },
+              { label: "Samples", icon: "layers-outline", route: "/(buyer)/samples" },
+              { label: "Production", icon: "construct-outline", route: "/(buyer)/production" },
+              { label: "Payments", icon: "card-outline", route: "/(buyer)/payments" },
+              { label: "Messages", icon: "chatbubble-ellipses-outline", route: "/(buyer)/messages" },
+              { label: "Profile", icon: "person-outline", route: "/(buyer)/profile" },
+              { label: "Settings", icon: "settings-outline", route: "/(shared)/settings" },
+              { label: "Notifications", icon: "notifications-outline", route: "/(shared)/notifications" },
+            ].map((item) => (
+              <TouchableOpacity
+                key={item.label}
+                style={styles.navigationItem}
+                activeOpacity={0.75}
+                onPress={() => {
+                  setNavigationMenuOpen(false);
+                  router.push(item.route as any);
+                }}
+              >
+                <Ionicons name={item.icon as any} size={20} color={Colors.primary} />
+                <Text style={styles.navigationItemText}>{item.label}</Text>
+                <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </Modal>
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -678,6 +740,67 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  navigationOverlay: {
+    flex: 1,
+    flexDirection: "row",
+    backgroundColor: "rgba(15, 23, 42, 0.42)",
+  },
+  navigationBackdrop: {
+    ...StyleSheet.absoluteFill,
+  },
+  navigationDrawer: {
+    width: "82%",
+    maxWidth: 340,
+    height: "100%",
+    backgroundColor: Colors.surface,
+    paddingTop: Platform.OS === "ios" ? 58 : (StatusBar.currentHeight || 0) + 18,
+    paddingHorizontal: 18,
+    paddingBottom: 24,
+    borderTopRightRadius: 22,
+    borderBottomRightRadius: 22,
+    elevation: 18,
+  },
+  navigationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  navigationTitle: {
+    color: Colors.primary,
+    fontSize: 19,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+  },
+  navigationCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.surfaceSubtle,
+  },
+  navigationSubtitle: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 18,
+  },
+  navigationItem: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 13,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  navigationItemText: {
+    flex: 1,
+    color: Colors.textHeading,
+    fontSize: 14,
+    fontWeight: "600",
   },
   scrollContent: {
     paddingHorizontal: 16,
