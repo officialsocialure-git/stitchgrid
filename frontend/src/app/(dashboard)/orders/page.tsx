@@ -125,12 +125,9 @@ export default function OrdersPage() {
     <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto pb-24 sm:pb-0">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 sm:pb-4 border-b border-surface-container-high">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="font-extrabold text-3xl text-on-surface leading-[1.2]">
-              {isSupplier ? "Purchase Orders (POs)" : "My Orders"}
-            </h1>
-            <Badge variant="primary" size="sm" className="hidden sm:inline-flex">MySQL Live Sync</Badge>
-          </div>
+          <h1 className="font-extrabold text-3xl text-on-surface leading-[1.2]">
+            {isSupplier ? "Purchase Orders (POs)" : "My Orders"}
+          </h1>
           <p className="hidden sm:block text-sm text-secondary mt-1 leading-[1.5]">
             Active and fulfilled B2B garment manufacturing contracts secured by payment milestones.
           </p>
