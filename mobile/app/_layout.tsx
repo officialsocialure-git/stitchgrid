@@ -1,10 +1,10 @@
-import React from "react";
-import { Stack, useRouter, useSegments } from "expo-router";
+import React, { useEffect } from "react";
+import { Stack, useRouter, useSegments, useRootNavigationState } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
-import { View, ActivityIndicator, Text, Image, Linking, StyleSheet } from "react-native";
+import { View, Text, Image, Linking, StyleSheet } from "react-native";
 import { Colors } from "../src/constants/colors";
 import { Button } from "../src/components/common/Button";
 
@@ -17,52 +17,56 @@ const queryClient = new QueryClient({
   },
 });
 
-function RouteGuard({ children }: { children: React.ReactNode }) {
-  const { user, token, activeMembership, isLoading, isBuyer, isSupplier, isAdmin, logout } = useAuth();
+/**
+ * Headless route synchronizer that handles role and session transitions
+ * AFTER the root layout has mounted and initial boot on index has completed.
+ */
+function RouteSynchronizer() {
+  const { token, isLoading, isSupplier, isAdmin, logout } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const rootNavigationState = useRootNavigationState();
 
-  React.useEffect(() => {
-    if (isLoading) return;
+  const isNavigationReady = Boolean(rootNavigationState?.key);
 
-    const inAuthGroup = segments[0] === "(auth)";
+  useEffect(() => {
+    // Crucial lifecycle check: Never navigate before root navigation is mounted
+    if (!isNavigationReady || isLoading) {
+      return;
+    }
+
+    const firstSegment = segments[0];
+    const inAuthGroup = firstSegment === "(auth)";
+    const onIndexRoute = !firstSegment || firstSegment === "index";
+
+    // Let IndexScreen handle the initial boot from root "/"
+    if (onIndexRoute) {
+      return;
+    }
 
     if (!token) {
+      // If user is on any protected route without a token, redirect to login
       if (!inAuthGroup) {
         router.replace("/(auth)/login");
       }
     } else {
-      if (isAdmin) {
-        // Admin is handled via the dedicated Web Admin notice below
-        return;
-      }
+      // If user has a token but is on auth screens (login/register), redirect to role dashboard
       if (inAuthGroup) {
-        if (isSupplier) {
+        if (isAdmin) {
+          router.replace("/");
+        } else if (isSupplier) {
           router.replace("/(supplier)/dashboard");
         } else {
           router.replace("/(buyer)/dashboard");
         }
       }
     }
-  }, [token, isLoading, activeMembership, segments, isBuyer, isSupplier, isAdmin]);
+  }, [isNavigationReady, token, isLoading, segments, isSupplier, isAdmin]);
 
-  if (isLoading) {
+  // If Admin user logs in while on any screen other than index, show the overlay notice
+  if (!isLoading && token && isAdmin && segments[0] !== "index") {
     return (
-      <View style={styles.centerContainer}>
-        <Image
-          source={require("../assets/stitchgrid-logo.png")}
-          style={{ width: 220, height: 50, marginBottom: 20 }}
-          resizeMode="contain"
-        />
-        <ActivityIndicator size="small" color={Colors.primary} />
-      </View>
-    );
-  }
-
-  // Admin users are directed to the Web Admin console per architecture directives
-  if (token && isAdmin) {
-    return (
-      <View style={styles.centerContainer}>
+      <View style={[StyleSheet.absoluteFill, styles.centerContainer, { zIndex: 999 }]}>
         <View style={styles.adminCard}>
           <Image
             source={require("../assets/stitchgrid-logo.png")}
@@ -89,7 +93,7 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return null;
 }
 
 export default function RootLayout() {
@@ -98,15 +102,15 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <StatusBar style="dark" />
-          <RouteGuard>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="index" />
-              <Stack.Screen name="(auth)" />
-              <Stack.Screen name="(buyer)" />
-              <Stack.Screen name="(supplier)" />
-              <Stack.Screen name="(shared)" />
-            </Stack>
-          </RouteGuard>
+          {/* Root navigator is ALWAYS mounted unconditionally on the first render */}
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(buyer)" />
+            <Stack.Screen name="(supplier)" />
+            <Stack.Screen name="(shared)" />
+          </Stack>
+          <RouteSynchronizer />
         </AuthProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
@@ -120,12 +124,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: Colors.background,
     padding: 24,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: Colors.textSecondary,
-    fontWeight: "600",
   },
   adminCard: {
     backgroundColor: "#FFFFFF",
@@ -151,4 +149,3 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
 });
-

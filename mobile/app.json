@@ -53,6 +53,15 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "8099b7c4-c1c6-4636-8876-6769dc8a6af0"
+      }
+    },
+    "owner": "socialures-team"
   }
 }
