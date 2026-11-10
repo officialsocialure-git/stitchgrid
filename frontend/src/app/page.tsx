@@ -2,12 +2,13 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { StitchgridLogo } from "@/components/common/StitchgridLogo";
 
-export default function RootPage() {
+export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("sg_token") : null;
+    const token = localStorage.getItem("sg_token");
     if (token) {
       router.replace("/dashboard");
     } else {
@@ -16,12 +17,13 @@ export default function RootPage() {
   }, [router]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface">
-      <div className="flex flex-col items-center gap-3">
-        <div className="w-12 h-12 rounded-2xl bg-primary text-white flex items-center justify-center animate-spin">
-          <span className="material-symbols-outlined text-[24px]">layers</span>
+    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="flex flex-col items-center gap-4">
+        <StitchgridLogo size="lg" subtitle="Connecting Buyers and Verified Garment Manufacturers" />
+        <div className="flex items-center gap-2 mt-4 text-xs font-semibold text-purple-700">
+          <div className="w-2 h-2 rounded-full bg-purple-700 animate-ping" />
+          <span>Entering STITCHGRID...</span>
         </div>
-        <p className="font-sans font-bold text-sm text-primary">Entering STITCHGRID...</p>
       </div>
     </div>
   );

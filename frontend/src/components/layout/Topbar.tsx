@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { authService } from "@/services/auth.service";
@@ -100,18 +101,15 @@ export function Topbar() {
         </button>
 
         {/* Brand Logo Link (Only shown on mobile when sidebar is hidden) */}
-        <Link href="/dashboard" className="flex md:hidden items-center gap-2.5 group">
-          <div className="w-9 h-9 rounded-xl bg-[#5B13EC] flex items-center justify-center text-white shadow-xs group-hover:bg-[#4d0ecf] transition-colors">
-            <span className="material-symbols-outlined text-[20px]">layers</span>
-          </div>
-          <div className="flex flex-col">
-            <span className="font-sans font-extrabold text-sm sm:text-base tracking-tight text-gray-900 leading-none">
-              {APP_NAME}
-            </span>
-            <span className="text-[10px] font-mono text-[#5B13EC] font-bold uppercase tracking-wider mt-0.5">
-              Garment Network
-            </span>
-          </div>
+        <Link href="/dashboard" className="flex md:hidden items-center group transition-opacity hover:opacity-90">
+          <Image
+            src="/stitchgrid-logo-transparent.png"
+            alt="STITCHGRID"
+            width={140}
+            height={31}
+            priority
+            className="h-8 w-auto object-contain"
+          />
         </Link>
       </div>
 

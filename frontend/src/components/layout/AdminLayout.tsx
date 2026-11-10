@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -27,12 +28,15 @@ function SidebarContent({ close }: { close?: () => void }) {
   const pathname = usePathname();
   return (
     <>
-      <Link href="/admin" onClick={close} className="flex h-[84px] items-center gap-3 border-b border-white/10 px-6">
-        <span className="grid h-11 w-11 place-items-center rounded-xl bg-[#D9F66A] text-[25px] font-black text-[#102536]">S</span>
-        <span className="min-w-0 leading-tight">
-          <span className="block text-[18px] font-extrabold tracking-[.12em] text-white">STITCHGRID</span>
-          <span className="mt-1 block text-[11px] font-medium tracking-wide text-slate-300">The Garment Network</span>
-        </span>
+      <Link href="/admin" onClick={close} className="flex h-[84px] items-center border-b border-white/10 px-5 transition-opacity hover:opacity-90">
+        <Image
+          src="/stitchgrid-logo-dark.png"
+          alt="STITCHGRID Admin"
+          width={195}
+          height={43}
+          priority
+          className="h-10 w-auto object-contain"
+        />
       </Link>
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-6">
         {links.map(({ label, href, icon: Icon }) => {

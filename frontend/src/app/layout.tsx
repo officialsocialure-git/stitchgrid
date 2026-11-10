@@ -12,6 +12,11 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "STITCHGRID - India's B2B Garment Manufacturing Network",
   description: "Connect verified Indian garment manufacturers, knitwear mills, trims vendors, and global fashion brands.",
+  icons: {
+    icon: "/favicon.png",
+    shortcut: "/favicon.ico",
+    apple: "/stitchgrid-symbol.png",
+  },
 };
 
 export default function RootLayout({

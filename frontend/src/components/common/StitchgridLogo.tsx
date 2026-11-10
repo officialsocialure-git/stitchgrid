@@ -1,39 +1,87 @@
 import React from "react";
+import Image from "next/image";
+import Link from "next/link";
 
 interface StitchgridLogoProps {
   subtitle?: string;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
+  variant?: "full" | "symbol" | "dark";
+  href?: string;
+  className?: string;
 }
 
-export function StitchgridLogo({ subtitle, size = "md" }: StitchgridLogoProps) {
-  const iconSize = size === "sm" ? 28 : size === "lg" ? 40 : 34;
-  const textSize = size === "sm" ? "text-lg" : size === "lg" ? "text-2xl" : "text-xl sm:text-2xl";
+export function StitchgridLogo({
+  subtitle,
+  size = "md",
+  variant = "full",
+  href,
+  className = "",
+}: StitchgridLogoProps) {
+  // Dimensions for exact 925:205 ratio (~4.51:1) for full logo, and 1:1 for symbol
+  const getDimensions = () => {
+    if (variant === "symbol") {
+      switch (size) {
+        case "sm":
+          return { width: 32, height: 32 };
+        case "lg":
+          return { width: 56, height: 56 };
+        case "xl":
+          return { width: 72, height: 72 };
+        case "md":
+        default:
+          return { width: 44, height: 44 };
+      }
+    }
 
-  return (
-    <div className="flex flex-col items-center text-center">
-      <div className="flex items-center justify-center gap-2.5">
-        <svg
-          width={iconSize}
-          height={iconSize}
-          viewBox="0 0 34 34"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          className="shrink-0 text-purple-700"
-        >
-          {/* Stylized 6-armed textile stitch asterisk matching reference */}
-          <line x1="5" y1="17" x2="29" y2="17" stroke="currentColor" strokeWidth="4.2" strokeLinecap="round" />
-          <line x1="11" y1="6.6" x2="23" y2="27.4" stroke="currentColor" strokeWidth="4.2" strokeLinecap="round" />
-          <line x1="23" y1="6.6" x2="11" y2="27.4" stroke="currentColor" strokeWidth="4.2" strokeLinecap="round" />
-        </svg>
-        <span className={`font-sans font-bold tracking-tight text-gray-950 ${textSize}`}>
-          STITCHGRID
-        </span>
+    switch (size) {
+      case "sm":
+        return { width: 144, height: 32 };
+      case "lg":
+        return { width: 252, height: 56 };
+      case "xl":
+        return { width: 320, height: 71 };
+      case "md":
+      default:
+        return { width: 198, height: 44 };
+    }
+  };
+
+  const dims = getDimensions();
+  const imageSrc =
+    variant === "symbol"
+      ? "/stitchgrid-symbol.png"
+      : variant === "dark"
+      ? "/stitchgrid-logo-dark.png"
+      : "/stitchgrid-logo-transparent.png";
+
+  const content = (
+    <div className={`flex flex-col items-center ${className}`}>
+      <div className="relative flex items-center justify-center">
+        <Image
+          src={imageSrc}
+          alt="STITCHGRID - The Garment Manufacturing Network"
+          width={dims.width}
+          height={dims.height}
+          priority
+          className="object-contain max-w-full h-auto"
+          style={{ maxHeight: dims.height }}
+        />
       </div>
       {subtitle && (
-        <p className="text-xs sm:text-sm text-gray-500 mt-1 max-w-xs leading-relaxed font-normal">
+        <p className="text-xs sm:text-sm text-slate-500 mt-2 text-center max-w-sm leading-relaxed font-medium">
           {subtitle}
         </p>
       )}
     </div>
   );
+
+  if (href) {
+    return (
+      <Link href={href} className="inline-block transition-opacity hover:opacity-90">
+        {content}
+      </Link>
+    );
+  }
+
+  return content;
 }

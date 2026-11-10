@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { NAVIGATION_LINKS, APP_NAME } from "@/constants";
 import { useAuth } from "@/hooks/useAuth";
@@ -67,18 +68,17 @@ export function Sidebar() {
   return (
     <aside className="hidden md:flex w-64 border-r border-slate-200/80 bg-white flex-col shrink-0 h-screen sticky top-0">
       {/* Brand Logo */}
-      <div className="h-16 px-6 flex items-center gap-3 border-b border-slate-100">
-        <div className="w-9 h-9 rounded-xl bg-[#5B13EC] flex items-center justify-center text-white shadow-xs">
-          <span className="material-symbols-outlined text-[20px]">layers</span>
-        </div>
-        <div className="flex flex-col">
-          <span className="font-sans font-extrabold text-base tracking-tight text-slate-900 leading-none">
-            {APP_NAME}
-          </span>
-          <span className="text-[10px] font-mono text-[#5B13EC] font-bold uppercase tracking-wider mt-0.5">
-            Garment Network
-          </span>
-        </div>
+      <div className="h-16 px-5 flex items-center border-b border-slate-100">
+        <Link href="/dashboard" className="flex items-center transition-opacity hover:opacity-90">
+          <Image
+            src="/stitchgrid-logo-transparent.png"
+            alt="STITCHGRID"
+            width={185}
+            height={41}
+            priority
+            className="h-9 w-auto object-contain"
+          />
+        </Link>
       </div>
 
       {/* Nav Links */}
