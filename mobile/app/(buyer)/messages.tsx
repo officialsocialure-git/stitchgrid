@@ -10,7 +10,9 @@ import {
   Platform,
   SafeAreaView,
   ActivityIndicator,
+  ScrollView,
 } from "react-native";
+import { useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../src/constants/colors";
 import { Header } from "../../src/components/common/Header";
@@ -20,7 +22,8 @@ import { realtimeService } from "../../src/services/realtime.service";
 import { Conversation, Message } from "../../src/types";
 
 export default function BuyerMessagesScreen() {
-  const { user } = useAuth();
+  const { user, activeMembership } = useAuth();
+  const { targetSupplierOrgId } = useLocalSearchParams<{ targetSupplierOrgId?: string }>();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -32,16 +35,37 @@ export default function BuyerMessagesScreen() {
   const loadConversations = useCallback(async () => {
     try {
       const data = await marketplaceService.listConversations();
-      setConversations(data || []);
-      if (data && data.length > 0 && !selectedConv) {
-        setSelectedConv(data[0]);
+      const list = data || [];
+      setConversations(list);
+
+      // If targeted supplier was passed from supplier directory
+      if (targetSupplierOrgId && activeMembership?.organizationId) {
+        let existing = list.find((c) => c.supplierOrgId === targetSupplierOrgId);
+        if (!existing) {
+          try {
+            existing = await marketplaceService.createConversation({
+              buyerOrgId: activeMembership.organizationId,
+              supplierOrgId: targetSupplierOrgId,
+            });
+            list.unshift(existing);
+            setConversations([...list]);
+          } catch (e) {}
+        }
+        if (existing) {
+          setSelectedConv(existing);
+          return;
+        }
+      }
+
+      if (list.length > 0 && !selectedConv) {
+        setSelectedConv(list[0]);
       }
     } catch (e) {
       console.warn("Failed to load conversations:", e);
     } finally {
       setLoading(false);
     }
-  }, [selectedConv]);
+  }, [selectedConv, targetSupplierOrgId, activeMembership?.organizationId]);
 
   const loadMessages = useCallback(async (convId: string) => {
     try {
@@ -62,11 +86,13 @@ export default function BuyerMessagesScreen() {
     }
   }, [selectedConv, loadMessages]);
 
-  // Real-time message listener
   useEffect(() => {
     const unsub = realtimeService.subscribe("message:new", (newMsg: any) => {
       if (newMsg && selectedConv && newMsg.conversationId === selectedConv.id) {
-        setMessages((prev) => [...prev, newMsg]);
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === newMsg.id)) return prev;
+          return [...prev, newMsg];
+        });
         flatListRef.current?.scrollToEnd({ animated: true });
       }
     });
@@ -80,7 +106,10 @@ export default function BuyerMessagesScreen() {
     try {
       setSending(true);
       const sent = await marketplaceService.sendMessage(selectedConv.id, body);
-      setMessages((prev) => [...prev, sent]);
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === sent.id)) return prev;
+        return [...prev, sent];
+      });
       flatListRef.current?.scrollToEnd({ animated: true });
     } catch (e) {
       console.warn("Send message failed:", e);
@@ -89,13 +118,40 @@ export default function BuyerMessagesScreen() {
     }
   };
 
+  const otherName =
+    selectedConv?.supplier?.name ||
+    selectedConv?.otherPartyName ||
+    "Factory Partner";
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <Header
-        title={selectedConv ? (selectedConv.otherPartyName || "Supplier Chat") : "Messages"}
-        subtitle={selectedConv ? "Direct secure line" : "Active conversations"}
-        showBack={!!selectedConv && conversations.length > 1}
+        title={conversations.length > 0 ? otherName : "Messages"}
+        subtitle="Direct verified B2B communication"
       />
+
+      {/* Conversation Switcher Tabs if multiple */}
+      {conversations.length > 1 && (
+        <View style={styles.convTabsContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.convTabs}>
+            {conversations.map((c) => {
+              const name = c.supplier?.name || c.otherPartyName || "Factory";
+              const isSelected = selectedConv?.id === c.id;
+              return (
+                <TouchableOpacity
+                  key={c.id}
+                  onPress={() => setSelectedConv(c)}
+                  style={[styles.convTab, isSelected && styles.convTabActive]}
+                >
+                  <Text style={[styles.convTabText, isSelected && styles.convTabTextActive]}>
+                    {name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -106,7 +162,7 @@ export default function BuyerMessagesScreen() {
             <Ionicons name="chatbubbles-outline" size={48} color={Colors.textMuted} />
             <Text style={styles.emptyTitle}>No Conversations Yet</Text>
             <Text style={styles.emptyDesc}>
-              Messages with suppliers about RFQs, samples, and contracts will appear here.
+              Messages with garment mills regarding your RFQs, samples, and contracts will appear here.
             </Text>
           </View>
         ) : (
@@ -119,16 +175,17 @@ export default function BuyerMessagesScreen() {
               onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
               renderItem={({ item }) => {
                 const isMe = item.senderUserId === user?.id || item.sender?.id === user?.id;
+                const messageText = item.body || item.content || "";
                 return (
                   <View style={[styles.msgRow, isMe ? styles.msgRowRight : styles.msgRowLeft]}>
                     <View style={[styles.bubble, isMe ? styles.bubbleRight : styles.bubbleLeft]}>
                       {!isMe && (
                         <Text style={styles.senderLabel}>
-                          {item.sender?.fullName || "Supplier"}
+                          {item.sender?.fullName || otherName}
                         </Text>
                       )}
                       <Text style={[styles.msgText, isMe ? styles.msgTextRight : styles.msgTextLeft]}>
-                        {item.content}
+                        {messageText}
                       </Text>
                       <Text style={[styles.timeText, isMe ? styles.timeRight : styles.timeLeft]}>
                         {item.createdAt ? new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
@@ -139,7 +196,6 @@ export default function BuyerMessagesScreen() {
               }}
             />
 
-            {/* Input Bar */}
             <View style={styles.inputBar}>
               <TextInput
                 style={styles.chatInput}
@@ -172,6 +228,36 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  convTabsContainer: {
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    paddingVertical: 8,
+  },
+  convTabs: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  convTab: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: Colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  convTabActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  convTabText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Colors.textSecondary,
+  },
+  convTabTextActive: {
+    color: "#FFFFFF",
   },
   emptyContainer: {
     flex: 1,
@@ -278,4 +364,3 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 });
-

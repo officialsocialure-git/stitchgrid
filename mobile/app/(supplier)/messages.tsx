@@ -10,6 +10,7 @@ import {
   Platform,
   SafeAreaView,
   ActivityIndicator,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../src/constants/colors";
@@ -32,9 +33,10 @@ export default function SupplierMessagesScreen() {
   const loadConversations = useCallback(async () => {
     try {
       const data = await marketplaceService.listConversations();
-      setConversations(data || []);
-      if (data && data.length > 0 && !selectedConv) {
-        setSelectedConv(data[0]);
+      const list = data || [];
+      setConversations(list);
+      if (list.length > 0 && !selectedConv) {
+        setSelectedConv(list[0]);
       }
     } catch (e) {
       console.warn("Failed to load conversations:", e);
@@ -65,7 +67,10 @@ export default function SupplierMessagesScreen() {
   useEffect(() => {
     const unsub = realtimeService.subscribe("message:new", (newMsg: any) => {
       if (newMsg && selectedConv && newMsg.conversationId === selectedConv.id) {
-        setMessages((prev) => [...prev, newMsg]);
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === newMsg.id)) return prev;
+          return [...prev, newMsg];
+        });
         flatListRef.current?.scrollToEnd({ animated: true });
       }
     });
@@ -79,7 +84,10 @@ export default function SupplierMessagesScreen() {
     try {
       setSending(true);
       const sent = await marketplaceService.sendMessage(selectedConv.id, body);
-      setMessages((prev) => [...prev, sent]);
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === sent.id)) return prev;
+        return [...prev, sent];
+      });
       flatListRef.current?.scrollToEnd({ animated: true });
     } catch (e) {
       console.warn("Send message failed:", e);
@@ -88,13 +96,39 @@ export default function SupplierMessagesScreen() {
     }
   };
 
+  const buyerName =
+    selectedConv?.buyer?.name ||
+    selectedConv?.otherPartyName ||
+    "Brand Client";
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <Header
-        title={selectedConv ? (selectedConv.otherPartyName || "Buyer Chat") : "Client Chats"}
-        subtitle={selectedConv ? "Direct factory communication" : "Active buyer inquiries"}
-        showBack={!!selectedConv && conversations.length > 1}
+        title={conversations.length > 0 ? buyerName : "Client Chats"}
+        subtitle="Direct buyer communication"
       />
+
+      {conversations.length > 1 && (
+        <View style={styles.convTabsContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.convTabs}>
+            {conversations.map((c) => {
+              const name = c.buyer?.name || c.otherPartyName || "Buyer";
+              const isSelected = selectedConv?.id === c.id;
+              return (
+                <TouchableOpacity
+                  key={c.id}
+                  onPress={() => setSelectedConv(c)}
+                  style={[styles.convTab, isSelected && styles.convTabActive]}
+                >
+                  <Text style={[styles.convTabText, isSelected && styles.convTabTextActive]}>
+                    {name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -105,7 +139,7 @@ export default function SupplierMessagesScreen() {
             <Ionicons name="chatbubbles-outline" size={48} color={Colors.textMuted} />
             <Text style={styles.emptyTitle}>No Messages</Text>
             <Text style={styles.emptyDesc}>
-              Messages from buyers inquiring about RFQs, fabric samples, and deliveries will show here.
+              Inquiries and messages from apparel buyers regarding RFQs and orders will show here.
             </Text>
           </View>
         ) : (
@@ -118,16 +152,17 @@ export default function SupplierMessagesScreen() {
               onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
               renderItem={({ item }) => {
                 const isMe = item.senderUserId === user?.id || item.sender?.id === user?.id;
+                const messageText = item.body || item.content || "";
                 return (
                   <View style={[styles.msgRow, isMe ? styles.msgRowRight : styles.msgRowLeft]}>
                     <View style={[styles.bubble, isMe ? styles.bubbleRight : styles.bubbleLeft]}>
                       {!isMe && (
                         <Text style={styles.senderLabel}>
-                          {item.sender?.fullName || "Buyer"}
+                          {item.sender?.fullName || buyerName}
                         </Text>
                       )}
                       <Text style={[styles.msgText, isMe ? styles.msgTextRight : styles.msgTextLeft]}>
-                        {item.content}
+                        {messageText}
                       </Text>
                       <Text style={[styles.timeText, isMe ? styles.timeRight : styles.timeLeft]}>
                         {item.createdAt ? new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
@@ -170,6 +205,36 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  convTabsContainer: {
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    paddingVertical: 8,
+  },
+  convTabs: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  convTab: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: Colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  convTabActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  convTabText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Colors.textSecondary,
+  },
+  convTabTextActive: {
+    color: "#FFFFFF",
   },
   emptyContainer: {
     flex: 1,
@@ -276,4 +341,3 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 });
-

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   FlatList,
   SafeAreaView,
   TouchableOpacity,
+  RefreshControl,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -13,38 +14,33 @@ import { Colors } from "../../src/constants/colors";
 import { Header } from "../../src/components/common/Header";
 import { Card } from "../../src/components/common/Card";
 import { EmptyState } from "../../src/components/common/EmptyState";
+import { marketplaceService } from "../../src/services/marketplace.service";
 import { realtimeService } from "../../src/services/realtime.service";
 import { Notification } from "../../src/types";
 
 export default function NotificationsScreen() {
   const router = useRouter();
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: "n1",
-      userId: "u1",
-      title: "PP Sample Approved",
-      content: "Buyer approved the pre-production sample for Order #SG-PO-4807. Bulk cutting is active.",
-      isRead: false,
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: "n2",
-      userId: "u1",
-      title: "New Quotation Received",
-      content: "Tirupur Knits submitted a bid of ₹175/pc for your 5,000 pcs Polo T-Shirts RFQ.",
-      isRead: true,
-      createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-    },
-    {
-      id: "n3",
-      userId: "u1",
-      title: "Escrow Payment Deposited",
-      content: "30% milestone deposit confirmed for Purchase Order #SG-PO-4329.",
-      isRead: true,
-      createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
-    },
-  ]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
+  const loadNotifications = useCallback(async () => {
+    try {
+      const data = await marketplaceService.listNotifications();
+      setNotifications(data || []);
+    } catch (e) {
+      console.warn("Failed to load notifications:", e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadNotifications();
+  }, [loadNotifications]);
+
+  // Real-time socket notification listener
   useEffect(() => {
     const unsub = realtimeService.subscribe("notification:new", (newNotif: any) => {
       if (newNotif) {
@@ -54,8 +50,26 @@ export default function NotificationsScreen() {
     return unsub;
   }, []);
 
-  const markAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+  const handleMarkAsRead = async (item: Notification) => {
+    if (item.readAt) return;
+    try {
+      await marketplaceService.markNotificationRead(item.id);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === item.id ? { ...n, readAt: new Date().toISOString() } : n))
+      );
+    } catch (e) {
+      console.warn("Could not mark notification read:", e);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    const unread = notifications.filter((n) => !n.readAt);
+    for (const n of unread) {
+      try {
+        await marketplaceService.markNotificationRead(n.id);
+      } catch (e) {}
+    }
+    setNotifications((prev) => prev.map((n) => ({ ...n, readAt: new Date().toISOString() })));
   };
 
   return (
@@ -65,46 +79,67 @@ export default function NotificationsScreen() {
         subtitle="Live production & milestone alerts"
         showBack
         rightAction={
-          <TouchableOpacity onPress={markAllRead} style={styles.markReadBtn}>
-            <Text style={styles.markReadText}>Mark read</Text>
-          </TouchableOpacity>
+          notifications.some((n) => !n.readAt) ? (
+            <TouchableOpacity onPress={handleMarkAllRead} style={styles.markReadBtn}>
+              <Text style={styles.markReadText}>Mark all read</Text>
+            </TouchableOpacity>
+          ) : undefined
         }
       />
 
       <FlatList
         data={notifications}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <EmptyState
-            icon="notifications-outline"
-            title="All Caught Up"
-            description="You have no unread notifications or alerts."
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              loadNotifications();
+            }}
+            colors={[Colors.primary]}
           />
         }
-        renderItem={({ item }) => (
-          <Card style={[styles.notifCard, !item.isRead && styles.unreadCard]}>
-            <View style={styles.topRow}>
-              <View style={[styles.iconWrap, !item.isRead && { backgroundColor: Colors.primary }]}>
-                <Ionicons
-                  name="notifications"
-                  size={16}
-                  color={!item.isRead ? "#FFFFFF" : Colors.primary}
-                />
+        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          !loading ? (
+            <EmptyState
+              icon="notifications-outline"
+              title="All Caught Up"
+              description="You have no notifications at this time."
+            />
+          ) : null
+        }
+        renderItem={({ item }) => {
+          const isUnread = !item.readAt;
+          return (
+            <Card
+              style={[styles.notifCard, isUnread && styles.unreadCard]}
+              onPress={() => handleMarkAsRead(item)}
+            >
+              <View style={styles.topRow}>
+                <View style={[styles.iconWrap, isUnread && { backgroundColor: Colors.primary }]}>
+                  <Ionicons
+                    name="notifications"
+                    size={16}
+                    color={isUnread ? "#FFFFFF" : Colors.primary}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.title}>{item.title}</Text>
+                  <Text style={styles.time}>
+                    {new Date(item.createdAt).toLocaleDateString("en-IN", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </Text>
+                </View>
+                {isUnread && <View style={styles.unreadDot} />}
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.title}>{item.title}</Text>
-                <Text style={styles.time}>
-                  {new Date(item.createdAt).toLocaleDateString("en-IN", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </Text>
-              </View>
-            </View>
-            <Text style={styles.content}>{item.content}</Text>
-          </Card>
-        )}
+              <Text style={styles.content}>{item.body || item.content || ""}</Text>
+            </Card>
+          );
+        }}
       />
     </SafeAreaView>
   );
@@ -124,7 +159,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   markReadText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
     color: Colors.primary,
   },
@@ -135,6 +170,12 @@ const styles = StyleSheet.create({
   unreadCard: {
     borderColor: Colors.borderPrimary,
     backgroundColor: "#FDFBFF",
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.primary,
   },
   topRow: {
     flexDirection: "row",
@@ -167,4 +208,3 @@ const styles = StyleSheet.create({
     paddingLeft: 44,
   },
 });
-

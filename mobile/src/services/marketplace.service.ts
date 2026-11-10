@@ -1,5 +1,5 @@
 import { api } from "./api";
-import { SupplierProfile, Rfq, Quotation, PurchaseOrder, Sample, Message, Conversation } from "../types";
+import { SupplierProfile, Rfq, Quotation, PurchaseOrder, Sample, Message, Conversation, Notification } from "../types";
 
 export const marketplaceService = {
   // 1. Supplier Discovery
@@ -146,6 +146,11 @@ export const marketplaceService = {
     return res.data?.data || res.data;
   },
 
+  async createConversation(data: { buyerOrgId: string; supplierOrgId: string }): Promise<Conversation> {
+    const res = await api.post("/conversations", data);
+    return res.data?.data || res.data;
+  },
+
   async getConversationMessages(conversationId: string): Promise<Message[]> {
     const res = await api.get(`/conversations/${conversationId}/messages`);
     return res.data?.data || res.data;
@@ -156,7 +161,18 @@ export const marketplaceService = {
     return res.data?.data || res.data;
   },
 
-  // 9. Payments
+  // 9. Notifications
+  async listNotifications(): Promise<Notification[]> {
+    const res = await api.get("/notifications");
+    return res.data?.data || res.data;
+  },
+
+  async markNotificationRead(notificationId: string): Promise<{ markedRead: boolean }> {
+    const res = await api.patch(`/notifications/${notificationId}/read`);
+    return res.data?.data || res.data;
+  },
+
+  // 10. Payments
   async listPayments(): Promise<any[]> {
     const res = await api.get("/payments");
     return res.data?.data || res.data;

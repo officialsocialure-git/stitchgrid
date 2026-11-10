@@ -147,8 +147,9 @@ export interface Message {
   id: string;
   conversationId: string;
   senderUserId: string;
-  senderOrgId: string;
-  content: string;
+  senderOrgId?: string;
+  body: string;
+  content?: string;
   attachmentUrls?: string[];
   createdAt: string;
   sender?: { id: string; fullName: string };
@@ -156,11 +157,16 @@ export interface Message {
 
 export interface Conversation {
   id: string;
-  participantOrgIds: string[];
+  buyerOrgId: string;
+  supplierOrgId: string;
+  buyer?: { id: string; name: string; city?: string };
+  supplier?: { id: string; name: string; city?: string };
+  messages?: Message[];
+  participantOrgIds?: string[];
   contextType?: string;
   contextId?: string;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
   lastMessage?: string;
   otherPartyName?: string;
 }
@@ -169,8 +175,10 @@ export interface Notification {
   id: string;
   userId: string;
   title: string;
-  content: string;
-  isRead: boolean;
+  body: string;
+  content?: string;
+  readAt?: string | null;
+  isRead?: boolean;
   type?: string;
   referenceId?: string;
   createdAt: string;

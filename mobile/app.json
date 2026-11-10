@@ -15,19 +15,35 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.stitchguard.app"
+      "bundleIdentifier": "com.stitchguard.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "STITCHGUARD needs camera access to capture apparel and sample inspection photos.",
+        "NSPhotoLibraryUsageDescription": "STITCHGUARD needs photo library access to upload garment specification and QC photos."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFFFF"
       },
-      "package": "com.stitchguard.app"
+      "package": "com.stitchguard.app",
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "INTERNET"
+      ]
     },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "name": "STITCHGUARD - Garment Manufacturing Network",
+      "shortName": "STITCHGUARD",
+      "themeColor": "#5B13EC",
+      "backgroundColor": "#FFFFFF",
+      "display": "standalone",
+      "orientation": "portrait"
     },
     "plugins": [
       "expo-router",

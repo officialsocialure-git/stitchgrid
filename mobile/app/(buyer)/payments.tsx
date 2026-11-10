@@ -64,9 +64,15 @@ export default function BuyerPaymentsScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.heroTitle}>B2B Vault Protection Active</Text>
             <Text style={styles.heroDesc}>
-              Funds remain secured in milestone escrow until quality inspection (AQL 2.5) is signed off.
+              Funds are secured in milestone escrow until quality inspection (AQL 2.5) is signed off.
             </Text>
           </View>
+        </View>
+        <View style={styles.disclaimerBox}>
+          <Ionicons name="information-circle-outline" size={16} color={Colors.textSecondary} />
+          <Text style={styles.disclaimerText}>
+            Escrow ledger transactions are recorded on the secure STITCHGUARD database. Live banking gateway settlement requires aggregator credentials.
+          </Text>
         </View>
       </View>
 
@@ -129,6 +135,21 @@ const styles = StyleSheet.create({
   heroWrap: {
     padding: 16,
     paddingBottom: 0,
+  },
+  disclaimerBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+    padding: 10,
+    backgroundColor: Colors.surfaceSubtle,
+    borderRadius: 12,
+  },
+  disclaimerText: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    flex: 1,
+    lineHeight: 15,
   },
   heroCard: {
     backgroundColor: Colors.primary,

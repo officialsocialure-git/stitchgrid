@@ -151,7 +151,7 @@ export default function SuppliersDiscoveryScreen() {
                   size="sm"
                   variant="outline"
                   icon="chatbubble-ellipses-outline"
-                  onPress={() => router.push("/(buyer)/messages")}
+                  onPress={() => router.push({ pathname: "/(buyer)/messages", params: { targetSupplierOrgId: org.id } })}
                 />
               </View>
             </Card>
