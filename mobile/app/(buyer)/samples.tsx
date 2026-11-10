@@ -8,13 +8,12 @@ import {
   SafeAreaView,
   Alert,
   ScrollView,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../src/constants/colors";
 import { Header } from "../../src/components/common/Header";
-import { Card } from "../../src/components/common/Card";
-import { Badge, BadgeVariant } from "../../src/components/common/Badge";
 import { Button } from "../../src/components/common/Button";
 import { Input } from "../../src/components/common/Input";
 import { Modal } from "../../src/components/common/Modal";
@@ -72,105 +71,117 @@ export default function BuyerSamplesScreen() {
     }
   };
 
-  const handleSendRevision = async () => {
+  const handleOpenRevisionModal = (sampleId: string) => {
+    setSelectedSampleId(sampleId);
+    setRevisionFeedback("");
+    setRevisionModalVisible(true);
+  };
+
+  const handleSubmitRevision = async () => {
     if (!selectedSampleId || !revisionFeedback.trim()) {
-      Alert.alert("Feedback Required", "Please describe the changes needed for the revised sample.");
+      Alert.alert("Missing Feedback", "Please provide required revisions for the manufacturer.");
       return;
     }
+
     try {
       setUpdatingId(selectedSampleId);
-      await marketplaceService.updateSample(selectedSampleId, "REJECTED", {
+      await marketplaceService.updateSample(selectedSampleId, "REVISION_REQUIRED", {
         feedback: revisionFeedback.trim(),
       });
       setRevisionModalVisible(false);
-      setRevisionFeedback("");
-      Alert.alert("Revision Sent", "Feedback delivered to factory. They will prepare a revised sample.");
+      Alert.alert("Revision Requested", "Manufacturer has been notified of required sample adjustments.");
       loadSamples();
     } catch (e) {
-      Alert.alert("Error", "Could not submit revision feedback.");
+      Alert.alert("Error", "Could not request revision.");
     } finally {
       setUpdatingId(null);
-    }
-  };
-
-  const getStatusBadge = (status: string): { label: string; variant: BadgeVariant } => {
-    switch (status) {
-      case "APPROVED":
-        return { label: "APPROVED", variant: "success" };
-      case "REJECTED":
-      case "REVISED":
-        return { label: "REVISION REQ", variant: "danger" };
-      case "DISPATCHED":
-        return { label: "IN TRANSIT", variant: "info" };
-      default:
-        return { label: status, variant: "warning" };
     }
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <Header
-        title="Sample Approvals"
-        subtitle="Review PP, Fit and Counter samples"
+        title="Samples Workflow"
+        subtitle="Fit, PP & pre-production approvals"
         showBack
       />
 
       <FlatList
         data={samples}
         keyExtractor={(item) => item.id}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadSamples(); }} colors={[Colors.primary]} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              loadSamples();
+            }}
+            colors={[Colors.primary]}
+          />
+        }
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           !loading ? (
             <EmptyState
               icon="shirt-outline"
-              title="No Samples Submitted"
-              description="Samples requested from factories on your orders will show up here."
-              actionTitle="View Orders"
-              onAction={() => router.push("/(buyer)/orders")}
+              title="No Sample Requests"
+              description="Samples requested from mills for fit and fabric approval will appear here."
             />
-          ) : null
+          ) : undefined
         }
-        renderItem={({ item }) => {
-          const badge = getStatusBadge(item.status);
-          const isPending = item.status === "REQUESTED" || item.status === "DISPATCHED" || item.status === "RECEIVED";
+        renderItem={({ item, index }) => {
+          const sampleCode = `SMP-2026-${(item.id || "100").slice(-4).replace(/\D/g, "").padStart(4, "0") || (100 + index).toString()}`;
+          const isApproved = item.status === "APPROVED";
+          const isPendingReview = item.status === "DISPATCHED" || item.status === "DELIVERED" || item.status === "REQUESTED";
+          const isRevision = item.status === "REVISION_REQUIRED";
 
           return (
-            <Card style={styles.sampleCard}>
+            <View style={styles.sampleCard}>
               <View style={styles.topRow}>
-                <View>
-                  <Text style={styles.sampleType}>{item.sampleType || "PP"} Sample</Text>
-                  <Text style={styles.orderRef}>
-                    PO: {item.purchaseOrder?.poNumber || "Active Contract"}
+                <Text style={styles.sampleCodeText}>{sampleCode}</Text>
+                <View
+                  style={[
+                    styles.statusPill,
+                    isApproved
+                      ? { backgroundColor: Colors.successLight, borderColor: Colors.successBorder }
+                      : isRevision
+                      ? { backgroundColor: Colors.dangerLight, borderColor: Colors.dangerBorder }
+                      : { backgroundColor: Colors.warningLight, borderColor: Colors.warningBorder },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusPillText,
+                      isApproved
+                        ? { color: Colors.successText }
+                        : isRevision
+                        ? { color: Colors.dangerText }
+                        : { color: Colors.warningText },
+                    ]}
+                  >
+                    {item.status.replace("_", " ")}
                   </Text>
                 </View>
-                <Badge label={badge.label} variant={badge.variant} size="sm" />
               </View>
 
-              <Text style={styles.supplierName}>
-                Factory: {item.supplier?.name || "Verified Tirupur Unit"}
+              <Text style={styles.sampleTitle}>
+                {item.sampleType || "Pre-Production Sample"}
+              </Text>
+              <Text style={styles.orderRefText}>
+                Order: {item.order?.poNumber || "PO-2026-ACTIVE"} • Factory: {item.order?.supplierOrg?.name || "Tirupur Mill"}
               </Text>
 
-              {item.trackingNumber && (
-                <View style={styles.trackingBox}>
-                  <Ionicons name="airplane-outline" size={16} color={Colors.primary} />
-                  <Text style={styles.trackingText}>
-                    Courier: {item.courierName || "BlueDart / DTDC"} • AWB: {item.trackingNumber}
-                  </Text>
+              {item.notes ? (
+                <View style={styles.notesBox}>
+                  <Text style={styles.notesText}>{item.notes}</Text>
                 </View>
-              )}
+              ) : null}
 
-              {item.feedback && (
-                <View style={styles.feedbackBox}>
-                  <Text style={styles.feedbackLabel}>Notes / Feedback:</Text>
-                  <Text style={styles.feedbackText}>{item.feedback}</Text>
-                </View>
-              )}
-
-              {isPending && (
-                <View style={styles.actionsRow}>
+              {/* Action Buttons */}
+              {isPendingReview && (
+                <View style={styles.actionRow}>
                   <Button
-                    title="Approve Sample"
+                    title={updatingId === item.id ? "Approving..." : "Approve Sample"}
                     size="sm"
                     loading={updatingId === item.id}
                     onPress={() => handleApprove(item.id)}
@@ -180,39 +191,42 @@ export default function BuyerSamplesScreen() {
                     title="Request Revision"
                     variant="outline"
                     size="sm"
-                    onPress={() => {
-                      setSelectedSampleId(item.id);
-                      setRevisionModalVisible(true);
-                    }}
+                    onPress={() => handleOpenRevisionModal(item.id)}
                     style={{ flex: 1 }}
                   />
                 </View>
               )}
-            </Card>
+            </View>
           );
         }}
       />
 
       {/* Revision Modal */}
-      <Modal visible={revisionModalVisible} onClose={() => setRevisionModalVisible(false)} title="Request Sample Revision">
-        <ScrollView style={{ maxHeight: 360 }}>
-          <Text style={styles.modalSub}>
-            Provide specific measurements, fit issues, or finishing adjustments required from the mill:
+      <Modal
+        visible={revisionModalVisible}
+        onClose={() => setRevisionModalVisible(false)}
+        title="Request Sample Revision"
+      >
+        <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+          <Text style={{ fontSize: 13, color: Colors.textSecondary, marginBottom: 12 }}>
+            Specify required adjustments for the garment fit, measurements or fabric feel:
           </Text>
+
           <Input
-            placeholder="e.g. Sleeve length +1.5cm, neckline binding rib width 2cm instead of 2.5cm"
+            label="Correction Details *"
+            placeholder="e.g. Increase chest circumference by 2cm, use softer silicone enzyme wash on next lap dip..."
             value={revisionFeedback}
             onChangeText={setRevisionFeedback}
             multiline
             numberOfLines={4}
-            containerStyle={{ minHeight: 90 }}
           />
+
           <Button
-            title="Submit Revision Feedback"
-            onPress={handleSendRevision}
-            loading={updatingId === selectedSampleId}
+            title="Submit Revision Request"
+            onPress={handleSubmitRevision}
+            loading={Boolean(updatingId)}
             size="lg"
-            style={{ marginTop: 12, marginBottom: 20 }}
+            style={{ marginTop: 14 }}
           />
         </ScrollView>
       </Modal>
@@ -230,71 +244,67 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   sampleCard: {
-    marginBottom: 14,
+    backgroundColor: Colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
   },
   topRow: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "flex-start",
     marginBottom: 8,
   },
-  sampleType: {
-    fontSize: 16,
+  sampleCodeText: {
+    fontSize: 12,
     fontWeight: "800",
-    color: Colors.text,
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    color: Colors.primary,
   },
-  orderRef: {
+  statusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  statusPillText: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  sampleTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: Colors.textHeading,
+  },
+  orderRefText: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  supplierName: {
-    fontSize: 13,
-    color: Colors.textSecondary,
+    marginTop: 4,
     marginBottom: 10,
   },
-  trackingBox: {
+  notesBox: {
+    backgroundColor: Colors.surfaceSubtle,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 12,
+  },
+  notesText: {
+    fontSize: 12,
+    color: Colors.textBody,
+    lineHeight: 16,
+  },
+  actionRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: Colors.primaryLight,
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 12,
-  },
-  trackingText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Colors.primary,
-  },
-  feedbackBox: {
-    backgroundColor: Colors.surfaceSubtle,
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 12,
-  },
-  feedbackLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Colors.textSecondary,
-    marginBottom: 2,
-  },
-  feedbackText: {
-    fontSize: 13,
-    color: Colors.text,
-  },
-  actionsRow: {
-    flexDirection: "row",
-    gap: 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
-  },
-  modalSub: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    marginBottom: 12,
-    lineHeight: 18,
+    marginTop: 4,
   },
 });
-

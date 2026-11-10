@@ -9,7 +9,6 @@ import {
 } from "react-native";
 import { Colors } from "../../src/constants/colors";
 import { Header } from "../../src/components/common/Header";
-import { Card } from "../../src/components/common/Card";
 import { Input } from "../../src/components/common/Input";
 import { Button } from "../../src/components/common/Button";
 import { useAuth } from "../../src/hooks/useAuth";
@@ -23,12 +22,12 @@ export default function SettingsScreen() {
   const [legalName, setLegalName] = useState(org?.legalName || "");
   const [taxId, setTaxId] = useState(org?.taxId || "");
   const [city, setCity] = useState(org?.city || "");
-  const [address, setAddress] = useState("");
+  const [address, setAddress] = useState(org?.address || "");
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
     if (!name.trim()) {
-      Alert.alert("Required", "Company name is required.");
+      Alert.alert("Required", "Company / Trading name is required.");
       return;
     }
 
@@ -60,48 +59,63 @@ export default function SettingsScreen() {
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Card>
-          <Text style={styles.sectionTitle}>Business Details</Text>
+        <View style={styles.formCard}>
+          <Text style={styles.sectionTitle}>Business Identification</Text>
+          <Text style={styles.sectionSubtitle}>
+            These verified details are shared on official Purchase Orders and GST invoices.
+          </Text>
+
           <Input
-            label="Trading Name *"
+            label="Trading / Brand Name *"
             placeholder="e.g. Tirupur Knits Export House"
             value={name}
             onChangeText={setName}
+            leftIcon="business-outline"
           />
+
           <Input
             label="Registered Legal Entity Name"
-            placeholder="e.g. Tirupur Knits Pvt Ltd"
+            placeholder="e.g. Tirupur Knits Private Limited"
             value={legalName}
             onChangeText={setLegalName}
+            leftIcon="document-text-outline"
           />
+
           <Input
-            label="GSTIN / Tax ID"
-            placeholder="e.g. 33AAAAA1234Z1Z9"
+            label="GSTIN / Corporate Tax ID"
+            placeholder="e.g. 33AAAAA0000A1Z5"
             value={taxId}
             onChangeText={setTaxId}
+            autoCapitalize="characters"
+            leftIcon="shield-checkmark-outline"
           />
+
           <Input
-            label="City"
-            placeholder="e.g. Tirupur"
+            label="Manufacturing City / Sourcing Hub"
+            placeholder="e.g. Tirupur, Tamil Nadu"
             value={city}
             onChangeText={setCity}
+            leftIcon="location-outline"
           />
+
           <Input
-            label="Factory / Office Street Address"
-            placeholder="e.g. SIDCO Industrial Estate"
+            label="Registered Office Address"
+            placeholder="Building, Industrial Estate, Pincode"
             value={address}
             onChangeText={setAddress}
             multiline
+            numberOfLines={3}
+            leftIcon="navigate-outline"
           />
 
           <Button
-            title="Save Profile Details"
+            title="Save Organization Changes"
             onPress={handleSave}
             loading={saving}
             size="lg"
-            style={{ marginTop: 8 }}
+            style={{ marginTop: 14 }}
           />
-        </Card>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -116,11 +130,28 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 40,
   },
+  formCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: Colors.text,
-    marginBottom: 16,
+    color: Colors.textHeading,
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 4,
+    marginBottom: 18,
+    lineHeight: 16,
   },
 });
-

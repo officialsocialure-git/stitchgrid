@@ -30,7 +30,7 @@ export default function BuyerTabsLayout() {
         options={{
           title: "Home",
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "home" : "home-outline"} size={size} color={color} />
+            <Ionicons name={focused ? "home" : "home-outline"} size={size} color={color as string} />
           ),
         }}
       />
@@ -39,7 +39,7 @@ export default function BuyerTabsLayout() {
         options={{
           title: "Requests",
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "document-text" : "document-text-outline"} size={size} color={color} />
+            <Ionicons name={focused ? "document-text" : "document-text-outline"} size={size} color={color as string} />
           ),
         }}
       />
@@ -48,7 +48,7 @@ export default function BuyerTabsLayout() {
         options={{
           title: "Orders",
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "cube" : "cube-outline"} size={size} color={color} />
+            <Ionicons name={focused ? "cube" : "cube-outline"} size={size} color={color as string} />
           ),
         }}
       />
@@ -57,7 +57,7 @@ export default function BuyerTabsLayout() {
         options={{
           title: "Messages",
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "chatbubble-ellipses" : "chatbubble-ellipses-outline"} size={size} color={color} />
+            <Ionicons name={focused ? "chatbubble-ellipses" : "chatbubble-ellipses-outline"} size={size} color={color as string} />
           ),
         }}
       />
@@ -66,7 +66,7 @@ export default function BuyerTabsLayout() {
         options={{
           title: "Profile",
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "person" : "person-outline"} size={size} color={color} />
+            <Ionicons name={focused ? "person" : "person-outline"} size={size} color={color as string} />
           ),
         }}
       />

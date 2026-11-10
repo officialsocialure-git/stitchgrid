@@ -5,7 +5,8 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",
@@ -18,7 +19,8 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://stitchgrid-backend.onrender.com/api",
         "EXPO_PUBLIC_SOCKET_URL": "https://stitchgrid-backend.onrender.com"
-      }
+      },
+      "channel": "preview"
     },
     "production": {
       "android": {
@@ -27,11 +29,11 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://stitchgrid-backend.onrender.com/api",
         "EXPO_PUBLIC_SOCKET_URL": "https://stitchgrid-backend.onrender.com"
-      }
+      },
+      "channel": "production"
     }
   },
   "submit": {
     "production": {}
   }
 }
-

@@ -7,12 +7,6 @@
     "icon": "./assets/icon.png",
     "scheme": "stitchguard",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#FFFFFF"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.stitchguard.app",
@@ -28,6 +22,10 @@
       },
       "package": "com.stitchguard.app",
       "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "INTERNET",
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
@@ -49,7 +47,15 @@
       "expo-router",
       "expo-secure-store",
       "expo-asset",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#FFFFFF"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
@@ -62,6 +68,12 @@
         "projectId": "8099b7c4-c1c6-4636-8876-6769dc8a6af0"
       }
     },
-    "owner": "socialures-team"
+    "owner": "socialures-team",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/8099b7c4-c1c6-4636-8876-6769dc8a6af0"
+    }
   }
 }

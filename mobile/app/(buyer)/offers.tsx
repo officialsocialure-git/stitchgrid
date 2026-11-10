@@ -7,13 +7,13 @@ import {
   RefreshControl,
   SafeAreaView,
   Alert,
+  TouchableOpacity,
+  Platform,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../src/constants/colors";
 import { Header } from "../../src/components/common/Header";
-import { Card } from "../../src/components/common/Card";
-import { Badge } from "../../src/components/common/Badge";
 import { Button } from "../../src/components/common/Button";
 import { EmptyState } from "../../src/components/common/EmptyState";
 import { marketplaceService } from "../../src/services/marketplace.service";
@@ -61,30 +61,28 @@ export default function BuyerOffersScreen() {
     pollIntervalMs: 20000,
   });
 
-  const handleAcceptOffer = async (quoteId: string, supplierName?: string) => {
+  const handleAcceptQuote = (quote: Quotation) => {
     Alert.alert(
-      "Issue Purchase Order",
-      `Accept quotation from ${supplierName || "this supplier"} and issue formal Purchase Order?`,
+      "Accept Quotation & Issue PO",
+      `Accept offer from ${quote.supplierOrg?.name || "Supplier"} for ₹${quote.totalAmount.toLocaleString()}? This will create a binding Purchase Order with milestone escrow.`,
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Issue PO",
+          text: "Accept & Create PO",
+          style: "default",
           onPress: async () => {
             try {
-              setAcceptingId(quoteId);
-              const po = await marketplaceService.createPurchaseOrder(quoteId);
-              Alert.alert(
-                "Purchase Order Issued!",
-                `Order #${po.poNumber || "SG-PO"} created. Supplier notified to accept and prepare PP Sample.`,
-                [
-                  {
-                    text: "View Orders",
-                    onPress: () => router.push("/(buyer)/orders"),
-                  },
-                ]
-              );
+              setAcceptingId(quote.id);
+              const po = await marketplaceService.createPurchaseOrder(quote.id);
+              Alert.alert("PO Created", `Purchase Order ${po.poNumber || ""} issued successfully!`, [
+                {
+                  text: "View Orders",
+                  onPress: () => router.push("/(buyer)/orders"),
+                },
+              ]);
+              loadOffers();
             } catch (err: any) {
-              Alert.alert("Error", err.response?.data?.message || "Failed to create Purchase Order.");
+              Alert.alert("Error", err.response?.data?.message || "Could not accept quotation.");
             } finally {
               setAcceptingId(null);
             }
@@ -97,92 +95,119 @@ export default function BuyerOffersScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <Header
-        title="Supplier Offers"
-        subtitle="Compare factory pricing & issue purchase orders"
-        showBack
+        title="Quotation Comparison"
+        subtitle="Review supplier bids & accept contracts"
+        showBack={Boolean(rfqId)}
       />
 
       <FlatList
         data={quotes}
         keyExtractor={(item) => item.id}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadOffers(); }} colors={[Colors.primary]} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              loadOffers();
+            }}
+            colors={[Colors.primary]}
+          />
+        }
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           !loading ? (
             <EmptyState
               icon="pricetag-outline"
-              title="No Offers Found"
-              description="When manufacturers respond to your RFQs, their quotations will appear here."
-              actionTitle="View Requests"
+              title="No Quotations Yet"
+              description="When verified garment manufacturers submit bids for your RFQs, they will appear here for side-by-side comparison."
+              actionTitle="View My Requests"
               onAction={() => router.push("/(buyer)/rfqs")}
             />
-          ) : null
+          ) : undefined
         }
-        renderItem={({ item }) => {
-          const supplierName = item.supplier?.name || "Verified Factory";
-          const firstItem = item.items?.[0];
-          const unitPrice = firstItem?.unitPrice || 0;
+        renderItem={({ item, index }) => {
+          const isPending = item.status === "PENDING";
+          const isAccepted = item.status === "ACCEPTED";
+          const unitPrice = item.items?.[0]?.unitPrice || item.totalAmount / 1000;
+          const quoteCode = `QTN-2026-${(item.id || "200").slice(-4).replace(/\D/g, "").padStart(4, "0") || (200 + index).toString()}`;
 
           return (
-            <Card style={styles.quoteCard}>
+            <View style={styles.quoteCard}>
               <View style={styles.topRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.supplierTitle}>{supplierName}</Text>
-                  <Text style={styles.rfqRef}>
-                    {item.rfq?.title || "Garment Production Lot"}
+                <Text style={styles.quoteCodeText}>{quoteCode}</Text>
+                <View
+                  style={[
+                    styles.statusPill,
+                    isAccepted
+                      ? { backgroundColor: Colors.successLight, borderColor: Colors.successBorder }
+                      : { backgroundColor: Colors.primaryLight, borderColor: Colors.borderPrimary },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusPillText,
+                      isAccepted ? { color: Colors.successText } : { color: Colors.primary },
+                    ]}
+                  >
+                    {item.status}
                   </Text>
                 </View>
-                <Badge
-                  label={item.status}
-                  size="sm"
-                  variant={item.status === "ACCEPTED" ? "success" : "primary"}
+              </View>
+
+              <Text style={styles.supplierName}>
+                {item.supplierOrg?.name || "Verified Factory Mill"}
+              </Text>
+              <Text style={styles.locationText}>
+                {item.supplierOrg?.city || "Tirupur Textile Hub"}
+              </Text>
+
+              <View style={styles.pricingRow}>
+                <View>
+                  <Text style={styles.unitPriceLabel}>Quoted Unit Price</Text>
+                  <Text style={styles.unitPriceVal}>₹{Math.round(unitPrice)}/pc</Text>
+                </View>
+                <View style={{ alignItems: "flex-end" }}>
+                  <Text style={styles.totalPriceLabel}>Total Contract Value</Text>
+                  <Text style={styles.totalPriceVal}>₹{item.totalAmount.toLocaleString()}</Text>
+                </View>
+              </View>
+
+              <View style={styles.metaRow}>
+                <View style={styles.metaItem}>
+                  <Text style={styles.metaLabel}>Production Lead</Text>
+                  <Text style={styles.metaVal}>{item.leadTimeDays} Days</Text>
+                </View>
+                <View style={styles.metaItem}>
+                  <Text style={styles.metaLabel}>Minimum MOQ</Text>
+                  <Text style={styles.metaVal}>{item.moq ? `${item.moq} pcs` : "N/A"}</Text>
+                </View>
+                <View style={styles.metaItem}>
+                  <Text style={styles.metaLabel}>Sample Lead</Text>
+                  <Text style={styles.metaVal}>
+                    {item.sampleLeadDays ? `${item.sampleLeadDays} Days` : "7 Days"}
+                  </Text>
+                </View>
+              </View>
+
+              {item.terms ? (
+                <View style={styles.termsBox}>
+                  <Ionicons name="information-circle-outline" size={14} color={Colors.textSecondary} />
+                  <Text style={styles.termsText} numberOfLines={2}>
+                    {item.terms}
+                  </Text>
+                </View>
+              ) : null}
+
+              {isPending && (
+                <Button
+                  title={acceptingId === item.id ? "Accepting..." : "Accept Offer & Issue PO"}
+                  onPress={() => handleAcceptQuote(item)}
+                  loading={acceptingId === item.id}
+                  size="md"
+                  style={{ marginTop: 12 }}
                 />
-              </View>
-
-              <View style={styles.priceBreakdown}>
-                <View style={styles.priceCol}>
-                  <Text style={styles.priceLabel}>Total Quote</Text>
-                  <Text style={styles.priceTotal}>₹{(item.totalAmount / 100000).toFixed(2)}L</Text>
-                </View>
-                {unitPrice > 0 && (
-                  <View style={styles.priceCol}>
-                    <Text style={styles.priceLabel}>Unit Price</Text>
-                    <Text style={styles.priceValue}>₹{unitPrice}/pc</Text>
-                  </View>
-                )}
-                <View style={styles.priceCol}>
-                  <Text style={styles.priceLabel}>Lead Time</Text>
-                  <Text style={styles.priceValue}>{item.leadTimeDays} days</Text>
-                </View>
-              </View>
-
-              <View style={styles.termsBox}>
-                <Ionicons name="shield-checkmark" size={16} color={Colors.primary} />
-                <Text style={styles.termsText}>
-                  {item.terms || "Standard B2B Escrow Milestones • 100% Quality Guaranteed"}
-                </Text>
-              </View>
-
-              <View style={styles.actionRow}>
-                {item.status !== "ACCEPTED" ? (
-                  <Button
-                    title="Accept Offer & Issue PO"
-                    size="md"
-                    loading={acceptingId === item.id}
-                    onPress={() => handleAcceptOffer(item.id, supplierName)}
-                    style={{ flex: 1 }}
-                  />
-                ) : (
-                  <Button
-                    title="PO Already Generated"
-                    variant="secondary"
-                    size="md"
-                    disabled
-                    style={{ flex: 1 }}
-                  />
-                )}
-              </View>
-            </Card>
+              )}
+            </View>
           );
         }}
       />
@@ -200,68 +225,115 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   quoteCard: {
-    marginBottom: 14,
+    backgroundColor: Colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
   },
   topRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: 8,
   },
-  supplierTitle: {
+  quoteCodeText: {
+    fontSize: 12,
+    fontWeight: "800",
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    color: Colors.primary,
+  },
+  statusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  statusPillText: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  supplierName: {
     fontSize: 16,
     fontWeight: "800",
-    color: Colors.text,
+    color: Colors.textHeading,
   },
-  rfqRef: {
-    fontSize: 13,
+  locationText: {
+    fontSize: 12,
     color: Colors.textSecondary,
     marginTop: 2,
+    marginBottom: 12,
   },
-  priceBreakdown: {
+  pricingRow: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: Colors.surfaceSubtle,
+    backgroundColor: Colors.primaryLight,
     borderRadius: 14,
     padding: 12,
     marginBottom: 12,
   },
-  priceCol: {
-    alignItems: "center",
-  },
-  priceLabel: {
-    fontSize: 11,
-    color: Colors.textMuted,
+  unitPriceLabel: {
+    fontSize: 10,
+    color: Colors.primary,
     fontWeight: "600",
   },
-  priceTotal: {
-    fontSize: 17,
-    fontWeight: "800",
+  unitPriceVal: {
+    fontSize: 16,
+    fontWeight: "900",
     color: Colors.primary,
     marginTop: 2,
   },
-  priceValue: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: Colors.text,
+  totalPriceLabel: {
+    fontSize: 10,
+    color: Colors.primary,
+    fontWeight: "600",
+  },
+  totalPriceVal: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: Colors.textHeading,
     marginTop: 2,
+  },
+  metaRow: {
+    flexDirection: "row",
+    backgroundColor: Colors.surfaceSubtle,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 10,
+  },
+  metaItem: {
+    flex: 1,
+  },
+  metaLabel: {
+    fontSize: 10,
+    color: Colors.textSecondary,
+    marginBottom: 2,
+  },
+  metaVal: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Colors.textHeading,
   },
   termsBox: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 14,
+    alignItems: "flex-start",
+    gap: 6,
+    backgroundColor: Colors.surfaceSubtle,
+    borderRadius: 10,
+    padding: 8,
   },
   termsText: {
-    fontSize: 12,
-    color: Colors.textSecondary,
     flex: 1,
-  },
-  actionRow: {
-    flexDirection: "row",
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
+    fontSize: 11,
+    color: Colors.textSecondary,
+    lineHeight: 15,
   },
 });
-

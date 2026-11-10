@@ -13,15 +13,23 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../src/constants/colors";
 import { Header } from "../../src/components/common/Header";
-import { Card } from "../../src/components/common/Card";
-import { Badge } from "../../src/components/common/Badge";
 import { Button } from "../../src/components/common/Button";
 import { Input } from "../../src/components/common/Input";
 import { EmptyState } from "../../src/components/common/EmptyState";
 import { marketplaceService } from "../../src/services/marketplace.service";
 import { SupplierProfile } from "../../src/types";
 
-const CATEGORIES = ["All", "Knits & Hosiery", "Woven & Shirts", "Denim & Jeans", "Activewear", "Kids Apparel"];
+const CATEGORIES = [
+  "All",
+  "T-Shirts",
+  "Shirts",
+  "Hoodies",
+  "Activewear",
+  "Denim & Jeans",
+  "Kids Wear",
+  "Knitwear",
+  "Woven Fabric",
+];
 
 export default function SuppliersDiscoveryScreen() {
   const router = useRouter();
@@ -50,6 +58,12 @@ export default function SuppliersDiscoveryScreen() {
     loadSuppliers();
   }, [loadSuppliers]);
 
+  const getSupplierIcon = (businessType?: string) => {
+    if (businessType?.toLowerCase().includes("fabric")) return "layers-outline";
+    if (businessType?.toLowerCase().includes("trim")) return "pricetag-outline";
+    return "business-outline";
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <Header
@@ -59,14 +73,26 @@ export default function SuppliersDiscoveryScreen() {
       />
 
       <View style={styles.searchSection}>
-        <Input
-          placeholder="Search mills by name, city, capabilities..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          leftIcon="search-outline"
-          containerStyle={{ marginBottom: 10 }}
-        />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryPills}>
+        <View style={styles.searchInputWrap}>
+          <Ionicons name="search" size={17} color={Colors.textMuted} style={{ marginRight: 8 }} />
+          <Input
+            placeholder="Search mills by name, city, capabilities..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            containerStyle={{ flex: 1, marginBottom: 0 }}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery("")} style={{ padding: 4 }}>
+              <Ionicons name="close-circle" size={16} color={Colors.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoryPills}
+        >
           {CATEGORIES.map((cat) => (
             <TouchableOpacity
               key={cat}
@@ -84,77 +110,100 @@ export default function SuppliersDiscoveryScreen() {
       <FlatList
         data={suppliers}
         keyExtractor={(item) => item.id}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadSuppliers(); }} colors={[Colors.primary]} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              loadSuppliers();
+            }}
+            colors={[Colors.primary]}
+          />
+        }
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           !loading ? (
             <EmptyState
-              icon="business-outline"
-              title="No Mills Found"
-              description="Try adjusting your filter or search query to find matching garment manufacturers."
+              icon="search-outline"
+              title="No Factories Found"
+              description="No suppliers matching your selected filter. Tap All to view all verified manufacturing partners."
+              actionTitle="Reset Filters"
+              onAction={() => {
+                setSelectedCategory("All");
+                setSearchQuery("");
+              }}
             />
-          ) : null
+          ) : undefined
         }
         renderItem={({ item }) => {
-          const org = item.organization;
+          const isApproved = item.organization?.verificationStatus === "APPROVED";
+          const icon = getSupplierIcon(item.organization?.businessType);
+          const capacityText = item.productionCapacity
+            ? `${item.productionCapacity.toLocaleString()} pcs / mo`
+            : "50,000 pcs / mo";
+
           return (
-            <Card style={styles.supplierCard}>
-              <View style={styles.topRow}>
-                <View style={styles.millIconWrap}>
-                  <Ionicons name="business" size={22} color={Colors.primary} />
+            <View style={styles.supplierCard}>
+              <View style={styles.cardTopRow}>
+                {isApproved ? (
+                  <View style={styles.verifiedPill}>
+                    <Ionicons name="checkmark" size={12} color={Colors.successText} />
+                    <Text style={styles.verifiedText}>Verified</Text>
+                  </View>
+                ) : (
+                  <View style={styles.pendingPill}>
+                    <Ionicons name="information-circle-outline" size={12} color={Colors.warningText} />
+                    <Text style={styles.pendingText}>Under review</Text>
+                  </View>
+                )}
+
+                <View style={styles.businessTypePill}>
+                  <Text style={styles.businessTypeText}>
+                    {item.organization?.businessType || "Garments & Textiles"}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.infoRow}>
+                <View style={styles.iconBox}>
+                  <Ionicons name={icon as any} size={22} color={Colors.primary} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.millName}>{org.name}</Text>
-                  <Text style={styles.millLocation}>
-                    📍 {org.city || "Tirupur"}, {org.country || "India"}
+                  <Text style={styles.supplierName} numberOfLines={1}>
+                    {item.organization?.name || "Apparel Mill"}
                   </Text>
+                  <View style={styles.locationRow}>
+                    <Ionicons name="location-outline" size={14} color={Colors.textSecondary} />
+                    <Text style={styles.locationText} numberOfLines={1}>
+                      {item.organization?.city || "Tirupur, India"}
+                    </Text>
+                  </View>
                 </View>
-                <Badge
-                  label="GST Verified"
-                  variant="success"
-                  size="sm"
-                />
               </View>
-
-              <Text style={styles.desc} numberOfLines={2}>
-                {item.description || "Specialized OEM garment manufacturing with export-standard quality inspection and automated sewing lines."}
-              </Text>
 
               <View style={styles.statsRow}>
-                <View style={styles.statBox}>
-                  <Text style={styles.statLabel}>Monthly Output</Text>
-                  <Text style={styles.statValue}>
-                    {item.productionCapacity ? `${(item.productionCapacity / 1000).toFixed(0)}k pcs` : "150k pcs"}
-                  </Text>
+                <View style={styles.statCol}>
+                  <Text style={styles.statLabel}>Monthly Capacity</Text>
+                  <Text style={styles.statVal}>{capacityText}</Text>
                 </View>
-                <View style={styles.statBox}>
+                <View style={styles.statDivider} />
+                <View style={styles.statCol}>
                   <Text style={styles.statLabel}>Experience</Text>
-                  <Text style={styles.statValue}>
-                    {item.yearsInBusiness ? `${item.yearsInBusiness} yrs` : "12+ yrs"}
-                  </Text>
-                </View>
-                <View style={styles.statBox}>
-                  <Text style={styles.statLabel}>Audit Status</Text>
-                  <Text style={[styles.statValue, { color: Colors.successText }]}>Tier-1 Pass</Text>
+                  <Text style={styles.statVal}>{item.yearsInBusiness || 10} Years</Text>
                 </View>
               </View>
 
-              <View style={styles.cardActions}>
+              <View style={styles.actionsRow}>
                 <Button
-                  title="Invite to RFQ"
+                  title="Message Mill"
                   size="sm"
-                  onPress={() => router.push("/(buyer)/rfqs")}
+                  onPress={() =>
+                    router.push(`/(buyer)/messages?targetSupplierOrgId=${item.organizationId}`)
+                  }
                   style={{ flex: 1 }}
                 />
-                <Button
-                  title="Message"
-                  size="sm"
-                  variant="outline"
-                  icon="chatbubble-ellipses-outline"
-                  onPress={() => router.push({ pathname: "/(buyer)/messages", params: { targetSupplierOrgId: org.id } })}
-                />
               </View>
-            </Card>
+            </View>
           );
         }}
       />
@@ -170,19 +219,30 @@ const styles = StyleSheet.create({
   searchSection: {
     paddingHorizontal: 16,
     paddingTop: 12,
+    paddingBottom: 8,
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  categoryPills: {
+  searchInputWrap: {
     flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.surfaceSubtle,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 12,
+    height: 44,
+    marginBottom: 10,
+  },
+  categoryPills: {
     gap: 8,
-    paddingBottom: 12,
+    paddingBottom: 4,
   },
   pill: {
     paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: 14,
     backgroundColor: Colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -194,74 +254,139 @@ const styles = StyleSheet.create({
   pillText: {
     fontSize: 12,
     fontWeight: "600",
-    color: Colors.textSecondary,
+    color: Colors.slate600,
   },
   pillTextActive: {
     color: "#FFFFFF",
+    fontWeight: "700",
   },
   listContent: {
     padding: 16,
     paddingBottom: 40,
   },
   supplierCard: {
-    marginBottom: 14,
+    backgroundColor: Colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
   },
-  topRow: {
+  cardTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  verifiedPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: Colors.successLight,
+    borderWidth: 1,
+    borderColor: Colors.successBorder,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  verifiedText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Colors.successText,
+  },
+  pendingPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: Colors.warningLight,
+    borderWidth: 1,
+    borderColor: Colors.warningBorder,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  pendingText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Colors.warningText,
+  },
+  businessTypePill: {
+    backgroundColor: Colors.primaryLight,
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  businessTypeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Colors.primary,
+  },
+  infoRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    marginBottom: 10,
+    marginBottom: 12,
   },
-  millIconWrap: {
+  iconBox: {
     width: 44,
     height: 44,
-    borderRadius: 14,
+    borderRadius: 12,
     backgroundColor: Colors.primaryLight,
+    borderWidth: 1,
+    borderColor: "rgba(91, 19, 236, 0.15)",
     alignItems: "center",
     justifyContent: "center",
   },
-  millName: {
+  supplierName: {
     fontSize: 16,
     fontWeight: "800",
-    color: Colors.text,
+    color: Colors.textHeading,
   },
-  millLocation: {
-    fontSize: 12,
-    color: Colors.textSecondary,
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
     marginTop: 2,
   },
-  desc: {
-    fontSize: 13,
+  locationText: {
+    fontSize: 12,
     color: Colors.textSecondary,
-    lineHeight: 18,
-    marginBottom: 12,
   },
   statsRow: {
     flexDirection: "row",
-    gap: 8,
-    marginBottom: 14,
-  },
-  statBox: {
-    flex: 1,
-    backgroundColor: Colors.surfaceSubtle,
-    padding: 10,
-    borderRadius: 12,
     alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: Colors.surfaceSubtle,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 12,
+  },
+  statCol: {
+    flex: 1,
+  },
+  statDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: Colors.borderLight,
+    marginHorizontal: 8,
   },
   statLabel: {
     fontSize: 10,
-    color: Colors.textMuted,
-    fontWeight: "600",
+    color: Colors.textSecondary,
+    marginBottom: 2,
   },
-  statValue: {
-    fontSize: 13,
+  statVal: {
+    fontSize: 12,
     fontWeight: "800",
-    color: Colors.text,
-    marginTop: 2,
+    color: Colors.textHeading,
   },
-  cardActions: {
+  actionsRow: {
     flexDirection: "row",
-    gap: 10,
+    alignItems: "center",
   },
 });
-

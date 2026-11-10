@@ -9,14 +9,14 @@ import {
   SafeAreaView,
   ScrollView,
   Alert,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../src/constants/colors";
 import { Header } from "../../src/components/common/Header";
-import { Card } from "../../src/components/common/Card";
-import { Badge, BadgeVariant } from "../../src/components/common/Badge";
 import { Button } from "../../src/components/common/Button";
+import { Input } from "../../src/components/common/Input";
 import { EmptyState } from "../../src/components/common/EmptyState";
 import { marketplaceService } from "../../src/services/marketplace.service";
 import { useRealtimeSync } from "../../src/hooks/useRealtimeSync";
@@ -28,6 +28,7 @@ export default function SupplierOrdersScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const loadOrders = useCallback(async () => {
@@ -67,141 +68,220 @@ export default function SupplierOrdersScreen() {
     }
   };
 
-  const getStatusBadge = (status: string): { label: string; variant: BadgeVariant } => {
+  const getProgressPercentage = (status: string) => {
     switch (status) {
-      case "COMPLETED":
-      case "DELIVERED":
-        return { label: status, variant: "success" };
+      case "ISSUED":
+        return 15;
+      case "ACCEPTED":
       case "SAMPLE_PENDING":
-      case "QC_PENDING":
-        return { label: status.replace(/_/g, " "), variant: "warning" };
-      case "IN_PRODUCTION":
+        return 30;
+      case "SAMPLE_APPROVED":
       case "PRODUCTION_STARTED":
-        return { label: "IN PRODUCTION", variant: "primary" };
+      case "IN_PRODUCTION":
+        return 65;
+      case "QC":
+        return 80;
+      case "DISPATCHED":
+        return 90;
+      case "COMPLETED":
+        return 100;
       default:
-        return { label: status.replace(/_/g, " "), variant: "info" };
+        return 25;
     }
   };
 
   const filteredOrders = orders.filter((o) => {
-    if (statusFilter === "ALL") return true;
-    return o.status === statusFilter;
+    const matchesFilter =
+      statusFilter === "ALL" ||
+      (statusFilter === "ACTIVE" && o.status !== "COMPLETED" && o.status !== "CANCELLED") ||
+      o.status === statusFilter;
+    const matchesQuery =
+      !searchQuery.trim() ||
+      (o.poNumber && o.poNumber.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (o.buyerOrg?.name && o.buyerOrg.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    return matchesFilter && matchesQuery;
   });
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <Header
-        title="Factory Orders"
-        subtitle="Manage manufacturing runs & milestone progression"
+        title="Production Orders"
+        subtitle="Manage factory lines & fulfillment"
       />
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterPills}>
-        {["ALL", "ACCEPTED", "SAMPLE_PENDING", "IN_PRODUCTION", "QC", "COMPLETED"].map((st) => (
-          <TouchableOpacity
-            key={st}
-            onPress={() => setStatusFilter(st)}
-            style={[styles.pill, statusFilter === st && styles.pillActive]}
-          >
-            <Text style={[styles.pillText, statusFilter === st && styles.pillTextActive]}>
-              {st.replace(/_/g, " ")}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {/* Filter Row */}
+      <View style={styles.filterSection}>
+        <View style={styles.searchInputWrap}>
+          <Ionicons name="search" size={17} color={Colors.textMuted} style={{ marginRight: 8 }} />
+          <Input
+            placeholder="Search orders by PO#, buyer..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            containerStyle={{ flex: 1, marginBottom: 0 }}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery("")} style={{ padding: 4 }}>
+              <Ionicons name="close-circle" size={16} color={Colors.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterPills}
+        >
+          {["ALL", "ACTIVE", "IN_PRODUCTION", "COMPLETED"].map((st) => (
+            <TouchableOpacity
+              key={st}
+              onPress={() => setStatusFilter(st)}
+              style={[styles.pill, statusFilter === st && styles.pillActive]}
+            >
+              <Text style={[styles.pillText, statusFilter === st && styles.pillTextActive]}>
+                {st}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
       <FlatList
         data={filteredOrders}
         keyExtractor={(item) => item.id}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadOrders(); }} colors={[Colors.primary]} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              loadOrders();
+            }}
+            colors={[Colors.primary]}
+          />
+        }
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           !loading ? (
             <EmptyState
               icon="cube-outline"
               title="No Factory Orders"
-              description="Orders awarded to your factory will appear here for floor execution."
-              actionTitle="Browse Requests"
+              description="When buyers accept your bids, purchase orders will appear here for manufacturing fulfillment."
+              actionTitle="Browse Buyer Requests"
               onAction={() => router.push("/(supplier)/buyer-requests")}
             />
-          ) : null
+          ) : undefined
         }
-        renderItem={({ item }) => {
-          const badge = getStatusBadge(item.status);
-          const firstItem = item.items?.[0];
-          const itemTitle = firstItem ? `${firstItem.quantity?.toLocaleString()} pcs ${firstItem.description}` : "Apparel Lot Contract";
+        renderItem={({ item, index }) => {
+          const poDisplay = item.poNumber || `PO-2026-${(item.id || "100").slice(-4).replace(/\D/g, "").padStart(4, "0") || (1000 + index).toString()}`;
+          const progress = getProgressPercentage(item.status);
+          const isIssued = item.status === "ISSUED";
+          const isSampleApproved = item.status === "SAMPLE_APPROVED";
+          const isInProduction = item.status === "IN_PRODUCTION" || item.status === "PRODUCTION_STARTED";
+          const isQc = item.status === "QC";
+          const isCompleted = item.status === "COMPLETED";
 
           return (
-            <Card style={styles.orderCard}>
+            <View style={styles.orderCard}>
               <View style={styles.topRow}>
-                <View>
-                  <Text style={styles.poNumber}>{item.poNumber}</Text>
-                  <Text style={styles.buyerName}>Buyer: {item.buyer?.name || "Apparel Brand"}</Text>
-                </View>
-                <Badge label={badge.label} variant={badge.variant} size="sm" />
-              </View>
-
-              <Text style={styles.itemTitle}>{itemTitle}</Text>
-
-              <View style={styles.metaRow}>
-                <View>
-                  <Text style={styles.metaLabel}>Contract Value</Text>
-                  <Text style={styles.amountText}>₹{(item.totalAmount / 100000).toFixed(2)}L</Text>
-                </View>
-                <View style={{ alignItems: "flex-end" }}>
-                  <Text style={styles.metaLabel}>Target Ship Date</Text>
-                  <Text style={styles.dateText}>
-                    {item.expectedDate ? new Date(item.expectedDate).toLocaleDateString("en-IN") : "Scheduled"}
+                <Text style={styles.poNumberText}>{poDisplay}</Text>
+                <View
+                  style={[
+                    styles.statusPill,
+                    isCompleted
+                      ? { backgroundColor: Colors.successLight, borderColor: Colors.successBorder }
+                      : { backgroundColor: Colors.primaryLight, borderColor: Colors.borderPrimary },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusPillText,
+                      isCompleted ? { color: Colors.successText } : { color: Colors.primary },
+                    ]}
+                  >
+                    {item.status.replace("_", " ")}
                   </Text>
                 </View>
               </View>
 
-              {/* Status Action Buttons */}
-              <View style={styles.actionsRow}>
-                {(item.status === "PO_CREATED" || item.status === "PENDING_ACCEPTANCE") && (
+              <Text style={styles.buyerText}>
+                Buyer: <Text style={{ color: Colors.textHeading, fontWeight: "800" }}>{item.buyerOrg?.name || "Enterprise Apparel Brand"}</Text>
+              </Text>
+
+              <View style={styles.pricingRow}>
+                <View>
+                  <Text style={styles.label}>Contract Revenue</Text>
+                  <Text style={styles.amountText}>₹{item.totalAmount.toLocaleString()}</Text>
+                </View>
+                <View style={{ alignItems: "flex-end" }}>
+                  <Text style={styles.label}>Fulfillment</Text>
+                  <Text style={styles.progressPercentText}>{progress}%</Text>
+                </View>
+              </View>
+
+              {/* Progress Bar */}
+              <View style={styles.progressBarTrack}>
+                <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
+              </View>
+
+              <View style={styles.stageLabelsRow}>
+                <Text style={styles.stageText}>Deposit</Text>
+                <Text style={styles.stageText}>Sample</Text>
+                <Text style={styles.stageText}>Bulk Cut</Text>
+                <Text style={styles.stageText}>QC Pass</Text>
+                <Text style={styles.stageText}>Dispatched</Text>
+              </View>
+
+              {/* Action Buttons */}
+              <View style={styles.actionRow}>
+                {isIssued && (
                   <Button
-                    title="Accept Order"
+                    title={updatingId === item.id ? "Accepting..." : "Accept Purchase Order"}
                     size="sm"
                     loading={updatingId === item.id}
-                    onPress={() => handleUpdateStatus(item.id, "ACCEPTED", "Accepted")}
+                    onPress={() => handleUpdateStatus(item.id, "ACCEPTED", "Accepted Contract")}
                     style={{ flex: 1 }}
                   />
                 )}
-                {item.status === "ACCEPTED" && (
+
+                {isSampleApproved && (
                   <Button
-                    title="Submit PP Sample"
+                    title={updatingId === item.id ? "Updating..." : "Start Bulk Cutting"}
                     size="sm"
                     loading={updatingId === item.id}
-                    onPress={() => router.push("/(supplier)/samples")}
+                    onPress={() => handleUpdateStatus(item.id, "IN_PRODUCTION", "Bulk Production")}
                     style={{ flex: 1 }}
                   />
                 )}
-                {item.status === "SAMPLE_APPROVED" && (
+
+                {isInProduction && (
                   <Button
-                    title="Start Bulk Production"
+                    title={updatingId === item.id ? "Updating..." : "Submit for QC"}
+                    size="sm"
+                    variant="primary"
+                    loading={updatingId === item.id}
+                    onPress={() => handleUpdateStatus(item.id, "QC", "AQL Quality Inspection")}
+                    style={{ flex: 1 }}
+                  />
+                )}
+
+                {isQc && (
+                  <Button
+                    title={updatingId === item.id ? "Updating..." : "Mark Dispatched"}
                     size="sm"
                     loading={updatingId === item.id}
-                    onPress={() => handleUpdateStatus(item.id, "IN_PRODUCTION", "In Production")}
+                    onPress={() => handleUpdateStatus(item.id, "DISPATCHED", "Carrier Dispatch")}
                     style={{ flex: 1 }}
                   />
                 )}
-                {item.status === "IN_PRODUCTION" && (
-                  <Button
-                    title="Floor Tracking"
-                    size="sm"
-                    variant="outline"
-                    onPress={() => router.push("/(supplier)/production")}
-                    style={{ flex: 1 }}
-                  />
-                )}
+
                 <Button
-                  title="Messages"
+                  title="Tracking"
+                  variant="outline"
                   size="sm"
-                  variant="secondary"
-                  icon="chatbubble-ellipses-outline"
-                  onPress={() => router.push("/(supplier)/messages")}
+                  onPress={() => router.push("/(supplier)/production")}
+                  style={{ minWidth: 90 }}
                 />
               </View>
-            </Card>
+            </View>
           );
         }}
       />
@@ -214,19 +294,33 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  filterPills: {
-    flexDirection: "row",
-    gap: 8,
+  filterSection: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 8,
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
+  searchInputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.surfaceSubtle,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 12,
+    height: 44,
+    marginBottom: 10,
+  },
+  filterPills: {
+    gap: 8,
+    paddingBottom: 4,
+  },
   pill: {
     paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: 14,
     backgroundColor: Colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -238,72 +332,107 @@ const styles = StyleSheet.create({
   pillText: {
     fontSize: 12,
     fontWeight: "600",
-    color: Colors.textSecondary,
+    color: Colors.slate600,
   },
   pillTextActive: {
     color: "#FFFFFF",
+    fontWeight: "700",
   },
   listContent: {
     padding: 16,
     paddingBottom: 40,
   },
   orderCard: {
-    marginBottom: 14,
+    backgroundColor: Colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
   },
   topRow: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "flex-start",
     marginBottom: 8,
   },
-  poNumber: {
-    fontSize: 16,
+  poNumberText: {
+    fontSize: 13,
     fontWeight: "800",
-    color: Colors.text,
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    color: Colors.primary,
   },
-  buyerName: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 2,
+  statusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
   },
-  itemTitle: {
+  statusPillText: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  buyerText: {
     fontSize: 14,
-    fontWeight: "600",
-    color: Colors.text,
+    color: Colors.textSecondary,
     marginBottom: 12,
   },
-  metaRow: {
+  pricingRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: Colors.surfaceSubtle,
-    padding: 12,
     borderRadius: 12,
-    marginBottom: 14,
+    padding: 10,
+    marginBottom: 10,
   },
-  metaLabel: {
-    fontSize: 11,
-    color: Colors.textMuted,
-    fontWeight: "600",
+  label: {
+    fontSize: 10,
+    color: Colors.textSecondary,
   },
   amountText: {
-    fontSize: 16,
+    fontSize: 15,
+    fontWeight: "900",
+    color: Colors.textHeading,
+    marginTop: 2,
+  },
+  progressPercentText: {
+    fontSize: 14,
     fontWeight: "800",
-    color: Colors.text,
+    color: Colors.primary,
     marginTop: 2,
   },
-  dateText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Colors.text,
-    marginTop: 2,
+  progressBarTrack: {
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: Colors.borderLight,
+    overflow: "hidden",
+    marginBottom: 6,
   },
-  actionsRow: {
+  progressBarFill: {
+    height: "100%",
+    backgroundColor: Colors.primary,
+    borderRadius: 4,
+  },
+  stageLabelsRow: {
     flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  stageText: {
+    fontSize: 10,
+    color: Colors.textSecondary,
+    fontWeight: "500",
+  },
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
   },
 });
-

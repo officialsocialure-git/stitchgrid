@@ -15,6 +15,8 @@ interface AuthContextType {
   isAdmin: boolean;
   login: (identifier: string, pass: string) => Promise<void>;
   signup: (data: SignupInput) => Promise<void>;
+  googleLogin: (credential: string) => Promise<any>;
+  completeGoogleOnboarding: (data: { organizationName: string; accountType: "BUYER" | "SUPPLIER" }) => Promise<void>;
   logout: () => Promise<void>;
   switchRole: (role: "BUYER" | "SUPPLIER") => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -89,6 +91,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     realtimeService.connect().catch((e) => console.warn("Socket connect err:", e));
   };
 
+  const googleLogin = async (credential: string) => {
+    const res = await authService.googleLogin(credential);
+    setToken(res.accessToken);
+    setUser(res.user);
+    setActiveMembership(res.activeMembership);
+    setMemberships(res.memberships || []);
+    realtimeService.connect().catch((e) => console.warn("Socket connect err:", e));
+    return res;
+  };
+
+  const completeGoogleOnboarding = async (data: { organizationName: string; accountType: "BUYER" | "SUPPLIER" }) => {
+    const res = await authService.completeGoogleOnboarding(data);
+    setToken(res.accessToken);
+    setActiveMembership(res.activeMembership);
+    await refreshUser();
+  };
+
   const logout = async () => {
     await authService.logout();
     realtimeService.disconnect();
@@ -147,6 +166,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAdmin,
         login,
         signup,
+        googleLogin,
+        completeGoogleOnboarding,
         logout,
         switchRole,
         refreshUser,

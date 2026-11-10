@@ -38,7 +38,6 @@ export default function BuyerMessagesScreen() {
       const list = data || [];
       setConversations(list);
 
-      // If targeted supplier was passed from supplier directory
       if (targetSupplierOrgId && activeMembership?.organizationId) {
         let existing = list.find((c) => c.supplierOrgId === targetSupplierOrgId);
         if (!existing) {
@@ -130,10 +129,14 @@ export default function BuyerMessagesScreen() {
         subtitle="Direct verified B2B communication"
       />
 
-      {/* Conversation Switcher Tabs if multiple */}
+      {/* Conversation Switcher Tabs */}
       {conversations.length > 1 && (
         <View style={styles.convTabsContainer}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.convTabs}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.convTabs}
+          >
             {conversations.map((c) => {
               const name = c.supplier?.name || c.otherPartyName || "Factory";
               const isSelected = selectedConv?.id === c.id;
@@ -159,10 +162,12 @@ export default function BuyerMessagesScreen() {
       >
         {conversations.length === 0 && !loading ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="chatbubbles-outline" size={48} color={Colors.textMuted} />
+            <View style={styles.emptyIconCircle}>
+              <Ionicons name="chatbubbles-outline" size={32} color={Colors.primary} />
+            </View>
             <Text style={styles.emptyTitle}>No Conversations Yet</Text>
             <Text style={styles.emptyDesc}>
-              Messages with garment mills regarding your RFQs, samples, and contracts will appear here.
+              Messages with garment mills regarding your RFQs, samples, and contracts will appear here in real time.
             </Text>
           </View>
         ) : (
@@ -178,17 +183,12 @@ export default function BuyerMessagesScreen() {
                 const messageText = item.body || item.content || "";
                 return (
                   <View style={[styles.msgRow, isMe ? styles.msgRowRight : styles.msgRowLeft]}>
-                    <View style={[styles.bubble, isMe ? styles.bubbleRight : styles.bubbleLeft]}>
-                      {!isMe && (
-                        <Text style={styles.senderLabel}>
-                          {item.sender?.fullName || otherName}
-                        </Text>
-                      )}
+                    <View style={[styles.msgBubble, isMe ? styles.msgBubbleRight : styles.msgBubbleLeft]}>
                       <Text style={[styles.msgText, isMe ? styles.msgTextRight : styles.msgTextLeft]}>
                         {messageText}
                       </Text>
-                      <Text style={[styles.timeText, isMe ? styles.timeRight : styles.timeLeft]}>
-                        {item.createdAt ? new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
+                      <Text style={[styles.timeText, isMe ? styles.timeTextRight : styles.timeTextLeft]}>
+                        {item.createdAt ? new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Just now"}
                       </Text>
                     </View>
                   </View>
@@ -196,24 +196,26 @@ export default function BuyerMessagesScreen() {
               }}
             />
 
-            <View style={styles.inputBar}>
+            {/* Input Bar */}
+            <View style={styles.inputContainer}>
               <TextInput
-                style={styles.chatInput}
-                placeholder="Type your message..."
+                style={styles.messageInput}
+                placeholder={`Message ${otherName}...`}
                 placeholderTextColor={Colors.textMuted}
                 value={inputText}
                 onChangeText={setInputText}
                 multiline
+                maxLength={1000}
               />
               <TouchableOpacity
+                style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
                 onPress={handleSend}
                 disabled={!inputText.trim() || sending}
-                style={[styles.sendButton, !inputText.trim() && { opacity: 0.5 }]}
               >
                 {sending ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <Ionicons name="send" size={18} color="#FFFFFF" />
+                  <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
                 )}
               </TouchableOpacity>
             </View>
@@ -240,9 +242,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   convTab: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: 14,
     backgroundColor: Colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -254,106 +256,85 @@ const styles = StyleSheet.create({
   convTabText: {
     fontSize: 12,
     fontWeight: "600",
-    color: Colors.textSecondary,
+    color: Colors.slate600,
   },
   convTabTextActive: {
     color: "#FFFFFF",
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 32,
-  },
-  emptyTitle: {
-    fontSize: 16,
     fontWeight: "700",
-    color: Colors.text,
-    marginTop: 12,
-  },
-  emptyDesc: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    textAlign: "center",
-    marginTop: 4,
-    lineHeight: 18,
   },
   messagesList: {
     padding: 16,
     paddingBottom: 20,
+    gap: 10,
   },
   msgRow: {
     flexDirection: "row",
-    marginBottom: 12,
-  },
-  msgRowLeft: {
-    justifyContent: "flex-start",
+    marginBottom: 4,
   },
   msgRowRight: {
     justifyContent: "flex-end",
   },
-  bubble: {
+  msgRowLeft: {
+    justifyContent: "flex-start",
+  },
+  msgBubble: {
     maxWidth: "80%",
-    borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 10,
+    borderRadius: 18,
   },
-  bubbleLeft: {
+  msgBubbleRight: {
+    backgroundColor: Colors.primary,
+    borderBottomRightRadius: 4,
+  },
+  msgBubbleLeft: {
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
     borderBottomLeftRadius: 4,
   },
-  bubbleRight: {
-    backgroundColor: Colors.primary,
-    borderBottomRightRadius: 4,
-  },
-  senderLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Colors.primary,
-    marginBottom: 2,
-  },
   msgText: {
     fontSize: 14,
-    lineHeight: 20,
-  },
-  msgTextLeft: {
-    color: Colors.text,
+    lineHeight: 19,
   },
   msgTextRight: {
     color: "#FFFFFF",
   },
+  msgTextLeft: {
+    color: Colors.textHeading,
+  },
   timeText: {
     fontSize: 10,
     marginTop: 4,
-    alignSelf: "flex-end",
   },
-  timeLeft: {
+  timeTextRight: {
+    color: "rgba(255, 255, 255, 0.7)",
+    textAlign: "right",
+  },
+  timeTextLeft: {
     color: Colors.textMuted,
   },
-  timeRight: {
-    color: "rgba(255, 255, 255, 0.7)",
-  },
-  inputBar: {
+  inputContainer: {
     flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    alignItems: "flex-end",
     backgroundColor: Colors.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
     gap: 10,
   },
-  chatInput: {
+  messageInput: {
     flex: 1,
     backgroundColor: Colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: Colors.border,
     borderRadius: 20,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    fontSize: 14,
-    color: Colors.text,
     maxHeight: 100,
+    fontSize: 14,
+    color: Colors.textHeading,
   },
   sendButton: {
     width: 40,
@@ -362,5 +343,36 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     alignItems: "center",
     justifyContent: "center",
+  },
+  sendButtonDisabled: {
+    backgroundColor: Colors.slate300,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 32,
+  },
+  emptyIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: Colors.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: Colors.textHeading,
+  },
+  emptyDesc: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    textAlign: "center",
+    marginTop: 4,
+    lineHeight: 18,
+    maxWidth: 280,
   },
 });

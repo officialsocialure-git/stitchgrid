@@ -90,6 +90,34 @@ export const authService = {
     return data;
   },
 
+  async googleLogin(credential: string): Promise<AuthSessionResponse & { requiresOnboarding?: boolean }> {
+    const res = await api.post("/auth/google", { credential });
+    const session = res.data?.data || res.data;
+    if (session.accessToken) {
+      await storage.setToken(session.accessToken);
+      await storage.setItem("stitchguard_user", JSON.stringify(session.user));
+      if (session.activeMembership) {
+        await storage.setItem("stitchguard_membership", JSON.stringify(session.activeMembership));
+      }
+    }
+    return session;
+  },
+
+  async completeGoogleOnboarding(data: {
+    organizationName: string;
+    accountType: "BUYER" | "SUPPLIER";
+  }): Promise<{ accessToken: string; activeMembership: Membership }> {
+    const res = await api.post("/auth/google/onboarding", data);
+    const result = res.data?.data || res.data;
+    if (result.accessToken) {
+      await storage.setToken(result.accessToken);
+      if (result.activeMembership) {
+        await storage.setItem("stitchguard_membership", JSON.stringify(result.activeMembership));
+      }
+    }
+    return result;
+  },
+
   async me(): Promise<{
     id: string;
     fullName: string;

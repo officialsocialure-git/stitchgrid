@@ -12,7 +12,6 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../src/constants/colors";
 import { Header } from "../../src/components/common/Header";
-import { Card } from "../../src/components/common/Card";
 import { EmptyState } from "../../src/components/common/EmptyState";
 import { marketplaceService } from "../../src/services/marketplace.service";
 import { realtimeService } from "../../src/services/realtime.service";
@@ -69,19 +68,31 @@ export default function NotificationsScreen() {
         await marketplaceService.markNotificationRead(n.id);
       } catch (e) {}
     }
-    setNotifications((prev) => prev.map((n) => ({ ...n, readAt: new Date().toISOString() })));
+    setNotifications((prev) =>
+      prev.map((n) => ({ ...n, readAt: n.readAt || new Date().toISOString() }))
+    );
   };
+
+  const getNotifIcon = (title: string, content?: string) => {
+    const text = `${title} ${content || ""}`.toLowerCase();
+    if (text.includes("sample")) return { name: "shirt" as const, color: "#d97706", bg: "#fef3c7" };
+    if (text.includes("order") || text.includes("po")) return { name: "cube" as const, color: "#059669", bg: "#d1fae5" };
+    if (text.includes("message") || text.includes("chat")) return { name: "chatbubble-ellipses" as const, color: "#2563eb", bg: "#dbeafe" };
+    return { name: "notifications" as const, color: Colors.primary, bg: Colors.primaryLight };
+  };
+
+  const hasUnread = notifications.some((n) => !n.readAt);
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <Header
         title="Notifications"
-        subtitle="Live production & milestone alerts"
+        subtitle="Platform updates & contract alerts"
         showBack
         rightAction={
-          notifications.some((n) => !n.readAt) ? (
-            <TouchableOpacity onPress={handleMarkAllRead} style={styles.markReadBtn}>
-              <Text style={styles.markReadText}>Mark all read</Text>
+          hasUnread ? (
+            <TouchableOpacity onPress={handleMarkAllRead} style={styles.markAllBtn}>
+              <Text style={styles.markAllText}>Mark all read</Text>
             </TouchableOpacity>
           ) : undefined
         }
@@ -104,40 +115,45 @@ export default function NotificationsScreen() {
         ListEmptyComponent={
           !loading ? (
             <EmptyState
-              icon="notifications-outline"
+              icon="notifications-off-outline"
               title="All Caught Up"
-              description="You have no notifications at this time."
+              description="You have no unread contract alerts, sample updates or messages right now."
             />
-          ) : null
+          ) : undefined
         }
         renderItem={({ item }) => {
           const isUnread = !item.readAt;
+          const icon = getNotifIcon(item.title, item.content);
+
           return (
-            <Card
-              style={[styles.notifCard, isUnread && styles.unreadCard]}
+            <TouchableOpacity
+              style={[styles.notifCard, isUnread && styles.notifCardUnread]}
               onPress={() => handleMarkAsRead(item)}
+              activeOpacity={0.8}
             >
-              <View style={styles.topRow}>
-                <View style={[styles.iconWrap, isUnread && { backgroundColor: Colors.primary }]}>
-                  <Ionicons
-                    name="notifications"
-                    size={16}
-                    color={isUnread ? "#FFFFFF" : Colors.primary}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.title}>{item.title}</Text>
-                  <Text style={styles.time}>
-                    {new Date(item.createdAt).toLocaleDateString("en-IN", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </Text>
-                </View>
-                {isUnread && <View style={styles.unreadDot} />}
+              <View style={[styles.iconWrap, { backgroundColor: icon.bg }]}>
+                <Ionicons name={icon.name} size={18} color={icon.color} />
               </View>
-              <Text style={styles.content}>{item.body || item.content || ""}</Text>
-            </Card>
+
+              <View style={{ flex: 1 }}>
+                <View style={styles.topRow}>
+                  <Text style={[styles.title, isUnread && styles.titleUnread]} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                  {isUnread && <View style={styles.unreadDot} />}
+                </View>
+
+                {item.content ? (
+                  <Text style={styles.content} numberOfLines={2}>
+                    {item.content}
+                  </Text>
+                ) : null}
+
+                <Text style={styles.timeText}>
+                  {item.createdAt ? new Date(item.createdAt).toLocaleDateString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Today"}
+                </Text>
+              </View>
+            </TouchableOpacity>
           );
         }}
       />
@@ -150,61 +166,78 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
+  markAllBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: Colors.primaryLight,
+  },
+  markAllText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Colors.primary,
+  },
   listContent: {
     padding: 16,
     paddingBottom: 40,
   },
-  markReadBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  markReadText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Colors.primary,
-  },
   notifCard: {
-    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Colors.border,
     padding: 14,
+    marginBottom: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  unreadCard: {
-    borderColor: Colors.borderPrimary,
-    backgroundColor: "#FDFBFF",
+  notifCardUnread: {
+    backgroundColor: "#fcfaff",
+    borderColor: "#ebdcfc",
+  },
+  iconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  title: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Colors.textHeading,
+    flex: 1,
+  },
+  titleUnread: {
+    fontWeight: "800",
   },
   unreadDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: Colors.primary,
-  },
-  topRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 6,
-  },
-  iconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: Colors.primaryLight,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  title: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: Colors.text,
-  },
-  time: {
-    fontSize: 11,
-    color: Colors.textMuted,
-    marginTop: 1,
+    marginLeft: 6,
   },
   content: {
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.textSecondary,
-    lineHeight: 18,
-    paddingLeft: 44,
+    marginTop: 3,
+    lineHeight: 16,
+  },
+  timeText: {
+    fontSize: 10,
+    color: Colors.textMuted,
+    marginTop: 6,
   },
 });

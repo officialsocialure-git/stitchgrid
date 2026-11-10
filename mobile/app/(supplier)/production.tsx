@@ -8,13 +8,12 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Alert,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../src/constants/colors";
 import { Header } from "../../src/components/common/Header";
-import { Card } from "../../src/components/common/Card";
-import { Badge } from "../../src/components/common/Badge";
 import { Button } from "../../src/components/common/Button";
 import { EmptyState } from "../../src/components/common/EmptyState";
 import { marketplaceService } from "../../src/services/marketplace.service";
@@ -60,7 +59,10 @@ export default function SupplierProductionScreen() {
     try {
       setUpdatingMilestoneId(milestoneId);
       await marketplaceService.updateMilestone(milestoneId, nextStatus);
-      Alert.alert("Milestone Updated", `Stage marked as ${nextStatus.replace(/_/g, " ")}. Buyer dashboard notified in real-time.`);
+      Alert.alert(
+        "Milestone Updated",
+        `Stage marked as ${nextStatus.replace(/_/g, " ")}. Buyer dashboard notified in real-time.`
+      );
       loadData();
     } catch (e) {
       Alert.alert("Error", "Could not update milestone.");
@@ -72,109 +74,207 @@ export default function SupplierProductionScreen() {
   const milestonesList = selectedOrder?.milestones?.length
     ? selectedOrder.milestones
     : [
-        { id: "m1", title: "1. Yarn & Fabric Dyeing", status: "COMPLETED", orderIndex: 1 },
-        { id: "m2", title: "2. PP Sample Sign-off", status: "COMPLETED", orderIndex: 2 },
-        { id: "m3", title: "3. Bulk Fabric Cutting", status: "IN_PROGRESS", orderIndex: 3 },
-        { id: "m4", title: "4. Sewing Lines & Assembly", status: "PENDING", orderIndex: 4 },
-        { id: "m5", title: "5. AQL 2.5 Quality Inspection", status: "PENDING", orderIndex: 5 },
-        { id: "m6", title: "6. Packing & Final Dispatch", status: "PENDING", orderIndex: 6 },
+        { id: "m1", title: "Fabric Procurement & Dyeing", status: "COMPLETED", orderIndex: 1 },
+        { id: "m2", title: "PP Sample Submission", status: "COMPLETED", orderIndex: 2 },
+        { id: "m3", title: "Bulk Cutting (Spreading & Cut)", status: "IN_PROGRESS", orderIndex: 3 },
+        { id: "m4", title: "Sewing & Assembly Operations", status: "PENDING", orderIndex: 4 },
+        { id: "m5", title: "Ironing & In-Line QC", status: "PENDING", orderIndex: 5 },
+        { id: "m6", title: "Final Dispatch & Logistics", status: "PENDING", orderIndex: 6 },
       ];
+
+  const completedCount = milestonesList.filter((m: any) => m.status === "COMPLETED").length;
+  const progressPercent = Math.round((completedCount / milestonesList.length) * 100);
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <Header
-        title="Floor Operations"
-        subtitle="Advance apparel manufacturing stages"
-        showBack
+        title="Factory Floor Timeline"
+        subtitle="Update milestone progression for buyer visibility"
       />
 
-      {orders.length === 0 && !loading ? (
-        <EmptyState
-          icon="speedometer-outline"
-          title="No Active Floor Orders"
-          description="Orders awarded to your factory will show live milestone update controls here."
-          actionTitle="View Orders"
-          onAction={() => router.push("/(supplier)/orders")}
-        />
-      ) : (
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} colors={[Colors.primary]} />}
-        >
-          {/* Order Chips */}
-          <Text style={styles.selectorLabel}>Select Manufacturing Lot:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
-            {orders.map((o) => (
-              <TouchableOpacity
-                key={o.id}
-                onPress={() => setSelectedOrderId(o.id)}
-                style={[styles.chip, selectedOrder?.id === o.id && styles.chipActive]}
-              >
-                <Text style={[styles.chipText, selectedOrder?.id === o.id && styles.chipTextActive]}>
-                  {o.poNumber}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              loadData();
+            }}
+            colors={[Colors.primary]}
+          />
+        }
+      >
+        {orders.length === 0 && !loading ? (
+          <EmptyState
+            icon="hammer-outline"
+            title="No Orders in Production"
+            description="Accepted purchase orders will show here for line scheduling and milestone sign-off."
+            actionTitle="View Factory Orders"
+            onAction={() => router.push("/(supplier)/orders")}
+          />
+        ) : (
+          <>
+            {/* Order Selector Horizontal Pills */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.orderPillsScroll}
+            >
+              {orders.map((order, idx) => {
+                const isSelected = (selectedOrderId || orders[0]?.id) === order.id;
+                const poNumber = order.poNumber || `PO-2026-${(1000 + idx).toString()}`;
+                return (
+                  <TouchableOpacity
+                    key={order.id}
+                    onPress={() => setSelectedOrderId(order.id)}
+                    style={[styles.orderPill, isSelected && styles.orderPillActive]}
+                  >
+                    <Text
+                      style={[styles.orderPillText, isSelected && styles.orderPillTextActive]}
+                    >
+                      {poNumber}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
 
-          {/* Selected Order Summary */}
-          {selectedOrder && (
-            <Card style={styles.summaryCard}>
-              <View style={styles.summaryTop}>
+            {/* Overview Card */}
+            <View style={styles.overviewCard}>
+              <View style={styles.overviewTop}>
                 <View>
-                  <Text style={styles.summaryTitle}>{selectedOrder.poNumber}</Text>
-                  <Text style={styles.summaryBuyer}>Buyer: {selectedOrder.buyer?.name || "Client"}</Text>
+                  <Text style={styles.overviewPo}>{selectedOrder?.poNumber || "PO-2026-ACTIVE"}</Text>
+                  <Text style={styles.overviewBuyer}>
+                    Buyer: {selectedOrder?.buyerOrg?.name || "Apparel Retail Partner"}
+                  </Text>
                 </View>
-                <Badge label={selectedOrder.status.replace(/_/g, " ")} size="sm" variant="primary" />
+                <View style={styles.percentBadge}>
+                  <Text style={styles.percentText}>{progressPercent}%</Text>
+                </View>
               </View>
-            </Card>
-          )}
 
-          {/* Milestone Cards */}
-          <Text style={styles.milestonesHeading}>Update Manufacturing Stages</Text>
-          {milestonesList.map((m: any) => {
-            const isCompleted = m.status === "COMPLETED";
-            const isInProgress = m.status === "IN_PROGRESS";
+              <View style={styles.progressBarTrack}>
+                <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
+              </View>
 
-            return (
-              <Card key={m.id} style={styles.milestoneCard}>
-                <View style={styles.milestoneTop}>
-                  <Text style={styles.milestoneTitle}>{m.title}</Text>
-                  <Badge
-                    label={m.status.replace(/_/g, " ")}
-                    size="sm"
-                    variant={isCompleted ? "success" : isInProgress ? "primary" : "neutral"}
-                  />
+              <View style={styles.statsRow}>
+                <View>
+                  <Text style={styles.statLabel}>Completed Stages</Text>
+                  <Text style={styles.statVal}>
+                    {completedCount} of {milestonesList.length}
+                  </Text>
                 </View>
-
-                <View style={styles.actionsRow}>
-                  {!isCompleted && !isInProgress && (
-                    <Button
-                      title="Start Stage"
-                      size="sm"
-                      loading={updatingMilestoneId === m.id}
-                      onPress={() => handleUpdateMilestone(m.id, "IN_PROGRESS")}
-                      style={{ flex: 1 }}
-                    />
-                  )}
-                  {isInProgress && (
-                    <Button
-                      title="Mark Completed ✓"
-                      size="sm"
-                      loading={updatingMilestoneId === m.id}
-                      onPress={() => handleUpdateMilestone(m.id, "COMPLETED")}
-                      style={{ flex: 1 }}
-                    />
-                  )}
-                  {isCompleted && (
-                    <Text style={styles.completedNotice}>Stage Completed & Signed Off</Text>
-                  )}
+                <View style={{ alignItems: "flex-end" }}>
+                  <Text style={styles.statLabel}>Order Status</Text>
+                  <Text style={[styles.statVal, { color: Colors.primary }]}>
+                    {selectedOrder?.status?.replace("_", " ") || "IN PRODUCTION"}
+                  </Text>
                 </View>
-              </Card>
-            );
-          })}
-        </ScrollView>
-      )}
+              </View>
+            </View>
+
+            {/* Milestones List */}
+            <Text style={styles.timelineHeading}>Production Line Stages</Text>
+
+            <View style={styles.timelineList}>
+              {milestonesList.map((m: any, idx: number) => {
+                const isCompleted = m.status === "COMPLETED";
+                const isInProgress = m.status === "IN_PROGRESS";
+                const isLast = idx === milestonesList.length - 1;
+
+                return (
+                  <View key={m.id || idx} style={styles.timelineItem}>
+                    {/* Left Icon & Connector */}
+                    <View style={styles.timelineLeftCol}>
+                      <View
+                        style={[
+                          styles.timelineCircle,
+                          isCompleted
+                            ? styles.circleCompleted
+                            : isInProgress
+                            ? styles.circleInProgress
+                            : styles.circlePending,
+                        ]}
+                      >
+                        {isCompleted ? (
+                          <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                        ) : isInProgress ? (
+                          <Ionicons name="ellipsis-horizontal" size={14} color="#FFFFFF" />
+                        ) : (
+                          <Text style={styles.circleNumber}>{idx + 1}</Text>
+                        )}
+                      </View>
+                      {!isLast && (
+                        <View
+                          style={[
+                            styles.connectorLine,
+                            isCompleted && styles.connectorLineCompleted,
+                          ]}
+                        />
+                      )}
+                    </View>
+
+                    {/* Right Card */}
+                    <View style={styles.milestoneCard}>
+                      <View style={styles.milestoneTop}>
+                        <Text style={styles.milestoneTitle}>{m.title}</Text>
+                        <View
+                          style={[
+                            styles.statusPill,
+                            isCompleted
+                              ? { backgroundColor: Colors.successLight, borderColor: Colors.successBorder }
+                              : isInProgress
+                              ? { backgroundColor: Colors.primaryLight, borderColor: Colors.borderPrimary }
+                              : { backgroundColor: Colors.surfaceSubtle, borderColor: Colors.border },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.statusPillText,
+                              isCompleted
+                                ? { color: Colors.successText }
+                                : isInProgress
+                                ? { color: Colors.primary }
+                                : { color: Colors.textSecondary },
+                            ]}
+                          >
+                            {m.status.replace("_", " ")}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Action buttons for supplier to advance milestone */}
+                      {!isCompleted && (
+                        <View style={{ marginTop: 8 }}>
+                          <Button
+                            title={
+                              updatingMilestoneId === m.id
+                                ? "Updating..."
+                                : isInProgress
+                                ? "Mark Stage Completed"
+                                : "Start This Stage"
+                            }
+                            size="sm"
+                            variant={isInProgress ? "primary" : "secondary"}
+                            loading={updatingMilestoneId === m.id}
+                            onPress={() =>
+                              handleUpdateMilestone(
+                                m.id,
+                                isInProgress ? "COMPLETED" : "IN_PROGRESS"
+                              )
+                            }
+                          />
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -188,87 +288,177 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 40,
   },
-  selectorLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: Colors.textSecondary,
-    marginBottom: 8,
-  },
-  chipsRow: {
-    flexDirection: "row",
+  orderPillsScroll: {
     gap: 8,
-    marginBottom: 16,
+    marginBottom: 14,
   },
-  chip: {
-    paddingHorizontal: 14,
+  orderPill: {
+    paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  chipActive: {
+  orderPillActive: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
   },
-  chipText: {
-    fontSize: 13,
+  orderPillText: {
+    fontSize: 12,
     fontWeight: "700",
-    color: Colors.textSecondary,
+    color: Colors.slate600,
   },
-  chipTextActive: {
+  orderPillTextActive: {
     color: "#FFFFFF",
   },
-  summaryCard: {
-    marginBottom: 16,
+  overviewCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 18,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
   },
-  summaryTop: {
+  overviewTop: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    marginBottom: 12,
   },
-  summaryTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: Colors.text,
+  overviewPo: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: Colors.textHeading,
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
-  summaryBuyer: {
-    fontSize: 13,
+  overviewBuyer: {
+    fontSize: 12,
     color: Colors.textSecondary,
     marginTop: 2,
   },
-  milestonesHeading: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: Colors.text,
+  percentBadge: {
+    backgroundColor: Colors.primaryLight,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 14,
+  },
+  percentText: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: Colors.primary,
+  },
+  progressBarTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.borderLight,
+    overflow: "hidden",
     marginBottom: 12,
   },
-  milestoneCard: {
+  progressBarFill: {
+    height: "100%",
+    backgroundColor: Colors.primary,
+    borderRadius: 4,
+  },
+  statsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  statLabel: {
+    fontSize: 10,
+    color: Colors.textSecondary,
+    marginBottom: 2,
+  },
+  statVal: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Colors.textHeading,
+  },
+  timelineHeading: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: Colors.textHeading,
     marginBottom: 12,
+  },
+  timelineList: {
+    paddingLeft: 4,
+  },
+  timelineItem: {
+    flexDirection: "row",
+    marginBottom: 12,
+  },
+  timelineLeftCol: {
+    alignItems: "center",
+    width: 32,
+    marginRight: 10,
+  },
+  timelineCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  circleCompleted: {
+    backgroundColor: Colors.success,
+  },
+  circleInProgress: {
+    backgroundColor: Colors.primary,
+  },
+  circlePending: {
+    backgroundColor: Colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  circleNumber: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Colors.textSecondary,
+  },
+  connectorLine: {
+    width: 2,
+    flex: 1,
+    backgroundColor: Colors.borderLight,
+    marginVertical: 4,
+  },
+  connectorLineCompleted: {
+    backgroundColor: Colors.successBorder,
+  },
+  milestoneCard: {
+    flex: 1,
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 12,
   },
   milestoneTop: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 10,
+    justifyContent: "space-between",
+    marginBottom: 6,
   },
   milestoneTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
-    color: Colors.text,
+    color: Colors.textHeading,
     flex: 1,
   },
-  actionsRow: {
-    flexDirection: "row",
-    gap: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
+  statusPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginLeft: 6,
   },
-  completedNotice: {
-    fontSize: 12,
+  statusPillText: {
+    fontSize: 9,
     fontWeight: "700",
-    color: Colors.success,
+    textTransform: "uppercase",
   },
 });
-

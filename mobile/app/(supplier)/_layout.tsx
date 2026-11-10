@@ -30,7 +30,7 @@ export default function SupplierTabsLayout() {
         options={{
           title: "Home",
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "business" : "business-outline"} size={size} color={color} />
+            <Ionicons name={focused ? "business" : "business-outline"} size={size} color={color as string} />
           ),
         }}
       />
@@ -39,7 +39,7 @@ export default function SupplierTabsLayout() {
         options={{
           title: "RFQs",
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "reader" : "reader-outline"} size={size} color={color} />
+            <Ionicons name={focused ? "reader" : "reader-outline"} size={size} color={color as string} />
           ),
         }}
       />
@@ -48,7 +48,7 @@ export default function SupplierTabsLayout() {
         options={{
           title: "My Orders",
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "cube" : "cube-outline"} size={size} color={color} />
+            <Ionicons name={focused ? "cube" : "cube-outline"} size={size} color={color as string} />
           ),
         }}
       />
@@ -57,7 +57,7 @@ export default function SupplierTabsLayout() {
         options={{
           title: "Messages",
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "chatbubble-ellipses" : "chatbubble-ellipses-outline"} size={size} color={color} />
+            <Ionicons name={focused ? "chatbubble-ellipses" : "chatbubble-ellipses-outline"} size={size} color={color as string} />
           ),
         }}
       />
@@ -66,7 +66,7 @@ export default function SupplierTabsLayout() {
         options={{
           title: "Profile",
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "person" : "person-outline"} size={size} color={color} />
+            <Ionicons name={focused ? "person" : "person-outline"} size={size} color={color as string} />
           ),
         }}
       />

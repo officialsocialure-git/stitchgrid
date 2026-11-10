@@ -108,7 +108,7 @@ export const Button: React.FC<ButtonProps> = ({
             <Ionicons
               name={icon}
               size={size === "sm" ? 16 : 18}
-              color={getTextStyles().color}
+              color={(getTextStyles().color as string) || undefined}
               style={{ marginRight: 6 }}
             />
           )}

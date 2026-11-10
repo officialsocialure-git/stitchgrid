@@ -19,8 +19,10 @@ export interface Organization {
   businessType?: string;
   taxId?: string;
   city?: string;
+  address?: string;
   country?: string;
   verificationStatus: VerificationStatus;
+  supplierProfile?: any;
 }
 
 export interface Membership {
@@ -53,10 +55,11 @@ export interface Rfq {
   targetPrice?: number;
   targetQuantity: number;
   targetDate?: string;
-  status: "DRAFT" | "OPEN" | "CLOSED" | "CANCELLED" | "AWARDED";
+  status: "DRAFT" | "OPEN" | "CLOSED" | "CANCELLED" | "AWARDED" | string;
   items: RfqItem[];
   quotations?: Quotation[];
   buyer?: { id: string; name: string; city?: string; country?: string };
+  buyerOrg?: { id: string; name: string; city?: string };
   createdAt: string;
 }
 
@@ -81,9 +84,10 @@ export interface Quotation {
   sampleCost?: number;
   sampleLeadDays?: number;
   moq?: number;
-  status: "DRAFT" | "SUBMITTED" | "REVISED" | "ACCEPTED" | "REJECTED" | "WITHDRAWN";
+  status: "DRAFT" | "SUBMITTED" | "REVISED" | "ACCEPTED" | "REJECTED" | "WITHDRAWN" | "PENDING" | string;
   supplier?: { id: string; name: string; city?: string };
-  rfq?: { id: string; title: string; targetQuantity: number };
+  supplierOrg?: { id: string; name: string; city?: string };
+  rfq?: { id: string; title: string; targetQuantity: number; buyer?: { name: string } };
   items: QuotationItem[];
   createdAt: string;
 }
@@ -100,7 +104,7 @@ export interface Milestone {
   title: string;
   orderIndex: number;
   targetDate?: string;
-  status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "DELAYED";
+  status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "DELAYED" | string;
   proofUrls?: string[];
   notes?: string;
 }
@@ -113,46 +117,79 @@ export interface PurchaseOrder {
   quotationId?: string;
   totalAmount: number;
   currency: string;
-  status: "PO_CREATED" | "PENDING_ACCEPTANCE" | "ACCEPTED" | "SAMPLE_PENDING" | "SAMPLE_APPROVED" | "PRODUCTION_STARTED" | "IN_PRODUCTION" | "QC_PENDING" | "QC" | "READY_TO_DISPATCH" | "DISPATCHED" | "DELIVERED" | "COMPLETED" | "CANCELLED";
+  status: "PO_CREATED" | "PENDING_ACCEPTANCE" | "ACCEPTED" | "SAMPLE_PENDING" | "SAMPLE_APPROVED" | "PRODUCTION_STARTED" | "IN_PRODUCTION" | "QC_PENDING" | "QC" | "READY_TO_DISPATCH" | "DISPATCHED" | "DELIVERED" | "COMPLETED" | "CANCELLED" | "ISSUED" | string;
   items: PurchaseOrderItem[];
   milestones: Milestone[];
   buyer?: { id: string; name: string; city?: string };
+  buyerOrg?: { id: string; name: string; city?: string };
   supplier?: { id: string; name: string; city?: string };
+  supplierOrg?: { id: string; name: string; city?: string };
   createdAt: string;
   expectedDate?: string;
 }
 
 export interface Sample {
   id: string;
-  sampleNumber: string;
+  sampleNumber?: string;
   purchaseOrderId?: string;
   rfqId?: string;
   buyerOrgId: string;
   supplierOrgId: string;
-  sampleType: "PROTO" | "FIT" | "PP" | "TOP" | "SALESMAN";
-  status: "REQUESTED" | "DISPATCHED" | "RECEIVED" | "APPROVED" | "REJECTED" | "REVISED";
+  sampleType?: "PROTO" | "FIT" | "PP" | "TOP" | "SALESMAN" | string;
+  status: "REQUESTED" | "DISPATCHED" | "RECEIVED" | "APPROVED" | "REJECTED" | "REVISED" | "IN_PROGRESS" | "DELIVERED" | "REVISION_REQUIRED" | string;
   courierName?: string;
   trackingNumber?: string;
   dispatchDate?: string;
   deliveryDate?: string;
   feedback?: string;
   reviewDate?: string;
+  notes?: string;
+  order?: PurchaseOrder;
   createdAt: string;
-  purchaseOrder?: { id: string; poNumber: string };
-  supplier?: { id: string; name: string };
-  buyer?: { id: string; name: string };
+}
+
+export interface SupplierCategory {
+  category: string;
+}
+
+export interface SupplierCatalogItem {
+  id?: string;
+  name: string;
+  description?: string;
+  unitPrice?: number;
+  price?: string;
+  minOrderQty?: number;
+  moq?: number;
+}
+
+export interface SupplierProfile {
+  id: string;
+  organizationId: string;
+  organization?: Organization;
+  name?: string;
+  city?: string;
+  businessType?: string;
+  verificationStatus?: string;
+  yearsInBusiness?: number;
+  productionCapacity?: number;
+  capacity?: string;
+  moq?: string;
+  tags?: string;
+  description?: string;
+  categories?: SupplierCategory[];
+  catalogItems?: SupplierCatalogItem[];
+  catalog?: { name: string; price: string; moq?: number }[];
 }
 
 export interface Message {
   id: string;
   conversationId: string;
-  senderUserId: string;
+  senderUserId?: string;
   senderOrgId?: string;
-  body: string;
+  body?: string;
   content?: string;
-  attachmentUrls?: string[];
-  createdAt: string;
   sender?: { id: string; fullName: string };
+  createdAt: string;
 }
 
 export interface Conversation {
@@ -161,45 +198,16 @@ export interface Conversation {
   supplierOrgId: string;
   buyer?: { id: string; name: string; city?: string };
   supplier?: { id: string; name: string; city?: string };
-  messages?: Message[];
-  participantOrgIds?: string[];
-  contextType?: string;
-  contextId?: string;
-  createdAt: string;
-  updatedAt?: string;
-  lastMessage?: string;
   otherPartyName?: string;
+  messages?: Message[];
+  updatedAt: string;
 }
 
 export interface Notification {
   id: string;
-  userId: string;
+  userId?: string;
   title: string;
-  body: string;
   content?: string;
-  readAt?: string | null;
-  isRead?: boolean;
-  type?: string;
-  referenceId?: string;
+  readAt: string | null;
   createdAt: string;
 }
-
-export interface SupplierProfile {
-  id: string;
-  organizationId: string;
-  description?: string;
-  yearsInBusiness?: number;
-  productionCapacity?: number;
-  verificationStatus: VerificationStatus;
-  organization: Organization;
-  categories: { id: string; category: string }[];
-  catalogItems: {
-    id: string;
-    title: string;
-    description?: string;
-    imageUrl?: string;
-    moq?: number;
-    priceEstimate?: number;
-  }[];
-}
-

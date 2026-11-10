@@ -9,12 +9,11 @@ import {
   SafeAreaView,
   Alert,
   ScrollView,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../src/constants/colors";
 import { Header } from "../../src/components/common/Header";
-import { Card } from "../../src/components/common/Card";
-import { Badge } from "../../src/components/common/Badge";
 import { Button } from "../../src/components/common/Button";
 import { Input } from "../../src/components/common/Input";
 import { Modal } from "../../src/components/common/Modal";
@@ -30,6 +29,7 @@ export default function SupplierBuyerRequestsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("ALL");
 
   // Quotation Submission Modal State
   const [selectedRfq, setSelectedRfq] = useState<Rfq | null>(null);
@@ -98,165 +98,186 @@ export default function SupplierBuyerRequestsScreen() {
         ],
       });
       setSelectedRfq(null);
-      Alert.alert("Quotation Submitted!", "Your offer has been submitted directly to the buyer for review.");
+      Alert.alert("Quotation Sent!", "Your commercial offer has been submitted to the buyer.");
       loadRequests();
     } catch (err: any) {
-      Alert.alert("Submission Failed", err.response?.data?.message || "Could not submit quotation.");
+      Alert.alert("Error", err.response?.data?.message || "Failed to submit quote.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const openRfqs = rfqs.filter((r) => {
-    const isAvailable = r.status === "OPEN";
-    const matchesSearch =
+  const filteredRfqs = rfqs.filter((r) => {
+    const matchesCategory =
+      categoryFilter === "ALL" ||
+      (r.garmentType && r.garmentType.toLowerCase().includes(categoryFilter.toLowerCase()));
+    const matchesQuery =
       !searchQuery.trim() ||
       r.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (r.buyer?.name && r.buyer.name.toLowerCase().includes(searchQuery.toLowerCase()));
-    return isAvailable && matchesSearch;
+      (r.garmentType && r.garmentType.toLowerCase().includes(searchQuery.toLowerCase()));
+    return matchesCategory && matchesQuery;
   });
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <Header
         title="Buyer Requests"
-        subtitle="Live apparel manufacturing bids"
+        subtitle="Live apparel requirements & contract tenders"
       />
 
-      <View style={styles.searchSection}>
-        <Input
-          placeholder="Search requests by garment or brand..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          leftIcon="search-outline"
-        />
+      {/* Filter Section */}
+      <View style={styles.filterSection}>
+        <View style={styles.searchInputWrap}>
+          <Ionicons name="search" size={17} color={Colors.textMuted} style={{ marginRight: 8 }} />
+          <Input
+            placeholder="Search requirements by garment, title..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            containerStyle={{ flex: 1, marginBottom: 0 }}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery("")} style={{ padding: 4 }}>
+              <Ionicons name="close-circle" size={16} color={Colors.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterPills}
+        >
+          {["ALL", "Knits", "Woven", "Denim", "Activewear"].map((cat) => (
+            <TouchableOpacity
+              key={cat}
+              onPress={() => setCategoryFilter(cat)}
+              style={[styles.pill, categoryFilter === cat && styles.pillActive]}
+            >
+              <Text style={[styles.pillText, categoryFilter === cat && styles.pillTextActive]}>
+                {cat}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
       <FlatList
-        data={openRfqs}
+        data={filteredRfqs}
         keyExtractor={(item) => item.id}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadRequests(); }} colors={[Colors.primary]} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              loadRequests();
+            }}
+            colors={[Colors.primary]}
+          />
+        }
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           !loading ? (
             <EmptyState
-              icon="reader-outline"
-              title="No Open Requests"
-              description="New buyer requirements will appear here as brands publish RFQs."
+              icon="search-outline"
+              title="No Buyer Requests Matching"
+              description="New garment requirements from brand buyers will appear here in real time."
             />
-          ) : null
+          ) : undefined
         }
-        renderItem={({ item }) => {
+        renderItem={({ item, index }) => {
+          const rfqIdDisplay = `RFQ-2026-${(item.id || "1040").slice(-4).replace(/\D/g, "").padStart(4, "0") || (1040 + index).toString()}`;
           return (
-            <Card style={styles.reqCard}>
+            <View style={styles.requestCard}>
               <View style={styles.topRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.reqTitle}>{item.title}</Text>
-                  <Text style={styles.buyerName}>
-                    Buyer: {item.buyer?.name || "Verified Brand"} • 📍 {item.buyer?.city || "India"}
-                  </Text>
+                <Text style={styles.rfqIdText}>{rfqIdDisplay}</Text>
+                <View style={styles.openPill}>
+                  <Text style={styles.openPillText}>OPEN FOR QUOTES</Text>
                 </View>
-                <Badge label="OPEN BID" variant="primary" size="sm" />
               </View>
 
-              <Text style={styles.specText}>
-                {item.garmentType || "Apparel"} • {item.fabricSpec || "Standard Knit Construction"}
+              <Text style={styles.requestTitle}>{item.title}</Text>
+              <Text style={styles.requestBuyer}>
+                Buyer: <Text style={{ color: Colors.textHeading, fontWeight: "700" }}>{item.buyer?.name || "Verified Brand Buyer"}</Text>
               </Text>
 
               <View style={styles.metaRow}>
-                <View style={styles.metaBox}>
-                  <Text style={styles.metaLabel}>Order Quantity</Text>
+                <View style={styles.metaItem}>
+                  <Text style={styles.metaLabel}>Required Qty</Text>
                   <Text style={styles.metaVal}>{item.targetQuantity.toLocaleString()} pcs</Text>
                 </View>
-                {item.targetPrice && (
-                  <View style={styles.metaBox}>
-                    <Text style={styles.metaLabel}>Buyer Target Price</Text>
-                    <Text style={styles.metaVal}>₹{item.targetPrice}/pc</Text>
-                  </View>
-                )}
+                <View style={styles.metaItem}>
+                  <Text style={styles.metaLabel}>Target Price</Text>
+                  <Text style={styles.metaVal}>
+                    {item.targetPrice ? `₹${item.targetPrice}/pc` : "Open Bid"}
+                  </Text>
+                </View>
+                <View style={styles.metaItem}>
+                  <Text style={styles.metaLabel}>Target Delivery</Text>
+                  <Text style={styles.metaVal}>{item.targetDate || "30 Days"}</Text>
+                </View>
               </View>
 
               <Button
-                title="Submit Quotation Bid"
-                size="md"
+                title="Send Quotation"
                 onPress={() => openQuoteModal(item)}
-                style={{ marginTop: 8 }}
+                size="sm"
+                style={{ marginTop: 4 }}
               />
-            </Card>
+            </View>
           );
         }}
       />
 
-      {/* Quote Submission Modal */}
-      <Modal visible={!!selectedRfq} onClose={() => setSelectedRfq(null)} title="Submit Factory Quotation">
-        {selectedRfq && (
-          <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
-            <Text style={styles.modalRfqTitle}>{selectedRfq.title}</Text>
-            <Text style={styles.modalRfqSub}>
-              Lot: {selectedRfq.targetQuantity.toLocaleString()} pcs
-            </Text>
+      {/* Submit Quote Modal */}
+      <Modal
+        visible={Boolean(selectedRfq)}
+        onClose={() => setSelectedRfq(null)}
+        title="Submit Commercial Quotation"
+      >
+        <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+          <Text style={{ fontSize: 13, color: Colors.textSecondary, marginBottom: 14 }}>
+            Quoting on: <Text style={{ fontWeight: "700", color: Colors.textHeading }}>{selectedRfq?.title}</Text>
+          </Text>
 
-            <View style={{ flexDirection: "row", gap: 12 }}>
-              <Input
-                label="Unit Price (₹/pc) *"
-                placeholder="e.g. 175"
-                value={unitPrice}
-                onChangeText={setUnitPrice}
-                keyboardType="numeric"
-                containerStyle={{ flex: 1 }}
-              />
-              <Input
-                label="Lead Time (Days) *"
-                placeholder="e.g. 30"
-                value={leadTimeDays}
-                onChangeText={setLeadTimeDays}
-                keyboardType="number-pad"
-                containerStyle={{ flex: 1 }}
-              />
-            </View>
+          <Input
+            label="Unit Price (₹ Per Piece) *"
+            placeholder="e.g. 185"
+            value={unitPrice}
+            onChangeText={setUnitPrice}
+            keyboardType="numeric"
+          />
 
-            <View style={{ flexDirection: "row", gap: 12 }}>
-              <Input
-                label="Minimum Order Qty"
-                placeholder="e.g. 500"
-                value={moq}
-                onChangeText={setMoq}
-                keyboardType="number-pad"
-                containerStyle={{ flex: 1 }}
-              />
-              <Input
-                label="Sample Cost (₹)"
-                placeholder="0 for free"
-                value={sampleCost}
-                onChangeText={setSampleCost}
-                keyboardType="numeric"
-                containerStyle={{ flex: 1 }}
-              />
-            </View>
+          <Input
+            label="Production Lead Time (Days) *"
+            placeholder="e.g. 30"
+            value={leadTimeDays}
+            onChangeText={setLeadTimeDays}
+            keyboardType="numeric"
+          />
 
-            <Input
-              label="Payment Terms & Milestone Notes"
-              placeholder="e.g. 30% Escrow deposit, 70% upon final inspection"
-              value={terms}
-              onChangeText={setTerms}
-            />
+          <Input
+            label="Minimum Order Qty (MOQ)"
+            placeholder="e.g. 500"
+            value={moq}
+            onChangeText={setMoq}
+            keyboardType="numeric"
+          />
 
-            <View style={styles.totalCalcBox}>
-              <Text style={styles.totalCalcLabel}>Estimated Total Contract:</Text>
-              <Text style={styles.totalCalcVal}>
-                ₹{((parseFloat(unitPrice || "0") * selectedRfq.targetQuantity) / 100000).toFixed(2)} Lakhs
-              </Text>
-            </View>
+          <Input
+            label="Payment & Delivery Terms"
+            placeholder="Payment milestones, shipping terms..."
+            value={terms}
+            onChangeText={setTerms}
+          />
 
-            <Button
-              title="Submit Formal Bid"
-              onPress={handleSubmitQuote}
-              loading={submitting}
-              size="lg"
-              style={{ marginTop: 12, marginBottom: 20 }}
-            />
-          </ScrollView>
-        )}
+          <Button
+            title="Submit Quotation"
+            onPress={handleSubmitQuote}
+            loading={submitting}
+            size="lg"
+            style={{ marginTop: 14 }}
+          />
+        </ScrollView>
       </Modal>
     </SafeAreaView>
   );
@@ -267,92 +288,122 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  searchSection: {
+  filterSection: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 8,
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+  },
+  searchInputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.surfaceSubtle,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 12,
+    height: 44,
+    marginBottom: 10,
+  },
+  filterPills: {
+    gap: 8,
+    paddingBottom: 4,
+  },
+  pill: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: Colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  pillActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  pillText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Colors.slate600,
+  },
+  pillTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "700",
   },
   listContent: {
     padding: 16,
     paddingBottom: 40,
   },
-  reqCard: {
-    marginBottom: 14,
+  requestCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
   },
   topRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 8,
   },
-  reqTitle: {
-    fontSize: 16,
+  rfqIdText: {
+    fontSize: 12,
     fontWeight: "800",
-    color: Colors.text,
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    color: Colors.primary,
   },
-  buyerName: {
+  openPill: {
+    backgroundColor: Colors.primaryLight,
+    borderWidth: 1,
+    borderColor: Colors.borderPrimary,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  openPillText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Colors.primary,
+  },
+  requestTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: Colors.textHeading,
+    lineHeight: 20,
+  },
+  requestBuyer: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  specText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
+    marginTop: 4,
     marginBottom: 12,
   },
   metaRow: {
     flexDirection: "row",
-    gap: 12,
     backgroundColor: Colors.surfaceSubtle,
-    padding: 12,
     borderRadius: 12,
+    padding: 10,
     marginBottom: 12,
   },
-  metaBox: {
+  metaItem: {
     flex: 1,
   },
   metaLabel: {
-    fontSize: 11,
-    color: Colors.textMuted,
-    fontWeight: "600",
+    fontSize: 10,
+    color: Colors.textSecondary,
+    marginBottom: 2,
   },
   metaVal: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: Colors.text,
-    marginTop: 2,
-  },
-  modalRfqTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: Colors.text,
-  },
-  modalRfqSub: {
     fontSize: 13,
-    color: Colors.textSecondary,
-    marginBottom: 14,
-  },
-  totalCalcBox: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: Colors.primaryLight,
-    padding: 12,
-    borderRadius: 12,
-    marginTop: 6,
-    marginBottom: 8,
-  },
-  totalCalcLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Colors.primary,
-  },
-  totalCalcVal: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: Colors.primary,
+    fontWeight: "700",
+    color: Colors.textHeading,
   },
 });
-

@@ -35,7 +35,7 @@ function RouteSynchronizer() {
       return;
     }
 
-    const firstSegment = segments[0];
+    const firstSegment = (segments as string[])[0];
     const inAuthGroup = firstSegment === "(auth)";
     const onIndexRoute = !firstSegment || firstSegment === "index";
 
@@ -64,7 +64,7 @@ function RouteSynchronizer() {
   }, [isNavigationReady, token, isLoading, segments, isSupplier, isAdmin]);
 
   // If Admin user logs in while on any screen other than index, show the overlay notice
-  if (!isLoading && token && isAdmin && segments[0] !== "index") {
+  if (!isLoading && token && isAdmin && (segments as string[]).length > 0) {
     return (
       <View style={[StyleSheet.absoluteFill, styles.centerContainer, { zIndex: 999 }]}>
         <View style={styles.adminCard}>
