@@ -5,7 +5,7 @@ import { z } from "zod";
 import { prisma } from "../config/prisma";
 import { AppError, sendOk } from "../utils/http";
 import { audit } from "../services/audit";
-import { emitToChannel, emitToOrg } from "../services/realtime";
+import { emitToChannel, emitToOrg, emitToRole } from "../services/realtime";
 
 async function orderAccess(orderId: string, userId: string) {
   const order = await prisma.purchaseOrder.findUnique({ where: { id: orderId } });
@@ -417,70 +417,20 @@ export async function listPayments(req: Request, res: Response, next: NextFuncti
   try {
     const memberships = await prisma.organizationMember.findMany({ where: { userId: req.auth!.userId, isActive: true } });
     const orgIds = memberships.map(m => m.organizationId);
-    const orders = await prisma.purchaseOrder.findMany({
-      where: {
-        OR: [
-          { buyerOrgId: { in: orgIds } },
-          { supplierOrgId: { in: orgIds } }
-        ]
-      },
-      include: {
-        supplier: { select: { id: true, name: true, city: true } },
-        buyer: { select: { id: true, name: true } },
-        items: true
-      }
-    });
-    const orderIds = orders.map(o => o.id);
-    const orderMap = new Map(orders.map(o => [o.id, o]));
-
-    // Auto-ensure default escrow transaction for orders if none exists
-    for (const po of orders) {
-      const existing = await prisma.paymentTransaction.findFirst({ where: { purchaseOrderId: po.id } });
-      if (!existing) {
-        await prisma.paymentTransaction.create({
-          data: {
-            purchaseOrderId: po.id,
-            amount: po.totalAmount,
-            provider: "ESCROW_VAULT",
-            currency: "INR",
-            status: "HELD_IN_ESCROW",
-            providerRef: `ESC-${po.poNumber || po.id.slice(0, 8)}`
-          }
-        }).catch(() => {});
-      }
-    }
-
     const payments = await prisma.paymentTransaction.findMany({
-      where: { purchaseOrderId: { in: orderIds } },
+      where: { provider: "RAZORPAY", purchaseOrder: { OR: [{ buyerOrgId: { in: orgIds } }, { supplierOrgId: { in: orgIds } }] } },
+      include: {
+        purchaseOrder: {
+          include: {
+            buyer: { select: { id: true, name: true } },
+            supplier: { select: { id: true, name: true } }
+          }
+        },
+        paymentMilestone: true
+      },
       orderBy: { createdAt: "desc" }
     });
-
-    const paymentsWithOrders = payments.map(p => ({
-      ...p,
-      purchaseOrder: orderMap.get(p.purchaseOrderId)
-    }));
-
-    return sendOk(res, paymentsWithOrders);
-  } catch (e) { next(e); }
-}
-
-export async function createPayment(req: Request, res: Response, next: NextFunction) {
-  try {
-    const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
-    const input = z.object({ amount: z.number().positive(), provider: z.string().default("ESCROW_VAULT"), currency: z.string().default("INR") }).parse(req.body);
-    const { order } = await orderAccess(orderId, req.auth!.userId);
-    const payment = await prisma.paymentTransaction.create({
-      data: {
-        purchaseOrderId: order.id,
-        amount: input.amount,
-        provider: input.provider,
-        currency: input.currency,
-        status: "HELD_IN_ESCROW",
-        providerRef: `ESC-${Date.now()}-${Math.floor(Math.random() * 1000)}`
-      }
-    });
-    await audit("PAYMENT_DEPOSITED", "PaymentTransaction", payment.id, req.auth!.userId);
-    return sendOk(res, payment, 201);
+    return sendOk(res, payments);
   } catch (e) { next(e); }
 }
 
@@ -529,7 +479,11 @@ export async function createDispute(req: Request, res: Response, next: NextFunct
     const input = z.object({ reason: z.string().min(5).max(4000) }).parse(req.body);
     const { order } = await orderAccess(req.params.orderId as string, req.auth!.userId);
     const dispute = await prisma.dispute.create({ data: { purchaseOrderId: order.id, raisedByUserId: req.auth!.userId, reason: input.reason } });
+    await prisma.paymentMilestone.updateMany({ where: { paymentPlan: { purchaseOrderId: order.id }, status: { in: ["PAID", "APPROVED", "RELEASE_PENDING"] } }, data: { status: "DISPUTED" } });
     await audit("DISPUTE_CREATED", "Dispute", dispute.id, req.auth!.userId);
+    emitToOrg(order.buyerOrgId, "payment:updated", { orderId: order.id, status: "DISPUTED" });
+    emitToOrg(order.supplierOrgId, "payment:updated", { orderId: order.id, status: "DISPUTED" });
+    emitToRole("ADMIN", "payment:updated", { orderId: order.id, status: "DISPUTED" });
     return sendOk(res, dispute, 201);
   } catch (e) { next(e); }
 }

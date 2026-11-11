@@ -785,6 +785,20 @@ export async function createPurchaseOrder(req: Request, res: Response, next: Nex
               { title: "Dispatch & Shipment Handover", status: "PENDING" },
             ]
           },
+          paymentPlan: {
+            create: {
+              totalAmount: quote.totalAmount,
+              currency: quote.currency,
+              milestones: {
+                create: [
+                  { title: "Order Confirmation", sequence: 1, percentage: 20, amount: Number(quote.totalAmount) * 0.20, status: "DUE" },
+                  { title: "Sample Approval", sequence: 2, percentage: 20, amount: Number(quote.totalAmount) * 0.20, status: "UPCOMING" },
+                  { title: "Production Completion", sequence: 3, percentage: 40, amount: Number(quote.totalAmount) * 0.40, status: "UPCOMING" },
+                  { title: "QC & Dispatch", sequence: 4, percentage: 20, amount: Number(quote.totalAmount) - Number(quote.totalAmount) * 0.80, status: "UPCOMING" }
+                ]
+              }
+            }
+          },
           samples: {
             create: {
               status: "REQUESTED",

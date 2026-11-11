@@ -30,6 +30,10 @@ const schema = z.object({
   SMS_API_KEY: z.string().optional(),
   SMS_SENDER_ID: z.string().optional(),
   SMS_TEMPLATE_ID: z.string().optional(),
-  GOOGLE_CLIENT_ID: z.string().optional()
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  RAZORPAY_KEY_ID: z.string().optional(),
+  RAZORPAY_KEY_SECRET: z.string().optional(),
+  RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
+  RAZORPAY_ROUTE_ENABLED: z.string().optional().transform(v => v === "true" || v === "1")
 });
 export const env = schema.parse(process.env);

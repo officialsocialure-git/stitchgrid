@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Boxes, FileText, Package, ShieldCheck, Users, ArrowUpRight, RefreshCw } from "lucide-react";
+import { Boxes, FileText, Package, ShieldCheck, Users, ArrowUpRight, RefreshCw, Wallet, CreditCard } from "lucide-react";
 import { adminService } from "@/features/admin/admin.service";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 
@@ -11,6 +11,8 @@ const metrics = [
   { key: "buyers", label: "Buyers", icon: Users, tone: "text-blue-600", href: "/admin/users" },
   { key: "openRfqs", label: "Open RFQs", icon: FileText, tone: "text-violet-600", href: "/admin/rfqs" },
   { key: "activeOrders", label: "Active Orders", icon: Package, tone: "text-orange-500", href: "/admin/orders" },
+  { key: "paidTransactions", label: "Verified Payments", icon: Wallet, tone: "text-emerald-600", href: "/admin/payments" },
+  { key: "pendingTransactions", label: "Pending Payments", icon: CreditCard, tone: "text-amber-600", href: "/admin/payments" },
 ];
 
 export default function AdminOverviewPage() {
@@ -26,7 +28,7 @@ export default function AdminOverviewPage() {
   useEffect(() => { load(); }, []);
 
   useRealtimeSync({
-    topics: ["admin:verification_updated", "admin:stats_updated", "order:created", "rfq:created", "supplier:updated"],
+    topics: ["admin:verification_updated", "admin:stats_updated", "order:created", "rfq:created", "supplier:updated", "payment:updated", "payment:setup_updated", "payment:refund_updated"],
     onSync: load,
     pollIntervalMs: 30000,
   });
@@ -35,6 +37,8 @@ export default function AdminOverviewPage() {
     { label: "Supplier verification", count: data?.pendingVerifications ?? 0, href: "/admin/verification", icon: ShieldCheck },
     { label: "RFQs to review", count: data?.openRfqs ?? 0, href: "/admin/rfqs", icon: FileText },
     { label: "Support cases", count: data?.openDisputes ?? 0, href: "/admin/support", icon: Package },
+    { label: "Supplier payment setups", count: data?.pendingPaymentSetups ?? 0, href: "/admin/payments", icon: Wallet },
+    { label: "Refund requests", count: data?.openRefundRequests ?? 0, href: "/admin/payments", icon: CreditCard },
   ];
 
   return <div className="mx-auto max-w-[1500px] space-y-6">

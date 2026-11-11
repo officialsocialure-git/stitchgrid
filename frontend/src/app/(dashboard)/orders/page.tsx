@@ -7,6 +7,7 @@ import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { marketplaceService } from "@/services/marketplace.service";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
+import { PaymentSetupReminder } from "@/features/payments/PaymentSetupReminder";
 
 interface LiveOrder {
   id: string;
@@ -123,6 +124,7 @@ export default function OrdersPage() {
 
   return (
     <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto pb-24 sm:pb-0">
+      {isSupplier && <PaymentSetupReminder placement="orders" />}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 sm:pb-4 border-b border-surface-container-high">
         <div>
           <h1 className="font-extrabold text-3xl text-on-surface leading-[1.2]">

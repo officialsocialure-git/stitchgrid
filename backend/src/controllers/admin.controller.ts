@@ -13,7 +13,7 @@ const pageQuery = z.object({
 
 export async function adminOverview(_req: Request, res: Response, next: NextFunction) {
   try {
-    const [users, buyers, suppliers, openRfqs, activeOrders, pendingVerifications, openDisputes, recentActivity] = await Promise.all([
+    const [users, buyers, suppliers, openRfqs, activeOrders, pendingVerifications, openDisputes, paidTransactions, pendingTransactions, pendingPaymentSetups, openRefundRequests, recentActivity] = await Promise.all([
       prisma.user.count(),
       prisma.organizationMember.count({ where: { role: "BUYER", isActive: true } }),
       prisma.organizationMember.count({ where: { role: "SUPPLIER", isActive: true } }),
@@ -21,9 +21,13 @@ export async function adminOverview(_req: Request, res: Response, next: NextFunc
       prisma.purchaseOrder.count({ where: { status: { notIn: ["COMPLETED", "CANCELLED"] } } }),
       prisma.organization.count({ where: { verificationStatus: "PENDING", members: { some: { role: "SUPPLIER", isActive: true } } } }),
       prisma.dispute.count({ where: { status: { in: ["OPEN", "UNDER_REVIEW"] } } }),
+      prisma.paymentTransaction.count({ where: { provider: "RAZORPAY", status: "PAID" } }),
+      prisma.paymentTransaction.count({ where: { provider: "RAZORPAY", status: "PENDING" } }),
+      prisma.supplierPaymentProfile.count({ where: { status: "PENDING" } }),
+      prisma.paymentRefund.count({ where: { status: "REQUESTED" } }),
       prisma.auditLog.findMany({ take: 8, orderBy: { createdAt: "desc" }, include: { user: { select: { fullName: true, email: true } } } }),
     ]);
-    return sendOk(res, { users, buyers, suppliers, openRfqs, activeOrders, pendingVerifications, openDisputes, recentActivity });
+    return sendOk(res, { users, buyers, suppliers, openRfqs, activeOrders, pendingVerifications, openDisputes, paidTransactions, pendingTransactions, pendingPaymentSetups, openRefundRequests, recentActivity });
   } catch (error) { next(error); }
 }
 
@@ -162,7 +166,7 @@ export async function adminPayments(req: Request, res: Response, next: NextFunct
     if (parsed.q) where.OR = [{ providerRef: { contains: parsed.q } }, { provider: { contains: parsed.q } }];
     if (parsed.status && parsed.status !== "ALL") where.status = parsed.status;
     const [items, total] = await Promise.all([
-      prisma.paymentTransaction.findMany({ where, orderBy: { createdAt: "desc" }, skip: (parsed.page - 1) * parsed.limit, take: parsed.limit }),
+      prisma.paymentTransaction.findMany({ where, include: { paymentMilestone: true }, orderBy: { createdAt: "desc" }, skip: (parsed.page - 1) * parsed.limit, take: parsed.limit }),
       prisma.paymentTransaction.count({ where })
     ]);
     const orderIds = [...new Set(items.map(item => item.purchaseOrderId))];
@@ -170,6 +174,17 @@ export async function adminPayments(req: Request, res: Response, next: NextFunct
     const orderMap = new Map(orders.map(order => [order.id, order]));
     return sendOk(res, { items: items.map(item => ({ ...item, order: orderMap.get(item.purchaseOrderId) || null })), page: parsed.page, limit: parsed.limit, total, pages: Math.ceil(total / parsed.limit) });
   } catch (error) { next(error); }
+}
+
+export async function adminSupplierPaymentSetups(_req: Request, res: Response, next: NextFunction) {
+  try {
+    const items = await prisma.supplierPaymentProfile.findMany({
+      include: { organization: { select: { id: true, name: true, legalName: true, taxId: true, country: true } } },
+      orderBy: { updatedAt: "desc" },
+      take: 200
+    });
+    return sendOk(res, { items });
+  } catch (e) { next(e); }
 }
 
 export async function adminDisputes(req: Request, res: Response, next: NextFunction) {

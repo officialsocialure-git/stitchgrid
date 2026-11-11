@@ -20,6 +20,9 @@ export const adminService = {
   updateRfqStatus: (id: string, status: "OPEN" | "CLOSED" | "CANCELLED") => api.patch(`/admin/rfqs/${id}/status`, { status }),
   orders: (params: URLSearchParams) => api.get<AdminPageResult>(`/admin/orders?${params.toString()}`),
   payments: (params: URLSearchParams) => api.get<AdminPageResult>(`/admin/payments?${params.toString()}`),
+  paymentSetups: () => api.get<{ items: any[] }>("/admin/payment-setups"),
+  refunds: () => api.get<{ items: any[] }>("/admin/refunds"),
+  processRefund: (id: string, decision: "APPROVE" | "REJECT", note?: string) => api.patch(`/admin/refunds/${id}`, { decision, note }),
   disputes: (params: URLSearchParams) => api.get<AdminPageResult>(`/admin/disputes?${params.toString()}`),
   auditLogs: () => api.get<any[]>("/admin/audit-logs"),
 };

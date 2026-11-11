@@ -169,10 +169,6 @@ export const marketplaceService = {
     return api.get<any[]>("/payments");
   },
 
-  createPayment: async (orderId: string, amount: number) => {
-    return api.post(`/orders/${orderId}/payments`, { amount });
-  },
-
   // 9. Admin Functions
   listAdminOrganizations: async () => {
     return api.get<any[]>("/admin/organizations");

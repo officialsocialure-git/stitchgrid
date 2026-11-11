@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Search, RefreshCw, ChevronLeft, ChevronRight, LoaderCircle, Inbox } from "lucide-react";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 
 type Column = { label: string; render: (row: any) => ReactNode; className?: string };
 type Props = {
@@ -14,6 +15,7 @@ type Props = {
   statusLabel?: string;
   actions?: (row: any, refresh: () => void) => ReactNode;
   searchPlaceholder?: string;
+  realtimeTopics?: string[];
 };
 
 function Status({ value }: { value?: string }) {
@@ -29,7 +31,7 @@ function Status({ value }: { value?: string }) {
   return <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ${tone}`}>{text.replaceAll("_"," ")}</span>;
 }
 
-export function AdminResourcePage({ title, description, fetcher, columns, statuses, statusLabel = "All Status", actions, searchPlaceholder = "Search records…" }: Props) {
+export function AdminResourcePage({ title, description, fetcher, columns, statuses, statusLabel = "All Status", actions, searchPlaceholder = "Search records…", realtimeTopics = [] }: Props) {
   const [rows, setRows] = useState<any[]>([]);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("ALL");
@@ -40,6 +42,7 @@ export function AdminResourcePage({ title, description, fetcher, columns, status
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const refresh = useCallback(() => setRefreshKey(v => v + 1), []);
+  useRealtimeSync({ topics: realtimeTopics, onSync: refresh, pollIntervalMs: 30000, enabled: realtimeTopics.length > 0 });
 
   useEffect(() => {
     let alive = true;

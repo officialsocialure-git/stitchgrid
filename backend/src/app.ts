@@ -11,6 +11,7 @@ import authRoutes from "./routes/auth.routes";
 import marketplaceRoutes from "./routes/marketplace.routes";
 import workflowRoutes from "./routes/workflow.routes";
 import adminRoutes from "./routes/admin.routes";
+import paymentRoutes from "./routes/payment.routes";
 import { errorHandler, notFound } from "./middleware/error";
 
 const app = express();
@@ -49,7 +50,7 @@ app.use(
     optionsSuccessStatus: 204,
   })
 );
-app.use(express.json({ limit: "50mb" }));
+app.use(express.json({ limit: "50mb", verify: (req, _res, buffer) => { (req as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer); } }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
@@ -86,6 +87,7 @@ if (env.NODE_ENV === "production") {
 
 app.use("/api/health", healthRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/payments", paymentRoutes);
 app.use("/api", marketplaceRoutes);
 app.use("/api", workflowRoutes);
 app.use("/api/admin", adminRoutes);

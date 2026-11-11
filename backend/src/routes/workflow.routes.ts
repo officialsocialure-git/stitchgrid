@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { authenticate, requireRole } from "../middleware/auth";
 import {
-  adminAuditLogs, adminListOrganizations, createConversation, createDispute, createPayment,
+  adminAuditLogs, adminListOrganizations, createConversation, createDispute,
   createReview, createSample, getConversationMessages, listConversations, listNotifications,
   listPayments, listSamples, markNotificationRead, resolveDispute, sendMessage,
   updateMilestone, updateSample, uploadFile
@@ -18,7 +18,7 @@ router.post("/conversations", createConversation);
 router.get("/conversations/:conversationId/messages", getConversationMessages);
 router.post("/conversations/:conversationId/messages", sendMessage);
 router.get("/payments", listPayments);
-router.post("/orders/:orderId/payments", createPayment);
+// Legacy simulated payment creation removed; use verified Razorpay milestone checkout.
 router.get("/notifications", listNotifications);
 router.patch("/notifications/:notificationId/read", markNotificationRead);
 router.post("/orders/:orderId/disputes", createDispute);

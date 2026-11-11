@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Modal } from "@/components/common/Modal";
 import { marketplaceService } from "@/services/marketplace.service";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
+import { PaymentSetupReminder } from "@/features/payments/PaymentSetupReminder";
 import dynamic from "next/dynamic";
 
 const PostRfqModal = dynamic(
@@ -466,6 +467,7 @@ export default function DashboardPage() {
 
     return (
       <div className="space-y-5 md:space-y-6 max-w-7xl mx-auto pb-28 md:pb-12">
+        {isSupplier && <PaymentSetupReminder placement="dashboard" />}
         {/* Mobile supplier hero: visual refresh only; existing catalogue action is preserved. */}
         <section className="md:hidden relative isolate overflow-hidden rounded-[26px] border border-purple-100 bg-gradient-to-br from-[#f8f3ff] via-[#f0e7ff] to-[#e5d5ff] px-5 py-6 shadow-sm">
           <div className="absolute -right-10 -top-8 h-48 w-48 rounded-full bg-white/45 blur-2xl" />

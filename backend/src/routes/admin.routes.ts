@@ -1,10 +1,11 @@
 import { Router } from "express";
 import { authenticate, requireRole } from "../middleware/auth";
 import {
-  adminCatalog, adminDisputes, adminOrders, adminOrganizationDetails, adminOverview, adminPayments,
+  adminCatalog, adminDisputes, adminOrders, adminOrganizationDetails, adminOverview, adminPayments, adminSupplierPaymentSetups,
   adminRfqDetails, adminRfqs, adminUpdateCatalogStatus, adminUpdateRfqStatus, adminUpdateUserStatus, adminUsers
 } from "../controllers/admin.controller";
 import { adminAuditLogs } from "../controllers/workflow.controller";
+import { adminListPaymentRefunds, adminProcessPaymentRefund } from "../controllers/payment.controller";
 
 const router = Router();
 router.use(authenticate, requireRole("ADMIN"));
@@ -19,6 +20,9 @@ router.get("/rfqs/:rfqId", adminRfqDetails);
 router.patch("/rfqs/:rfqId/status", adminUpdateRfqStatus);
 router.get("/orders", adminOrders);
 router.get("/payments", adminPayments);
+router.get("/payment-setups", adminSupplierPaymentSetups);
+router.get("/refunds", adminListPaymentRefunds);
+router.patch("/refunds/:refundId", adminProcessPaymentRefund);
 router.get("/disputes", adminDisputes);
 router.get("/audit-logs", adminAuditLogs);
 
