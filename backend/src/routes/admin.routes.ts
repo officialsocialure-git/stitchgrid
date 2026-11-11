@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { authenticate, requireRole } from "../middleware/auth";
 import {
-  adminCatalog, adminDisputes, adminOrders, adminOrganizationDetails, adminOverview, adminPayments, adminSupplierPaymentSetups,
+  adminCatalog, adminDisputes, adminOrderDetails, adminOrders, adminOrganizationDetails, adminOverview, adminPayments, adminSupplierPaymentSetups,
   adminRfqDetails, adminRfqs, adminUpdateCatalogStatus, adminUpdateRfqStatus, adminUpdateUserStatus, adminUsers
 } from "../controllers/admin.controller";
 import { adminAuditLogs } from "../controllers/workflow.controller";
@@ -19,6 +19,7 @@ router.get("/rfqs", adminRfqs);
 router.get("/rfqs/:rfqId", adminRfqDetails);
 router.patch("/rfqs/:rfqId/status", adminUpdateRfqStatus);
 router.get("/orders", adminOrders);
+router.get("/orders/:orderId", adminOrderDetails);
 router.get("/payments", adminPayments);
 router.get("/payment-setups", adminSupplierPaymentSetups);
 router.get("/refunds", adminListPaymentRefunds);

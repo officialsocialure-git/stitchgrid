@@ -64,15 +64,5 @@ export default function AdminOverviewPage() {
         </Link>)}
       </div>
     </section>
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-      <div className="border-b border-slate-100 px-5 py-4"><h2 className="text-lg font-bold">Recent Activity</h2></div>
-      {loading ? <p className="p-5 text-sm text-slate-500">Loading activity…</p> : !data?.recentActivity?.length ? <p className="p-5 text-sm text-slate-500">No recent platform activity yet.</p> : <div className="divide-y divide-slate-100">
-        {data.recentActivity.map((item:any) => <div key={item.id} className="flex flex-wrap items-center gap-3 px-5 py-4">
-          <span className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-600"><FileText size={17}/></span>
-          <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{item.action.replaceAll("_"," ")}</p><p className="mt-0.5 text-xs text-slate-500">{item.user?.fullName || "Platform"} · {item.entityType}{item.entityId ? ` · ${item.entityId}` : ""}</p></div>
-          <time className="text-xs text-slate-500">{new Date(item.createdAt).toLocaleString()}</time>
-        </div>)}
-      </div>}
-    </section>
   </div>;
 }
