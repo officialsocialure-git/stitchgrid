@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
@@ -38,6 +38,7 @@ export default function PaymentsPage() {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [setup, setSetup] = useState({ accountHolderName: "", bankName: "", bankAccountLast4: "", ifscMasked: "" });
+  const setupDirtyRef = useRef(false);
   const [proofUrls, setProofUrls] = useState<Record<string, string>>({});
   const [proofNotes, setProofNotes] = useState<Record<string, string>>({});
   const [rejectReasons, setRejectReasons] = useState<Record<string, string>>({});
@@ -49,7 +50,8 @@ export default function PaymentsPage() {
       const result = await paymentService.dashboard();
       setDashboard(result);
       const p = result?.supplierSetup;
-      if (p) setSetup({
+      // Background refreshes must never overwrite values the supplier is currently editing.
+      if (p && !setupDirtyRef.current) setSetup({
         accountHolderName: p.accountHolderName || "",
         bankName: p.bankName || "",
         bankAccountLast4: p.bankAccountLast4 || "",
@@ -122,7 +124,11 @@ export default function PaymentsPage() {
     e.preventDefault();
     setBusy("setup");
     setError("");
-    try { await paymentService.updateSupplierSetup(setup); await load(); }
+    try {
+      await paymentService.updateSupplierSetup(setup);
+      await load();
+      setupDirtyRef.current = false;
+    }
     catch (e) { setError(e instanceof Error ? e.message : "Unable to save payment details."); }
     finally { setBusy(""); }
   };
@@ -204,10 +210,10 @@ export default function PaymentsPage() {
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-slate-900">Bank & Payment Details</h2><p className="text-sm text-slate-500">Payment details are collected after login, not during registration.</p></div><Badge variant={statusTone(profile.status || "NOT_STARTED") as any}>{profile.status || "NOT STARTED"}</Badge></div>
             <form onSubmit={saveSetup} className="mt-5 grid gap-4 md:grid-cols-2">
-              <label className="text-sm font-medium text-slate-700">Account holder name<input required value={setup.accountHolderName} onChange={e => setSetup(s => ({...s, accountHolderName:e.target.value}))} className="mt-1 h-11 w-full rounded-xl border border-slate-300 px-3 outline-none focus:border-violet-600"/></label>
-              <label className="text-sm font-medium text-slate-700">Bank name<input required value={setup.bankName} onChange={e => setSetup(s => ({...s, bankName:e.target.value}))} className="mt-1 h-11 w-full rounded-xl border border-slate-300 px-3 outline-none focus:border-violet-600"/></label>
-              <label className="text-sm font-medium text-slate-700">Bank account last 4 digits<input required maxLength={4} pattern="\\d{4}" value={setup.bankAccountLast4} onChange={e => setSetup(s => ({...s, bankAccountLast4:e.target.value.replace(/\\D/g,"").slice(0,4)}))} className="mt-1 h-11 w-full rounded-xl border border-slate-300 px-3 outline-none focus:border-violet-600"/></label>
-              <label className="text-sm font-medium text-slate-700">IFSC (masked)<input required value={setup.ifscMasked} onChange={e => setSetup(s => ({...s, ifscMasked:e.target.value.toUpperCase()}))} placeholder="SBIN****123" className="mt-1 h-11 w-full rounded-xl border border-slate-300 px-3 outline-none focus:border-violet-600"/></label>
+              <label className="text-sm font-medium text-slate-700">Account holder name<input required value={setup.accountHolderName} onChange={e => { setupDirtyRef.current = true; setSetup(s => ({...s, accountHolderName:e.target.value})); }} className="mt-1 h-11 w-full rounded-xl border border-slate-300 px-3 outline-none focus:border-violet-600"/></label>
+              <label className="text-sm font-medium text-slate-700">Bank name<input required value={setup.bankName} onChange={e => { setupDirtyRef.current = true; setSetup(s => ({...s, bankName:e.target.value})); }} className="mt-1 h-11 w-full rounded-xl border border-slate-300 px-3 outline-none focus:border-violet-600"/></label>
+              <label className="text-sm font-medium text-slate-700">Bank account last 4 digits<input required maxLength={4} pattern="\d{4}" value={setup.bankAccountLast4} onChange={e => { setupDirtyRef.current = true; setSetup(s => ({...s, bankAccountLast4:e.target.value.replace(/\D/g,"").slice(0,4)})); }} className="mt-1 h-11 w-full rounded-xl border border-slate-300 px-3 outline-none focus:border-violet-600"/></label>
+              <label className="text-sm font-medium text-slate-700">IFSC (masked)<input required value={setup.ifscMasked} onChange={e => { setupDirtyRef.current = true; setSetup(s => ({...s, ifscMasked:e.target.value.toUpperCase()})); }} placeholder="SBIN****123" className="mt-1 h-11 w-full rounded-xl border border-slate-300 px-3 outline-none focus:border-violet-600"/></label>
               <div className="md:col-span-2 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">This form stores only masked account information. Full bank details and KYC must be completed through an approved Razorpay Route onboarding flow before payouts can be activated. STITCHGRID does not store full bank account numbers.</div>
               <div className="md:col-span-2"><Button type="submit" loading={busy === "setup"}>Save Payment Details</Button></div>
             </form>
