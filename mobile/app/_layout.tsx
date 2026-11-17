@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
+import { useUpdates } from "../src/hooks/useUpdates";
 import { View, Text, Image, Linking, StyleSheet } from "react-native";
 import { Colors } from "../src/constants/colors";
 import { Button } from "../src/components/common/Button";
@@ -22,6 +23,7 @@ const queryClient = new QueryClient({
  * AFTER the root layout has mounted and initial boot on index has completed.
  */
 function RouteSynchronizer() {
+  useUpdates();
   const { token, isLoading, isSupplier, isAdmin, logout } = useAuth();
   const segments = useSegments();
   const router = useRouter();

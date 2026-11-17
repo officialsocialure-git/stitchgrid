@@ -30,6 +30,11 @@ export const marketplaceService = {
     return res.data?.data || res.data;
   },
 
+  async inviteSupplier(rfqId: string, supplierOrgId: string): Promise<any> {
+    const res = await api.post(`/rfqs/${rfqId}/invitations`, { supplierOrgId });
+    return res.data?.data || res.data;
+  },
+
   async createRfq(data: {
     buyerOrgId: string;
     title: string;
@@ -62,6 +67,11 @@ export const marketplaceService = {
     items: { description: string; quantity: number; unitPrice: number; rfqItemId?: string }[];
   }): Promise<Quotation> {
     const res = await api.post("/quotations", data);
+    return res.data?.data || res.data;
+  },
+
+  async updateQuotationStatus(quotationId: string, status: string, reason?: string): Promise<Quotation> {
+    const res = await api.patch(`/quotations/${quotationId}/status`, { status, reason });
     return res.data?.data || res.data;
   },
 
@@ -158,6 +168,11 @@ export const marketplaceService = {
 
   async sendMessage(conversationId: string, body: string): Promise<Message> {
     const res = await api.post(`/conversations/${conversationId}/messages`, { body });
+    return res.data?.data || res.data;
+  },
+
+  async uploadFile(data: { filename: string; data: string; label?: string }): Promise<{ url: string; label: string }> {
+    const res = await api.post("/upload", data);
     return res.data?.data || res.data;
   },
 

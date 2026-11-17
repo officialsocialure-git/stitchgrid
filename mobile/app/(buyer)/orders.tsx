@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,10 @@ import {
   SafeAreaView,
   Alert,
   Platform,
+  StatusBar,
+  Modal as NativeModal,
+  TextInput,
+  ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -19,6 +23,7 @@ import { EmptyState } from "../../src/components/common/EmptyState";
 import { marketplaceService } from "../../src/services/marketplace.service";
 import { useRealtimeSync } from "../../src/hooks/useRealtimeSync";
 import { PurchaseOrder } from "../../src/types";
+import { OrderDetailsModal } from "../../src/components/orders/OrderDetailsModal";
 
 export default function BuyerOrdersScreen() {
   const router = useRouter();
@@ -27,12 +32,22 @@ export default function BuyerOrdersScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
+  // Search & Status Filters matching Web App
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+
+  // Navigation Drawer & Modals
+  const [navigationMenuOpen, setNavigationMenuOpen] = useState(false);
+  const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<PurchaseOrder | null>(null);
+
   const loadOrders = useCallback(async () => {
     try {
+      setLoading(true);
       const data = await marketplaceService.listOrders();
-      setOrders(data || []);
+      setOrders(Array.isArray(data) ? data : []);
     } catch (e) {
       console.warn("Failed to load orders:", e);
+      setOrders([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -46,19 +61,31 @@ export default function BuyerOrdersScreen() {
   useRealtimeSync({
     topics: ["order:created", "order:updated", "milestone:updated"],
     onSync: loadOrders,
-    pollIntervalMs: 20000,
+    pollIntervalMs: 25000,
   });
 
-  const handleApproveSample = async (orderId: string) => {
+  const handleStatusChange = async (orderId: string, nextStatus: string) => {
     try {
       setUpdatingId(orderId);
-      await marketplaceService.updateOrderStatus(orderId, "SAMPLE_APPROVED", {
-        note: "Buyer approved PP Sample from Mobile App",
+      await marketplaceService.updateOrderStatus(orderId, nextStatus, {
+        note: `Buyer transitioned status to ${nextStatus}`,
       });
-      Alert.alert("Approved", "PP Sample approved! Order transitioned to Bulk Production.");
+      Alert.alert(
+        "Status Updated",
+        nextStatus === "SAMPLE_APPROVED"
+          ? "Pre-Production Sample approved! Factory has been authorized to start bulk production."
+          : nextStatus === "DELIVERED"
+          ? "Delivery confirmed! Final inspection and settlement ready."
+          : nextStatus === "COMPLETED"
+          ? "Order completed and final payment released to factory!"
+          : `Order updated to ${nextStatus}.`
+      );
       loadOrders();
-    } catch (e) {
-      Alert.alert("Error", "Could not approve sample.");
+      if (selectedOrderForDetails?.id === orderId) {
+        setSelectedOrderForDetails((prev) => (prev ? { ...prev, status: nextStatus } : null));
+      }
+    } catch (err: any) {
+      Alert.alert("Error", err.response?.data?.message || err.message || "Failed to update order status.");
     } finally {
       setUpdatingId(null);
     }
@@ -90,28 +117,125 @@ export default function BuyerOrdersScreen() {
       case "COMPLETED":
         return 100;
       default:
-        return 10;
+        return 15;
     }
   };
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <Header />
+  const getMilestoneLabel = (po: PurchaseOrder) => {
+    const isCompleted = po.status === "COMPLETED";
+    const isDelivered = po.status === "DELIVERED";
+    const isDispatched = po.status === "DISPATCHED";
+    const isQc = po.status === "QC" || po.status === "QC_PENDING";
 
-      <FlatList
-        data={orders}
-        keyExtractor={(item) => item.id}
-        ListHeaderComponent={
-          <View style={styles.pageHeader}>
-            <Text style={styles.pageTitle}>My Orders</Text>
-            <Button
-              title="Issue New Purchase Order"
-              onPress={() => router.push("/(buyer)/rfqs")}
-              size="lg"
-              style={styles.newOrderButton}
-            />
+    const activeMilestone = po.milestones?.find((m) => m.status === "IN_PROGRESS")?.title;
+    if (activeMilestone) return activeMilestone;
+
+    if (isCompleted) return "Order Fulfilled & Payment Released";
+    if (isDelivered) return "Delivered at Buyer Warehouse";
+    if (isDispatched) return "In Transit (Tracking Active)";
+    if (po.status === "READY_TO_DISPATCH") return "Packed & Ready for Carrier";
+    if (isQc) return "Quality Inspection (AQL 2.5 Standard)";
+    if (po.status === "PRODUCTION_STARTED" || po.status === "IN_PRODUCTION") return "Bulk Production Lines Active";
+    if (po.status === "SAMPLE_APPROVED") return "Pre-Production Sample Approved";
+    if (po.status === "SAMPLE_PENDING") return "PP Sample in Review";
+    if (po.status === "ACCEPTED") return "Order Accepted by Factory";
+    return "Purchase Order Generated";
+  };
+
+  const filteredOrders = useMemo(() => {
+    return orders.filter((po) => {
+      const q = searchQuery.trim().toLowerCase();
+      const poNum = (po.poNumber || "").toLowerCase();
+      const buyer = (po.buyerOrg?.name || po.buyer?.name || "").toLowerCase();
+      const supplier = (po.supplierOrg?.name || po.supplier?.name || "").toLowerCase();
+      const items = (po.items || []).map((i) => i.description || "").join(" ").toLowerCase();
+
+      const matchesSearch = !q || poNum.includes(q) || buyer.includes(q) || supplier.includes(q) || items.includes(q);
+      const matchesStatus = statusFilter === "ALL" || po.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [orders, searchQuery, statusFilter]);
+
+  return (
+    <SafeAreaView
+      style={[
+        styles.safeArea,
+        Platform.OS === "android" ? { paddingTop: StatusBar.currentHeight || 0 } : null,
+      ]}
+    >
+      {/* Header with Menu Drawer Trigger */}
+      <Header showMenuButton onMenuPress={() => setNavigationMenuOpen(true)} />
+
+      {/* Navigation Drawer */}
+      <NativeModal
+        visible={navigationMenuOpen}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setNavigationMenuOpen(false)}
+      >
+        <View style={styles.navigationOverlay}>
+          <TouchableOpacity
+            style={styles.navigationBackdrop}
+            activeOpacity={1}
+            onPress={() => setNavigationMenuOpen(false)}
+          />
+          <View style={styles.navigationDrawer}>
+            <View style={styles.navigationHeader}>
+              <Text style={styles.navigationTitle}>STITCHGRID</Text>
+              <TouchableOpacity
+                onPress={() => setNavigationMenuOpen(false)}
+                style={styles.navigationCloseButton}
+              >
+                <Ionicons name="close" size={22} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.navigationSubtitle}>Buyer Workspace</Text>
+            {[
+              { label: "Dashboard", icon: "grid-outline", route: "/(buyer)/dashboard" },
+              { label: "My Requests", icon: "document-text-outline", route: "/(buyer)/rfqs" },
+              { label: "My Offers", icon: "pricetags-outline", route: "/(buyer)/offers" },
+              { label: "Orders", icon: "cube-outline", route: "/(buyer)/orders" },
+              { label: "Samples", icon: "layers-outline", route: "/(buyer)/samples" },
+              { label: "Production", icon: "construct-outline", route: "/(buyer)/production" },
+              { label: "Payments", icon: "card-outline", route: "/(buyer)/payments" },
+              { label: "Messages", icon: "chatbubble-ellipses-outline", route: "/(buyer)/messages" },
+              { label: "Suppliers", icon: "business-outline", route: "/(buyer)/suppliers" },
+              { label: "Profile", icon: "person-outline", route: "/(buyer)/profile" },
+              { label: "Settings", icon: "settings-outline", route: "/(shared)/settings" },
+              { label: "Notifications", icon: "notifications-outline", route: "/(shared)/notifications" },
+            ].map((item) => (
+              <TouchableOpacity
+                key={item.label}
+                style={styles.navigationItem}
+                onPress={() => {
+                  setNavigationMenuOpen(false);
+                  router.push(item.route as any);
+                }}
+              >
+                <Ionicons
+                  name={item.icon as any}
+                  size={20}
+                  color={item.label === "Orders" ? Colors.primary : Colors.textSecondary}
+                />
+                <Text
+                  style={[
+                    styles.navigationItemText,
+                    item.label === "Orders" && { color: Colors.primary, fontWeight: "800" },
+                  ]}
+                >
+                  {item.label}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
+              </TouchableOpacity>
+            ))}
           </View>
-        }
+        </View>
+      </NativeModal>
+
+      {/* Orders List */}
+      <FlatList
+        data={filteredOrders}
+        keyExtractor={(item) => item.id}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -123,101 +247,311 @@ export default function BuyerOrdersScreen() {
           />
         }
         contentContainerStyle={styles.listContent}
+        ListHeaderComponent={
+          <View style={styles.pageHeaderWrap}>
+            {/* Title & Badge */}
+            <View style={styles.titleRow}>
+              <Text style={styles.pageTitle}>My Orders</Text>
+              <View style={styles.tagBadge}>
+                <Text style={styles.tagBadgeText}>Milestone Contracts</Text>
+              </View>
+            </View>
+
+            {/* Subtitle */}
+            <Text style={styles.pageDescription}>
+              Active and fulfilled B2B garment manufacturing contracts secured by payment milestones.
+            </Text>
+
+            {/* Primary Action Button */}
+            <TouchableOpacity
+              onPress={() => router.push("/(buyer)/rfqs")}
+              style={styles.newOrderBtn}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="add" size={18} color="#FFF" />
+              <Text style={styles.newOrderBtnText}>Issue New Purchase Order</Text>
+            </TouchableOpacity>
+
+            {/* Search Input */}
+            <View style={styles.searchContainer}>
+              <Ionicons name="search" size={17} color={Colors.textMuted} style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Search by PO ID, product or supplier..."
+                placeholderTextColor={Colors.textMuted}
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery("")} style={styles.searchClearBtn}>
+                  <Ionicons name="close-circle" size={16} color={Colors.textMuted} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Status Filter Tabs (Horizontal Scroll) */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.statusPillsWrap}
+            >
+              {[
+                { key: "ALL", label: "All Orders" },
+                { key: "PO_CREATED", label: "PO Created" },
+                { key: "ACCEPTED", label: "Accepted" },
+                { key: "SAMPLE_PENDING", label: "Sample Pending" },
+                { key: "SAMPLE_APPROVED", label: "Sample Approved" },
+                { key: "PRODUCTION_STARTED", label: "Production" },
+                { key: "QC_PENDING", label: "QC Pending" },
+                { key: "READY_TO_DISPATCH", label: "Ready to Dispatch" },
+                { key: "DISPATCHED", label: "Dispatched" },
+                { key: "DELIVERED", label: "Delivered" },
+                { key: "COMPLETED", label: "Completed" },
+              ].map((st) => (
+                <TouchableOpacity
+                  key={st.key}
+                  onPress={() => setStatusFilter(st.key)}
+                  style={[styles.statusPill, statusFilter === st.key && styles.statusPillActive]}
+                >
+                  <Text
+                    style={[
+                      styles.statusPillText,
+                      statusFilter === st.key && styles.statusPillTextActive,
+                    ]}
+                  >
+                    {st.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        }
         ListEmptyComponent={
           !loading ? (
-            <EmptyState
-              icon="cube-outline"
-              title="No Orders Found"
-              description="Accepted quotations will appear here as formal purchase orders with escrow tracking."
-              actionTitle="View Quotations"
-              onAction={() => router.push("/(buyer)/offers")}
-            />
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIconCircle}>
+                <Ionicons name="cube-outline" size={32} color={Colors.primary} />
+              </View>
+              <Text style={styles.emptyTitle}>
+                {orders.length === 0 ? "No purchase orders found" : "No matching orders"}
+              </Text>
+              <Text style={styles.emptySubtitle}>
+                {orders.length === 0
+                  ? "Accept an incoming quotation from your RFQs page to issue a binding purchase order."
+                  : "Try clearing your search query or status filter to see other orders."}
+              </Text>
+              {orders.length > 0 ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    setSearchQuery("");
+                    setStatusFilter("ALL");
+                  }}
+                  style={styles.clearFilterBtn}
+                >
+                  <Text style={styles.clearFilterBtnText}>Clear Search & Filters</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  onPress={() => router.push("/(buyer)/rfqs")}
+                  style={styles.emptyPostBtn}
+                >
+                  <Ionicons name="swap-horizontal" size={16} color="#FFF" />
+                  <Text style={styles.emptyPostBtnText}>View RFQs & Quotations</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           ) : undefined
         }
         renderItem={({ item }) => {
           const progress = getProgressPercentage(item.status);
-          const isSamplePending = item.status === "SAMPLE_PENDING";
           const isCompleted = item.status === "COMPLETED";
+          const isDelivered = item.status === "DELIVERED";
+          const isQc = item.status === "QC" || item.status === "QC_PENDING";
+          const isDispatched = item.status === "DISPATCHED";
+
+          const badgeTheme =
+            isCompleted || isDelivered
+              ? { bg: Colors.successLight, text: Colors.successText, border: Colors.successBorder }
+              : isQc
+              ? { bg: Colors.warningLight, text: Colors.warningText, border: Colors.warningBorder }
+              : isDispatched
+              ? { bg: Colors.infoLight, text: Colors.infoText, border: Colors.infoBorder }
+              : { bg: Colors.primaryLight, text: Colors.primary, border: Colors.borderPrimary };
+
           const itemTitle = item.items?.length
             ? item.items.map((part) => `${Number(part.quantity || 0).toLocaleString()} pcs ${part.description || "Apparel"}`).join(", ")
-            : "Apparel Production Order";
+            : "Apparel Production Lot";
+
           const buyerName = item.buyerOrg?.name || item.buyer?.name || "Buyer";
-          const deliveryDate = item.expectedDate
+          const supplierName = item.supplierOrg?.name || item.supplier?.name || "Verified Mill";
+          const supplierCity = item.supplierOrg?.city || item.supplier?.city || "India";
+
+          const deliveryFormatted = item.expectedDate
             ? new Date(item.expectedDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
-            : "Not specified";
-          const currentMilestone = item.milestones?.find((milestone) => milestone.status === "IN_PROGRESS")?.title
-            || (isCompleted ? "Order Fulfilled & Payment Released"
-            : item.status === "DISPATCHED" ? "In Transit"
-            : item.status === "QC" || item.status === "QC_PENDING" ? "Quality Inspection (AQL 2.5)"
-            : item.status === "PRODUCTION_STARTED" || item.status === "IN_PRODUCTION" ? "Bulk Production Lines Active"
-            : item.status === "SAMPLE_APPROVED" ? "Pre-Production Sample Approved"
-            : item.status === "SAMPLE_PENDING" ? "PP Sample in Review"
-            : item.status === "ACCEPTED" ? "Order Accepted by Factory"
-            : "Purchase Order Generated");
+            : "18 Nov 2026";
+
+          const amountFormatted = `₹${(Number(item.totalAmount || 0) / 100000).toFixed(2)}L`;
+          const currentMilestoneTitle = getMilestoneLabel(item);
 
           return (
             <View style={styles.orderCard}>
+              {/* Top Row: PO ID, Status Badge & Supplier info */}
               <View style={styles.cardTopRow}>
-                <Text style={styles.poNumberText}>{item.poNumber || "Purchase Order"}</Text>
-                <View style={[
-                  styles.statusPill,
-                  isCompleted
-                    ? { backgroundColor: Colors.successLight, borderColor: Colors.successBorder }
-                    : { backgroundColor: Colors.primaryLight, borderColor: Colors.borderPrimary },
-                ]}>
-                  <Text style={[
-                    styles.statusPillText,
-                    isCompleted ? { color: Colors.successText } : { color: Colors.primary },
-                  ]}>{item.status.replace(/_/g, " ")}</Text>
+                <View style={styles.cardPillsRow}>
+                  <Text style={styles.poNumberText}>{item.poNumber || `SG-PO-${item.id.slice(0, 6)}`}</Text>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      { backgroundColor: badgeTheme.bg, borderColor: badgeTheme.border },
+                    ]}
+                  >
+                    <Text style={[styles.statusBadgeText, { color: badgeTheme.text }]}>
+                      {item.status.replace(/_/g, " ")}
+                    </Text>
+                  </View>
                 </View>
+
+                <TouchableOpacity
+                  onPress={() => setSelectedOrderForDetails(item)}
+                  style={styles.moreBtn}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="chevron-forward" size={18} color={Colors.textSecondary} />
+                </TouchableOpacity>
               </View>
 
-              <Text style={styles.orderTitle}>{itemTitle}</Text>
-              <Text style={styles.buyerText}>Buyer: <Text style={styles.buyerName}>{buyerName}</Text></Text>
+              <Text style={styles.supplierText}>
+                Supplier: <Text style={{ color: Colors.textHeading, fontWeight: "700" }}>{supplierName}</Text> ({supplierCity})
+              </Text>
 
+              {/* Title & Buyer */}
+              <Text style={styles.orderTitle} numberOfLines={2}>
+                {itemTitle}
+              </Text>
+              <Text style={styles.buyerText}>
+                Buyer: <Text style={styles.buyerName}>{buyerName}</Text>
+              </Text>
+
+              {/* Amount & Target Date */}
               <View style={styles.amountDateRow}>
-                <Text style={styles.orderAmount}>₹{(Number(item.totalAmount) / 100000).toFixed(2)}L</Text>
-                <Text style={styles.deliveryDate}>Target: {deliveryDate}</Text>
+                <Text style={styles.orderAmount}>{amountFormatted}</Text>
+                <Text style={styles.deliveryDate}>Target: {deliveryFormatted}</Text>
               </View>
 
-              <View style={styles.milestonePanel}>
-                <View style={styles.milestoneTopRow}>
-                  <Text style={styles.currentMilestone} numberOfLines={1}>{currentMilestone}</Text>
-                  <Text style={styles.completedText}>{progress}% Completed</Text>
+              {/* Progress & Milestone Indicator (Light Purple Card matching Web) */}
+              <View style={styles.progressCard}>
+                <View style={styles.progressHeader}>
+                  <Text style={styles.milestoneTitle} numberOfLines={1}>
+                    {currentMilestoneTitle}
+                  </Text>
+                  <Text style={styles.progressPercentText}>{progress}% Completed</Text>
                 </View>
-                <View style={styles.webProgressTrack}>
-                  <View style={[styles.webProgressFill, { width: `${progress}%` }]} />
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${progress}%` }]} />
                 </View>
               </View>
 
-              <View style={styles.actionsDivider} />
-              {isSamplePending && (
-                <Button
-                  title={updatingId === item.id ? "Approving..." : "Approve PP Sample"}
-                  size="md"
-                  loading={updatingId === item.id}
-                  onPress={() => handleApproveSample(item.id)}
-                  style={styles.approveButton}
-                />
-              )}
+              {/* Buyer Interactive Action Banner */}
+              <View style={styles.buyerActionWrap}>
+                {(item.status === "PO_CREATED" || item.status === "PENDING_ACCEPTANCE") && (
+                  <View style={styles.statusNoticeBanner}>
+                    <Ionicons name="sync" size={15} color={Colors.warningText} />
+                    <Text style={styles.statusNoticeText}>PO Issued • Awaiting Factory Order Acceptance</Text>
+                  </View>
+                )}
 
-              <View style={styles.quickActions}>
-                <TouchableOpacity style={styles.quickAction} onPress={() => router.push(`/(buyer)/production?orderId=${item.id}`)}>
-                  <Ionicons name="business-outline" size={24} color={Colors.textHeading} />
+                {item.status === "ACCEPTED" && (
+                  <View style={[styles.statusNoticeBanner, { backgroundColor: Colors.successLight, borderColor: Colors.successBorder }]}>
+                    <Ionicons name="checkmark-circle" size={15} color={Colors.successText} />
+                    <Text style={[styles.statusNoticeText, { color: Colors.successText }]}>
+                      Order Accepted by Supplier • PP Sample in Progress
+                    </Text>
+                  </View>
+                )}
+
+                {item.status === "SAMPLE_PENDING" && (
+                  <TouchableOpacity
+                    onPress={() => handleStatusChange(item.id, "SAMPLE_APPROVED")}
+                    disabled={updatingId === item.id}
+                    style={styles.actionButtonPrimary}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="checkmark-circle" size={16} color="#FFF" />
+                    <Text style={styles.actionButtonText}>
+                      {updatingId === item.id ? "Approving..." : "Approve PP Sample"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {item.status === "DISPATCHED" && (
+                  <TouchableOpacity
+                    onPress={() => handleStatusChange(item.id, "DELIVERED")}
+                    disabled={updatingId === item.id}
+                    style={styles.actionButtonPrimary}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="cube-outline" size={16} color="#FFF" />
+                    <Text style={styles.actionButtonText}>
+                      {updatingId === item.id ? "Confirming..." : "Confirm Delivery Received"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {item.status === "DELIVERED" && (
+                  <TouchableOpacity
+                    onPress={() => handleStatusChange(item.id, "COMPLETED")}
+                    disabled={updatingId === item.id}
+                    style={styles.actionButtonPrimary}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="wallet-outline" size={16} color="#FFF" />
+                    <Text style={styles.actionButtonText}>
+                      {updatingId === item.id ? "Releasing..." : "Release Payment & Complete"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Action Links Row (3 Quick Actions matching Web) */}
+              <View style={styles.cardActionsRow}>
+                <TouchableOpacity
+                  onPress={() => router.push(`/(buyer)/production?orderId=${item.id}`)}
+                  style={styles.quickActionItem}
+                >
+                  <Ionicons name="construct-outline" size={17} color={Colors.textHeading} />
                   <Text style={styles.quickActionText}>Track Milestones</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.quickAction} onPress={() => router.push("/(buyer)/samples")}>
-                  <Ionicons name="shirt-outline" size={24} color={Colors.textHeading} />
+
+                <TouchableOpacity
+                  onPress={() => router.push("/(buyer)/samples")}
+                  style={styles.quickActionItem}
+                >
+                  <Ionicons name="shirt-outline" size={17} color={Colors.textHeading} />
                   <Text style={styles.quickActionText}>View Samples</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.quickAction} onPress={() => router.push("/(buyer)/payments")}>
-                  <Ionicons name="wallet-outline" size={24} color={Colors.textHeading} />
+
+                <TouchableOpacity
+                  onPress={() => router.push("/(buyer)/payments")}
+                  style={styles.quickActionItem}
+                >
+                  <Ionicons name="wallet-outline" size={17} color={Colors.textHeading} />
                   <Text style={styles.quickActionText}>Secure Payment</Text>
                 </TouchableOpacity>
               </View>
             </View>
           );
         }}
+      />
+
+      {/* Order Details Modal */}
+      <OrderDetailsModal
+        visible={Boolean(selectedOrderForDetails)}
+        onClose={() => setSelectedOrderForDetails(null)}
+        order={selectedOrderForDetails}
+        onTrackProduction={(orderId) => router.push(`/(buyer)/production?orderId=${orderId}`)}
+        onSecurePayment={() => router.push("/(buyer)/payments")}
+        onStatusChange={handleStatusChange}
+        updating={Boolean(updatingId)}
       />
     </SafeAreaView>
   );
@@ -228,277 +562,405 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  filterSection: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
-    backgroundColor: Colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+  listContent: {
+    paddingBottom: 40,
   },
-  searchInputWrap: {
+  pageHeaderWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  titleRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Colors.surfaceSubtle,
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  pageTitle: {
+    fontSize: 26,
+    lineHeight: 32,
+    fontWeight: "800",
+    color: Colors.textHeading,
+  },
+  tagBadge: {
+    backgroundColor: Colors.primaryLight,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 14,
+  },
+  tagBadgeText: {
+    color: Colors.primary,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  pageDescription: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 6,
+  },
+  newOrderBtn: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginTop: 14,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  newOrderBtnText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
     paddingHorizontal: 12,
+    marginTop: 14,
     height: 44,
-    marginBottom: 10,
   },
-  filterPills: {
-    gap: 8,
-    paddingBottom: 4,
+  searchIcon: {
+    marginRight: 8,
   },
-  pill: {
-    paddingHorizontal: 14,
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.text,
+    paddingVertical: 0,
+  },
+  searchClearBtn: {
+    padding: 4,
+  },
+  statusPillsWrap: {
+    flexDirection: "row",
+    gap: 6,
+    paddingVertical: 10,
+  },
+  statusPill: {
+    paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 14,
-    backgroundColor: Colors.surfaceSubtle,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  pillActive: {
+  statusPillActive: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
   },
-  pillText: {
-    fontSize: 12,
+  statusPillText: {
+    fontSize: 11,
     fontWeight: "600",
-    color: Colors.slate600,
+    color: Colors.textSecondary,
   },
-  pillTextActive: {
+  statusPillTextActive: {
     color: "#FFFFFF",
     fontWeight: "700",
   },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingTop: 22,
-    paddingBottom: 112,
+  emptyContainer: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderStyle: "dashed",
+    padding: 28,
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginTop: 16,
   },
-  pageHeader: {
-    paddingBottom: 18,
-    marginBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    gap: 16,
+  emptyIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: Colors.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
   },
-  pageTitle: {
-    fontSize: 30,
-    lineHeight: 38,
-    fontWeight: "900",
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "800",
     color: Colors.textHeading,
   },
-  newOrderButton: {
-    alignSelf: "flex-start",
-    minWidth: 0,
+  emptySubtitle: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    textAlign: "center",
+    marginTop: 4,
+    marginBottom: 14,
+    lineHeight: 18,
+    maxWidth: 280,
+  },
+  clearFilterBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: Colors.primaryLight,
+  },
+  clearFilterBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Colors.primary,
+  },
+  emptyPostBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+  },
+  emptyPostBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FFF",
   },
   orderCard: {
-    backgroundColor: Colors.surface,
+    backgroundColor: "#FFFFFF",
     borderRadius: 20,
     borderWidth: 1,
     borderColor: Colors.border,
+    marginHorizontal: 16,
+    marginTop: 14,
     padding: 16,
-    marginBottom: 12,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
     elevation: 1,
   },
   cardTopRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 10,
   },
-  topRow: {
+  cardPillsRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
+    gap: 8,
   },
   poNumberText: {
     fontSize: 13,
     fontWeight: "800",
-    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
     color: Colors.primary,
   },
-  statusPill: {
+  statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
   },
-  statusPillText: {
+  statusBadgeText: {
     fontSize: 10,
     fontWeight: "700",
-    textTransform: "uppercase",
+  },
+  moreBtn: {
+    padding: 4,
   },
   supplierText: {
-    fontSize: 14,
+    fontSize: 12,
     color: Colors.textSecondary,
-    marginBottom: 12,
+    marginTop: 6,
   },
   orderTitle: {
-    fontSize: 21,
-    lineHeight: 27,
+    fontSize: 16,
     fontWeight: "800",
     color: Colors.textHeading,
-    marginBottom: 8,
+    marginTop: 6,
+    lineHeight: 22,
   },
   buyerText: {
-    fontSize: 14,
+    fontSize: 12,
     color: Colors.textSecondary,
-    marginBottom: 16,
+    marginTop: 2,
   },
   buyerName: {
+    fontWeight: "700",
     color: Colors.textHeading,
-    fontWeight: "800",
   },
   amountDateRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "baseline",
     justifyContent: "space-between",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 16,
+    marginTop: 10,
   },
   orderAmount: {
-    fontSize: 27,
+    fontSize: 20,
     fontWeight: "900",
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
     color: Colors.primary,
   },
   deliveryDate: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    fontWeight: "600",
-  },
-  milestonePanel: {
-    backgroundColor: "#F7F2FF",
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#E9DFFF",
-    padding: 14,
-  },
-  milestoneTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-    marginBottom: 9,
-  },
-  currentMilestone: {
-    flex: 1,
-    color: Colors.primary,
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  completedText: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  webProgressTrack: {
-    height: 9,
-    borderRadius: 8,
-    backgroundColor: "#DCE8FF",
-    overflow: "hidden",
-  },
-  webProgressFill: {
-    height: "100%",
-    borderRadius: 8,
-    backgroundColor: Colors.primary,
-  },
-  actionsDivider: {
-    height: 1,
-    backgroundColor: Colors.borderLight,
-    marginTop: 18,
-    marginBottom: 14,
-  },
-  approveButton: {
-    alignSelf: "flex-start",
-    marginBottom: 14,
-  },
-  quickActions: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  quickAction: {
-    flex: 1,
-    minHeight: 84,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 13,
-    backgroundColor: Colors.surface,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 4,
-    paddingVertical: 10,
-    gap: 7,
-  },
-  quickActionText: {
-    color: Colors.textHeading,
     fontSize: 11,
-    lineHeight: 14,
-    fontWeight: "700",
-    textAlign: "center",
+    fontWeight: "600",
+    color: Colors.textSecondary,
   },
-  pricingRow: {
+  progressCard: {
+    backgroundColor: "#f7f2ff",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#ede5fc",
+    padding: 12,
+    marginTop: 12,
+  },
+  progressHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: Colors.surfaceSubtle,
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 10,
-  },
-  label: {
-    fontSize: 10,
-    color: Colors.textSecondary,
-  },
-  amountText: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: Colors.textHeading,
-    marginTop: 2,
-  },
-  progressPercentText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: Colors.primary,
-    marginTop: 2,
-  },
-  progressBarTrack: {
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: Colors.borderLight,
-    overflow: "hidden",
     marginBottom: 6,
   },
-  progressBarFill: {
+  milestoneTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Colors.primary,
+    flex: 1,
+    marginRight: 6,
+  },
+  progressPercentText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Colors.textSecondary,
+  },
+  progressTrack: {
+    height: 6,
+    backgroundColor: "#e9ddff",
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  progressFill: {
     height: "100%",
     backgroundColor: Colors.primary,
-    borderRadius: 4,
+    borderRadius: 3,
   },
-  stageLabelsRow: {
+  buyerActionWrap: {
+    marginTop: 12,
+  },
+  statusNoticeBanner: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 14,
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: Colors.warningLight,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.warningBorder,
   },
-  stageText: {
-    fontSize: 10,
-    color: Colors.textSecondary,
-    fontWeight: "500",
+  statusNoticeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Colors.warningText,
+    flex: 1,
   },
-  actionRow: {
+  actionButtonPrimary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: Colors.primary,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  actionButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FFF",
+  },
+  cardActionsRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+  },
+  quickActionItem: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: Colors.surfaceSubtle,
+    gap: 4,
+  },
+  quickActionText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Colors.textHeading,
+    textAlign: "center",
+  },
+  navigationOverlay: {
+    flex: 1,
+    flexDirection: "row",
+    backgroundColor: "rgba(15, 23, 42, 0.42)",
+  },
+  navigationBackdrop: {
+    ...StyleSheet.absoluteFill,
+  },
+  navigationDrawer: {
+    width: "82%",
+    maxWidth: 340,
+    height: "100%",
+    backgroundColor: Colors.surface,
+    paddingTop: Platform.OS === "ios" ? 58 : (StatusBar.currentHeight || 0) + 18,
+    paddingHorizontal: 18,
+    paddingBottom: 24,
+    borderTopRightRadius: 22,
+    borderBottomRightRadius: 22,
+    elevation: 18,
+  },
+  navigationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  navigationTitle: {
+    color: Colors.primary,
+    fontSize: 19,
+    fontWeight: "900",
+  },
+  navigationCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.surfaceSubtle,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  navigationSubtitle: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 14,
+  },
+  navigationItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 11,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  navigationItemText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
+    color: Colors.text,
   },
 });

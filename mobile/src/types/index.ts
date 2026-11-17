@@ -202,7 +202,9 @@ export interface Conversation {
   supplier?: { id: string; name: string; city?: string };
   otherPartyName?: string;
   messages?: Message[];
-  updatedAt: string;
+  linkedOrder?: { id: string; poNumber: string; status: string; item: string } | null;
+  updatedAt?: string;
+  createdAt?: string;
 }
 
 export interface Notification {

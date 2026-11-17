@@ -10,27 +10,35 @@
     },
     "preview": {
       "distribution": "internal",
+      "channel": "preview",
       "android": {
         "buildType": "apk"
       },
       "ios": {
-        "simulator": true
+        "simulator": false
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://stitchgrid-backend.onrender.com/api",
-        "EXPO_PUBLIC_SOCKET_URL": "https://stitchgrid-backend.onrender.com"
-      },
-      "channel": "preview"
+        "EXPO_PUBLIC_SOCKET_URL": "https://stitchgrid-backend.onrender.com",
+        "EXPO_PUBLIC_APP_ENV": "preview"
+      }
+    },
+    "preview-simulator": {
+      "extends": "preview",
+      "ios": {
+        "simulator": true
+      }
     },
     "production": {
+      "channel": "production",
       "android": {
         "buildType": "app-bundle"
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://stitchgrid-backend.onrender.com/api",
-        "EXPO_PUBLIC_SOCKET_URL": "https://stitchgrid-backend.onrender.com"
-      },
-      "channel": "production"
+        "EXPO_PUBLIC_SOCKET_URL": "https://stitchgrid-backend.onrender.com",
+        "EXPO_PUBLIC_APP_ENV": "production"
+      }
     }
   },
   "submit": {
