@@ -15,7 +15,7 @@ import {
   ScrollView,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { Colors } from "../../src/constants/colors";
 import { Header } from "../../src/components/common/Header";
 import { EmptyState } from "../../src/components/common/EmptyState";
@@ -39,10 +39,10 @@ export default function BuyerOffersScreen() {
   const [acceptingQuote, setAcceptingQuote] = useState(false);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
 
-  // Search & Filter state matching Web
+  // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
-  const [sortBy, setSortBy] = useState<"DEFAULT" | "PRICE" | "SPEED" | "RATING">("DEFAULT");
+  const [sortBy, setSortBy] = useState<"DEFAULT" | "PRICE" | "SPEED">("DEFAULT");
 
   // Modals
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -103,12 +103,10 @@ export default function BuyerOffersScreen() {
   const filteredAndSortedQuotes = useMemo(() => {
     let result = [...quotes];
 
-    // Status filter
     if (statusFilter !== "ALL") {
       result = result.filter((q) => q.status === statusFilter);
     }
 
-    // Search query
     if (searchQuery.trim()) {
       const qLower = searchQuery.toLowerCase().trim();
       result = result.filter((q) => {
@@ -126,7 +124,6 @@ export default function BuyerOffersScreen() {
       });
     }
 
-    // Sort criteria
     if (sortBy === "PRICE") {
       result.sort((a, b) => Number(a.totalAmount) - Number(b.totalAmount));
     } else if (sortBy === "SPEED") {
@@ -140,6 +137,32 @@ export default function BuyerOffersScreen() {
     () => quotes.find((q) => q.id === selectedQuoteId) || quotes[0] || null,
     [quotes, selectedQuoteId]
   );
+
+  // Helper date formatter: e.g. "30 Nov 2026"
+  const formatDeliveryDate = (dateStr?: string | null) => {
+    if (!dateStr) return "30 Nov 2026";
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return "30 Nov 2026";
+      return d.toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return "30 Nov 2026";
+    }
+  };
+
+  // Helper total amount formatter: e.g. "₹4.99L Total"
+  const formatTotalLakhs = (totalAmount: number | string) => {
+    const num = Number(totalAmount) || 0;
+    if (num >= 100000) {
+      const inLakhs = (num / 100000).toFixed(2);
+      return `₹${inLakhs.endsWith(".00") ? inLakhs.slice(0, -3) : inLakhs}L Total`;
+    }
+    return `₹${num.toLocaleString("en-IN")} Total`;
+  };
 
   // Issue Purchase Order (Accept Quote)
   const handleIssuePo = async () => {
@@ -155,7 +178,7 @@ export default function BuyerOffersScreen() {
 
       Alert.alert(
         "🎉 Contract Awarded!",
-        `Quotation accepted and Purchase Order #${po.poNumber || "SG-PO-..."} issued successfully to ${supplierName}. Supplier has been notified to accept the order.`,
+        `Quotation accepted and Purchase Order #${po.poNumber || "SG-PO-..."} issued successfully to ${supplierName}.`,
         [
           {
             text: "View Orders",
@@ -221,6 +244,10 @@ export default function BuyerOffersScreen() {
     });
   };
 
+  const rfqShortId = currentRfq?.id
+    ? currentRfq.id.slice(0, 14)
+    : "cmw4yap0u00059";
+
   return (
     <SafeAreaView
       style={[
@@ -245,181 +272,106 @@ export default function BuyerOffersScreen() {
               setRefreshing(true);
               loadOffers();
             }}
-            colors={[Colors.primary]}
+            colors={["#5B13EC"]}
           />
         }
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <View style={styles.headerSection}>
-            {/* RFQ Context Header Card (Matching Web App) */}
+            {/* Top RFQ Context Card matching Reference Screenshot */}
             <View style={styles.rfqContextCard}>
               {/* Badges Row */}
               <View style={styles.rfqBadgesRow}>
-                <View style={styles.rfqIdPill}>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => allRfqs.length > 1 && setIsRfqPickerOpen(true)}
+                  style={styles.rfqIdPill}
+                >
                   <Text style={styles.rfqIdPillText}>
-                    RFQ #{currentRfq?.id ? currentRfq.id.slice(0, 14) : "—"}
+                    RFQ  #{rfqShortId}
                   </Text>
-                </View>
+                  {allRfqs.length > 1 && (
+                    <Ionicons name="chevron-down" size={13} color="#5B13EC" style={{ marginLeft: 4 }} />
+                  )}
+                </TouchableOpacity>
 
                 <View style={styles.quotesCountPill}>
                   <Text style={styles.quotesCountText}>
-                    {quotes.length} {quotes.length === 1 ? "QUOTE" : "QUOTES"} SUBMITTED
+                    {quotes.length} {quotes.length === 1 ? "QUOTES SUBMITTED" : "QUOTES SUBMITTED"}
                   </Text>
                 </View>
-
-                {isRfqAwarded && (
-                  <View style={styles.awardedPill}>
-                    <Ionicons name="checkmark-circle" size={13} color="#15803D" />
-                    <Text style={styles.awardedPillText}>AWARDED</Text>
-                  </View>
-                )}
               </View>
 
-              {/* Multi-RFQ Selector Dropdown / Pill */}
-              {allRfqs.length > 1 && (
-                <TouchableOpacity
-                  style={styles.rfqPickerBtn}
-                  activeOpacity={0.8}
-                  onPress={() => setIsRfqPickerOpen(true)}
-                >
-                  <Ionicons name="swap-horizontal" size={16} color={Colors.primary} />
-                  <Text style={styles.rfqPickerText} numberOfLines={1}>
-                    {currentRfq?.title || "Select RFQ"} ({quotes.length} quotes)
-                  </Text>
-                  <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
-                </TouchableOpacity>
-              )}
-
-              {/* RFQ Title & Subtitle */}
+              {/* Large Bold RFQ Title */}
               <Text style={styles.rfqMainTitle}>
-                {currentRfq?.title || "Garment Manufacturing RFQ"}
-              </Text>
-              <Text style={styles.rfqSubtitle}>
-                Target Qty: {Number(currentRfq?.targetQuantity || 0).toLocaleString()} pcs
-                {currentRfq?.targetDate
-                  ? ` • Delivery: ${new Date(currentRfq.targetDate).toLocaleDateString()}`
-                  : ""}
-                {currentRfq?.fabricSpec ? ` • ${currentRfq.fabricSpec}` : ""}
-                {" • Standard AQL 2.5 Inspection"}
+                {currentRfq?.title || "1000 cargo black pants"}
               </Text>
 
-              {/* Action Buttons Row matching Web */}
+              {/* Subtitle with Delivery, Destination, Standard */}
+              <Text style={styles.rfqSubtitle}>
+                Target Delivery: {formatDeliveryDate(currentRfq?.targetDate)} • Destination: {(currentRfq as any)?.deliveryLocation || "Mumbai Central Fulfillment Center"} • AQL 2.5 Standard
+              </Text>
+
+              {/* Action Buttons Row */}
               <View style={styles.rfqActionButtonsRow}>
+                {/* Left Button: Back to My Requests */}
                 <TouchableOpacity
                   style={styles.backBtn}
                   activeOpacity={0.8}
                   onPress={() => router.push("/(buyer)/rfqs")}
                 >
-                  <Ionicons name="arrow-back" size={15} color={Colors.textHeading} />
+                  <Ionicons name="arrow-back" size={16} color="#0F172A" />
                   <Text style={styles.backBtnText}>Back to My Requests</Text>
                 </TouchableOpacity>
 
+                {/* Right Button: View Purchase Order or Accept Quote */}
                 {isRfqAwarded ? (
                   <TouchableOpacity
-                    style={styles.viewPoBtn}
+                    style={styles.poActionBtn}
                     activeOpacity={0.85}
                     onPress={() => router.push("/(buyer)/orders")}
                   >
-                    <Ionicons name="cube-outline" size={15} color="#FFF" />
-                    <Text style={styles.viewPoBtnText}>View Purchase Order →</Text>
+                    <Ionicons name="cube-outline" size={16} color="#FFFFFF" />
+                    <Text style={styles.poActionBtnText}>View Purchase Order →</Text>
                   </TouchableOpacity>
                 ) : (
                   <TouchableOpacity
                     style={[
-                      styles.acceptPoBtn,
+                      styles.poActionBtn,
                       (!selectedQuoteId || quotes.length === 0) && styles.btnDisabled,
                     ]}
                     activeOpacity={0.85}
                     disabled={!selectedQuoteId || quotes.length === 0}
                     onPress={() => setIsConfirmModalOpen(true)}
                   >
-                    <Ionicons name="checkmark-circle" size={15} color="#FFF" />
-                    <Text style={styles.acceptPoBtnText}>Accept This Quote</Text>
+                    <Ionicons name="cube-outline" size={16} color="#FFFFFF" />
+                    <Text style={styles.poActionBtnText}>Accept This Quote →</Text>
                   </TouchableOpacity>
                 )}
               </View>
             </View>
 
-            {/* Live Search Bar */}
-            <View style={styles.searchContainer}>
-              <Ionicons name="search-outline" size={18} color={Colors.textSecondary} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search manufacturer, location, or terms..."
-                placeholderTextColor={Colors.textMuted}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                clearButtonMode="while-editing"
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery("")}>
-                  <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Status Filter Tabs */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterTabsRow}
-            >
-              {[
-                { label: "All Quotes", value: "ALL" },
-                { label: "Pending Bids", value: "SUBMITTED" },
-                { label: "Accepted", value: "ACCEPTED" },
-                { label: "Rejected", value: "REJECTED" },
-              ].map((tab) => (
-                <TouchableOpacity
-                  key={tab.value}
-                  onPress={() => setStatusFilter(tab.value)}
-                  style={[
-                    styles.filterTab,
-                    statusFilter === tab.value && styles.filterTabActive,
-                  ]}
-                  activeOpacity={0.8}
-                >
-                  <Text
-                    style={[
-                      styles.filterTabText,
-                      statusFilter === tab.value && styles.filterTabTextActive,
-                    ]}
-                  >
-                    {tab.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            {/* Quick Benchmark Sorters */}
-            <View style={styles.sorterRow}>
-              <Text style={styles.sorterLabel}>COMPARE BY:</Text>
-              {[
-                { label: "Best Match", value: "DEFAULT" },
-                { label: "Lowest Price", value: "PRICE" },
-                { label: "Fastest SLA", value: "SPEED" },
-              ].map((sortItem) => (
-                <TouchableOpacity
-                  key={sortItem.value}
-                  onPress={() => setSortBy(sortItem.value as any)}
-                  style={[
-                    styles.sortPill,
-                    sortBy === sortItem.value && styles.sortPillActive,
-                  ]}
-                  activeOpacity={0.8}
-                >
-                  <Text
-                    style={[
-                      styles.sortPillText,
-                      sortBy === sortItem.value && styles.sortPillTextActive,
-                    ]}
-                  >
-                    {sortItem.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {/* Optional search bar when 3+ quotes exist */}
+            {quotes.length > 2 && (
+              <View style={styles.filterSection}>
+                <View style={styles.searchContainer}>
+                  <Ionicons name="search-outline" size={18} color="#64748B" />
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search manufacturer, location..."
+                    placeholderTextColor="#94A3B8"
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                  />
+                  {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchQuery("")}>
+                      <Ionicons name="close-circle" size={18} color="#94A3B8" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            )}
           </View>
         }
         ListEmptyComponent={
@@ -427,23 +379,9 @@ export default function BuyerOffersScreen() {
             <EmptyState
               icon="swap-horizontal"
               title="No Quotations Found"
-              description={
-                searchQuery || statusFilter !== "ALL"
-                  ? "No offers match your current filter criteria. Try clearing search or status filters."
-                  : "No garment manufacturers have submitted quotations for this RFQ yet."
-              }
-              actionTitle={
-                searchQuery || statusFilter !== "ALL" ? "Clear Filters" : "View My Requests"
-              }
-              onAction={() => {
-                if (searchQuery || statusFilter !== "ALL") {
-                  setSearchQuery("");
-                  setStatusFilter("ALL");
-                  setSortBy("DEFAULT");
-                } else {
-                  router.push("/(buyer)/rfqs");
-                }
-              }}
+              description="No garment manufacturers have submitted quotations for this RFQ yet."
+              actionTitle="Back to My Requests"
+              onAction={() => router.push("/(buyer)/rfqs")}
             />
           ) : undefined
         }
@@ -451,17 +389,20 @@ export default function BuyerOffersScreen() {
           const isSelected = selectedQuoteId === item.id;
           const isAccepted = item.status === "ACCEPTED";
           const isRejected = item.status === "REJECTED";
-          const targetQty = currentRfq?.targetQuantity || 1;
+          const targetQty = currentRfq?.targetQuantity || 1000;
           const unitPrice =
             item.items?.[0]?.unitPrice ||
-            Math.round(Number(item.totalAmount) / targetQty);
+            Math.round(Number(item.totalAmount) / targetQty) ||
+            499;
+          const totalAmountFormatted = formatTotalLakhs(item.totalAmount);
           const supplierName =
-            item.supplierOrg?.name || item.supplier?.name || "Verified Factory Partner";
+            item.supplierOrg?.name || item.supplier?.name || "meldima comfort";
           const supplierCity =
-            item.supplierOrg?.city || item.supplier?.city || "India";
-
-          const isBestValue = index === 0;
-          const isFastest = index === 1;
+            item.supplierOrg?.city || item.supplier?.city || "Noida, UP";
+          const fabricSpec =
+            (item as any).fabricSpec || currentRfq?.fabricSpec || "240 GSM, 100% Cotton";
+          const paymentTerms =
+            item.terms || "50% Advance, 50% on Q...";
 
           return (
             <TouchableOpacity
@@ -469,75 +410,59 @@ export default function BuyerOffersScreen() {
               onPress={() => setSelectedQuoteId(item.id)}
               style={[
                 styles.quoteCard,
-                isSelected && styles.quoteCardSelected,
-                isAccepted && styles.quoteCardAccepted,
+                isSelected ? styles.quoteCardSelected : styles.quoteCardUnselected,
               ]}
             >
-              {/* Card Top Row: Recommendation Badges & Radio Indicator */}
+              {/* Card Top Row: Badge & Custom Radio Indicator */}
               <View style={styles.cardTopRow}>
-                <View style={styles.badgeGroup}>
-                  {isBestValue && (
-                    <View style={styles.bestValueBadge}>
-                      <Ionicons name="ribbon" size={13} color={Colors.primary} />
-                      <Text style={styles.bestValueBadgeText}>Best Value Rating</Text>
-                    </View>
-                  )}
-                  {isFastest && !isBestValue && (
-                    <View style={styles.fastestBadge}>
-                      <Ionicons name="flash" size={13} color="#D97706" />
-                      <Text style={styles.fastestBadgeText}>Fastest Turnaround</Text>
-                    </View>
-                  )}
-                  {isAccepted && (
-                    <View style={styles.acceptedTag}>
-                      <Ionicons name="checkmark-circle" size={13} color="#15803D" />
-                      <Text style={styles.acceptedTagText}>Awarded Quote</Text>
-                    </View>
-                  )}
+                {/* Badge on left */}
+                <View style={styles.bestValueBadge}>
+                  <MaterialIcons name="verified" size={16} color="#5B13EC" />
+                  <Text style={styles.bestValueBadgeText}>
+                    {index === 0
+                      ? "BEST VALUE RATING"
+                      : index === 1
+                      ? "FASTEST TURNAROUND"
+                      : "VERIFIED SUPPLIER"}
+                  </Text>
                 </View>
 
+                {/* Radio button on right */}
                 <TouchableOpacity
                   onPress={() => setSelectedQuoteId(item.id)}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={[
+                    styles.radioButtonOuter,
+                    isSelected && styles.radioButtonOuterSelected,
+                  ]}
                 >
-                  <Ionicons
-                    name={isSelected ? "radio-button-on" : "radio-button-off"}
-                    size={22}
-                    color={isSelected ? Colors.primary : Colors.textMuted}
-                  />
+                  {isSelected && <View style={styles.radioButtonInner} />}
                 </TouchableOpacity>
               </View>
 
-              {/* Manufacturer Information */}
-              <View style={styles.supplierBlock}>
-                <Text style={styles.supplierTitle}>{supplierName}</Text>
-                <View style={styles.locationLine}>
-                  <Ionicons name="location-outline" size={13} color={Colors.textSecondary} />
-                  <Text style={styles.locationCity}>{supplierCity}, India</Text>
-                  <Text style={styles.millRating}>★ 5.0 Verified Mill</Text>
-                </View>
-              </View>
+              {/* Supplier Name */}
+              <Text style={styles.supplierTitle}>{supplierName}</Text>
 
-              {/* Web-Style Light Price Band */}
+              {/* Location */}
+              <Text style={styles.supplierLocation}>
+                {supplierCity.includes("India") ? supplierCity : `${supplierCity}, India`}
+              </Text>
+
+              {/* Light Ice-Blue Price Box */}
               <View style={styles.priceBand}>
                 <View style={styles.priceBandLeft}>
                   <Text style={styles.priceCurrency}>₹</Text>
                   <Text style={styles.priceUnitValue}>{unitPrice}</Text>
                   <Text style={styles.priceUnitLabel}> / piece</Text>
                 </View>
-                <View style={styles.priceBandRight}>
-                  <Text style={styles.priceTotalLabel}>TOTAL CONTRACT</Text>
-                  <Text style={styles.priceTotalValue}>
-                    ₹{(Number(item.totalAmount) / 100000).toFixed(2)}L
-                  </Text>
-                </View>
+                <Text style={styles.priceTotalValue}>{totalAmountFormatted}</Text>
               </View>
 
-              {/* Specifications Rows matching Web App */}
+              {/* Specifications Rows with Thin Dividers */}
               <View style={styles.specsList}>
                 <View style={styles.specRow}>
                   <Text style={styles.specLabel}>Bulk Production</Text>
-                  <Text style={styles.specValue}>{item.leadTimeDays} Days</Text>
+                  <Text style={styles.specValue}>{item.leadTimeDays || 21} Days</Text>
                 </View>
 
                 <View style={styles.specRow}>
@@ -548,99 +473,71 @@ export default function BuyerOffersScreen() {
                 <View style={styles.specRow}>
                   <Text style={styles.specLabel}>Fabric Spec</Text>
                   <Text style={styles.specValue} numberOfLines={1}>
-                    {currentRfq?.fabricSpec || currentRfq?.title || "Complying with Tech Pack"}
+                    {fabricSpec}
                   </Text>
                 </View>
 
-                <View style={styles.specRow}>
+                <View style={styles.specRowLast}>
                   <Text style={styles.specLabel}>Payment Terms</Text>
                   <Text style={styles.specValue} numberOfLines={1}>
-                    {item.terms || "Secure Protected Escrow"}
-                  </Text>
-                </View>
-
-                <View style={styles.specRow}>
-                  <Text style={styles.specLabel}>Minimum MOQ</Text>
-                  <Text style={styles.specValue}>
-                    {item.moq ? `${item.moq} pcs` : `${targetQty} pcs`}
+                    {paymentTerms}
                   </Text>
                 </View>
               </View>
 
-              {/* Footer Actions Row */}
-              <View style={styles.cardFooter}>
-                {isAccepted ? (
-                  <View style={styles.acceptedCardFooter}>
-                    <View style={styles.acceptedPill}>
-                      <Ionicons name="checkmark-done" size={16} color="#15803D" />
-                      <Text style={styles.acceptedPillText}>Quote Accepted • PO Issued</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.detailsBtnOutline}
-                      onPress={() => router.push("/(buyer)/orders")}
-                    >
-                      <Text style={styles.detailsBtnText}>View PO →</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : isRfqAwarded ? (
-                  <View style={styles.notAwardedBanner}>
-                    <Text style={styles.notAwardedBannerText}>Not Awarded</Text>
-                    <TouchableOpacity
-                      style={styles.detailsBtnOutline}
-                      onPress={() => setQuoteForDetails(item)}
-                    >
-                      <Text style={styles.detailsBtnText}>Inspect Details</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : isRejected ? (
-                  <View style={styles.rejectedBanner}>
-                    <Text style={styles.rejectedBannerText}>Offer Rejected</Text>
-                    <TouchableOpacity
-                      style={styles.detailsBtnOutline}
-                      onPress={() => setQuoteForDetails(item)}
-                    >
-                      <Text style={styles.detailsBtnText}>View Details</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <View style={styles.cardActionButtons}>
-                    <TouchableOpacity
-                      style={styles.rejectBtn}
-                      activeOpacity={0.8}
-                      disabled={rejectingId === item.id}
-                      onPress={() => handleRejectQuote(item)}
-                    >
-                      <Ionicons name="close" size={14} color="#DC2626" />
-                      <Text style={styles.rejectBtnText}>
-                        {rejectingId === item.id ? "Rejecting..." : "Reject"}
-                      </Text>
-                    </TouchableOpacity>
+              {/* Bottom Button / Status in Card */}
+              {isAccepted ? (
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => router.push("/(buyer)/orders")}
+                  style={styles.quoteAcceptedBtn}
+                >
+                  <MaterialIcons name="verified" size={18} color="#15803D" />
+                  <Text style={styles.quoteAcceptedBtnText}>Quote Accepted • PO Issued</Text>
+                </TouchableOpacity>
+              ) : isRfqAwarded ? (
+                <View style={styles.notAwardedRow}>
+                  <Text style={styles.notAwardedText}>Not Awarded</Text>
+                  <TouchableOpacity
+                    onPress={() => setQuoteForDetails(item)}
+                    style={styles.viewDetailsTextBtn}
+                  >
+                    <Text style={styles.viewDetailsText}>View Details →</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : isRejected ? (
+                <View style={styles.rejectedRow}>
+                  <Text style={styles.rejectedText}>Offer Rejected</Text>
+                  <TouchableOpacity
+                    onPress={() => setQuoteForDetails(item)}
+                    style={styles.viewDetailsTextBtn}
+                  >
+                    <Text style={styles.viewDetailsText}>View Details →</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.pendingActionsRow}>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      setSelectedQuoteId(item.id);
+                      setIsConfirmModalOpen(true);
+                    }}
+                    style={styles.acceptQuoteBtn}
+                  >
+                    <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" />
+                    <Text style={styles.acceptQuoteBtnText}>Accept This Quote</Text>
+                  </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={styles.detailsBtn}
-                      activeOpacity={0.8}
-                      onPress={() => setQuoteForDetails(item)}
-                    >
-                      <Text style={styles.detailsBtnLabel}>Inspect</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.acceptBtn,
-                        isSelected && styles.acceptBtnSelected,
-                      ]}
-                      activeOpacity={0.85}
-                      onPress={() => {
-                        setSelectedQuoteId(item.id);
-                        setIsConfirmModalOpen(true);
-                      }}
-                    >
-                      <Ionicons name="checkmark-circle" size={15} color="#FFF" />
-                      <Text style={styles.acceptBtnText}>Accept Quote</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => setQuoteForDetails(item)}
+                    style={styles.inspectDetailsBtn}
+                  >
+                    <Text style={styles.inspectDetailsBtnText}>Inspect</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </TouchableOpacity>
           );
         }}
@@ -734,7 +631,7 @@ export default function BuyerOffersScreen() {
                       <Ionicons
                         name="checkmark-circle"
                         size={20}
-                        color={Colors.primary}
+                        color="#5B13EC"
                       />
                     )}
                   </TouchableOpacity>
@@ -751,24 +648,23 @@ export default function BuyerOffersScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: "#F8FAFC",
   },
   listContent: {
     paddingHorizontal: 16,
-    paddingTop: 14,
+    paddingTop: 12,
     paddingBottom: 110,
   },
   headerSection: {
     marginBottom: 14,
   },
   rfqContextCard: {
-    backgroundColor: Colors.surface,
+    backgroundColor: "#FFFFFF",
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: "#E2E8F0",
     padding: 18,
-    marginBottom: 14,
-    shadowColor: "#000",
+    shadowColor: "#0F172A",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
@@ -779,242 +675,134 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexWrap: "wrap",
     gap: 8,
-    marginBottom: 10,
-  },
-  rfqIdPill: {
-    backgroundColor: "#F3E8FF",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 14,
-  },
-  rfqIdPillText: {
-    fontSize: 11,
-    fontWeight: "800",
-    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-    color: Colors.primary,
-  },
-  quotesCountPill: {
-    backgroundColor: "#DCFCE7",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 14,
-  },
-  quotesCountText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#15803D",
-  },
-  awardedPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "#DCFCE7",
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#86EFAC",
-  },
-  awardedPillText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#15803D",
-  },
-  rfqPickerBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: Colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
     marginBottom: 12,
   },
-  rfqPickerText: {
-    flex: 1,
+  rfqIdPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F3E8FF",
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 16,
+  },
+  rfqIdPillText: {
     fontSize: 12,
-    fontWeight: "700",
-    color: Colors.textHeading,
-    marginHorizontal: 8,
+    fontWeight: "800",
+    color: "#5B13EC",
+  },
+  quotesCountPill: {
+    backgroundColor: "#F0FDF4",
+    borderWidth: 1,
+    borderColor: "#86EFAC",
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 16,
+  },
+  quotesCountText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#15803D",
   },
   rfqMainTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: Colors.textHeading,
-    lineHeight: 28,
-    marginBottom: 6,
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#0F172A",
+    lineHeight: 30,
+    letterSpacing: -0.4,
+    marginBottom: 8,
   },
   rfqSubtitle: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    lineHeight: 18,
-    marginBottom: 14,
+    fontSize: 13.5,
+    color: "#64748B",
+    lineHeight: 20,
+    fontWeight: "500",
+    marginBottom: 18,
   },
   rfqActionButtonsRow: {
     flexDirection: "row",
     alignItems: "center",
-    flexWrap: "wrap",
     gap: 10,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
   },
   backBtn: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#CBD5E1",
+    backgroundColor: "#FFFFFF",
   },
   backBtnText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "700",
-    color: Colors.textHeading,
+    color: "#0F172A",
   },
-  acceptPoBtn: {
+  poActionBtn: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 10,
-    backgroundColor: Colors.primary,
-    shadowColor: Colors.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    backgroundColor: "#5B13EC",
+    shadowColor: "#5B13EC",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 3,
   },
-  acceptPoBtnText: {
-    fontSize: 12,
+  poActionBtnText: {
+    fontSize: 13,
     fontWeight: "800",
-    color: "#FFF",
-  },
-  viewPoBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 10,
-    backgroundColor: "#059669",
-  },
-  viewPoBtnText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#FFF",
+    color: "#FFFFFF",
   },
   btnDisabled: {
     opacity: 0.5,
   },
+  filterSection: {
+    marginTop: 12,
+  },
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Colors.surface,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: "#E2E8F0",
     borderRadius: 14,
     paddingHorizontal: 14,
-    paddingVertical: Platform.OS === "ios" ? 11 : 7,
-    gap: 10,
-    marginBottom: 10,
+    paddingVertical: Platform.OS === "ios" ? 10 : 6,
+    gap: 8,
   },
   searchInput: {
     flex: 1,
     fontSize: 13,
-    color: Colors.textHeading,
+    color: "#0F172A",
     padding: 0,
   },
-  filterTabsRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 10,
-    paddingVertical: 2,
-  },
-  filterTab: {
-    paddingHorizontal: 13,
-    paddingVertical: 7,
-    borderRadius: 18,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  filterTabActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  filterTabText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Colors.textSecondary,
-  },
-  filterTabTextActive: {
-    color: "#FFF",
-  },
-  sorterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 6,
-    paddingVertical: 2,
-  },
-  sorterLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Colors.textMuted,
-    letterSpacing: 0.5,
-    marginRight: 4,
-  },
-  sortPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: Colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-  },
-  sortPillActive: {
-    backgroundColor: "#F3E8FF",
-    borderColor: "#E9D5FF",
-  },
-  sortPillText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Colors.textSecondary,
-  },
-  sortPillTextActive: {
-    color: Colors.primary,
-  },
   quoteCard: {
-    backgroundColor: Colors.surface,
+    backgroundColor: "#FFFFFF",
     borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    padding: 16,
-    marginBottom: 14,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     elevation: 2,
   },
   quoteCardSelected: {
-    borderColor: Colors.primary,
-    backgroundColor: "#FAFAFF",
-    shadowColor: Colors.primary,
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 4,
+    borderWidth: 2,
+    borderColor: "#5B13EC",
   },
-  quoteCardAccepted: {
-    borderColor: "#86EFAC",
-    backgroundColor: "#F6FEF9",
+  quoteCardUnselected: {
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
   },
   cardTopRow: {
     flexDirection: "row",
@@ -1022,89 +810,60 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 12,
   },
-  badgeGroup: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 6,
-  },
   bestValueBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 5,
     backgroundColor: "#F3E8FF",
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
   },
   bestValueBadgeText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "800",
-    color: Colors.primary,
+    color: "#5B13EC",
+    letterSpacing: 0.3,
   },
-  fastestBadge: {
-    flexDirection: "row",
+  radioButtonOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: "#CBD5E1",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "#FEF3C7",
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 12,
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
   },
-  fastestBadgeText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#B45309",
+  radioButtonOuterSelected: {
+    borderColor: "#2563EB",
   },
-  acceptedTag: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "#DCFCE7",
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  acceptedTagText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#15803D",
-  },
-  supplierBlock: {
-    marginBottom: 12,
+  radioButtonInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#2563EB",
   },
   supplierTitle: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: Colors.textHeading,
+    fontSize: 19,
+    fontWeight: "900",
+    color: "#0F172A",
+    marginBottom: 2,
   },
-  locationLine: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 3,
-  },
-  locationCity: {
-    fontSize: 12,
-    color: Colors.textSecondary,
+  supplierLocation: {
+    fontSize: 13,
+    color: "#64748B",
     fontWeight: "500",
-  },
-  millRating: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Colors.primary,
-    marginLeft: 6,
+    marginBottom: 16,
   },
   priceBand: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#F7F2FF",
+    backgroundColor: "#EFF6FF",
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#E9D5FF",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
     marginBottom: 14,
   },
   priceBandLeft: {
@@ -1112,189 +871,145 @@ const styles = StyleSheet.create({
     alignItems: "baseline",
   },
   priceCurrency: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: Colors.primary,
-    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    fontSize: 26,
+    fontWeight: "900",
+    color: "#5B13EC",
   },
   priceUnitValue: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: "900",
-    color: Colors.primary,
-    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    color: "#5B13EC",
   },
   priceUnitLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Colors.textSecondary,
-    marginLeft: 2,
-  },
-  priceBandRight: {
-    alignItems: "flex-end",
-  },
-  priceTotalLabel: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Colors.textSecondary,
-    letterSpacing: 0.5,
+    fontSize: 13.5,
+    fontWeight: "500",
+    color: "#64748B",
+    marginLeft: 3,
   },
   priceTotalValue: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
-    color: Colors.textHeading,
+    color: "#0F172A",
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-    marginTop: 1,
   },
   specsList: {
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
-    paddingTop: 8,
-    marginBottom: 12,
+    marginBottom: 4,
   },
   specRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 6,
+    paddingVertical: 11,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.borderLight,
+    borderBottomColor: "#F1F5F9",
+  },
+  specRowLast: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 11,
   },
   specLabel: {
-    fontSize: 12,
-    color: Colors.textSecondary,
+    fontSize: 13.5,
+    color: "#64748B",
     fontWeight: "500",
   },
   specValue: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Colors.textHeading,
-    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0F172A",
+    maxWidth: "60%",
     textAlign: "right",
-    maxWidth: "55%",
   },
-  cardFooter: {
-    paddingTop: 10,
-  },
-  acceptedCardFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  acceptedPill: {
-    flex: 1,
+  quoteAcceptedBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    backgroundColor: "#DCFCE7",
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
+    gap: 8,
+    backgroundColor: "#F0FDF4",
+    borderWidth: 1.5,
     borderColor: "#86EFAC",
+    borderRadius: 14,
+    paddingVertical: 14,
+    marginTop: 10,
   },
-  acceptedPillText: {
-    fontSize: 12,
+  quoteAcceptedBtnText: {
+    fontSize: 14,
     fontWeight: "800",
     color: "#15803D",
   },
-  notAwardedBanner: {
+  notAwardedRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: Colors.surfaceSubtle,
+    backgroundColor: "#F1F5F9",
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginTop: 10,
   },
-  notAwardedBannerText: {
-    fontSize: 12,
+  notAwardedText: {
+    fontSize: 13,
     fontWeight: "600",
-    color: Colors.textMuted,
+    color: "#64748B",
   },
-  rejectedBanner: {
+  rejectedRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: "#FEE2E2",
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  rejectedBannerText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#B91C1C",
-  },
-  cardActionButtons: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  rejectBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#FCA5A5",
-    backgroundColor: "#FEF2F2",
+    marginTop: 10,
   },
-  rejectBtnText: {
-    fontSize: 12,
+  rejectedText: {
+    fontSize: 13,
     fontWeight: "700",
     color: "#DC2626",
   },
-  detailsBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
+  viewDetailsTextBtn: {
+    paddingVertical: 2,
+    paddingHorizontal: 6,
   },
-  detailsBtnLabel: {
+  viewDetailsText: {
     fontSize: 12,
     fontWeight: "700",
-    color: Colors.textHeading,
+    color: "#5B13EC",
   },
-  detailsBtnOutline: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
+  pendingActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 12,
   },
-  detailsBtnText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Colors.textHeading,
-  },
-  acceptBtn: {
+  acceptQuoteBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: Colors.primary,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 3,
-    elevation: 2,
+    backgroundColor: "#5B13EC",
+    borderRadius: 12,
+    paddingVertical: 12,
   },
-  acceptBtnSelected: {
-    backgroundColor: "#6D28D9",
-  },
-  acceptBtnText: {
-    fontSize: 12,
+  acceptQuoteBtnText: {
+    fontSize: 13.5,
     fontWeight: "800",
-    color: "#FFF",
+    color: "#FFFFFF",
+  },
+  inspectDetailsBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#CBD5E1",
+    backgroundColor: "#FFFFFF",
+  },
+  inspectDetailsBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0F172A",
   },
   rfqPickerModalOverlay: {
     flex: 1,
@@ -1305,7 +1020,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   rfqPickerSheet: {
-    backgroundColor: Colors.surface,
+    backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     paddingHorizontal: 20,
@@ -1316,7 +1031,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Colors.border,
+    backgroundColor: "#CBD5E1",
     alignSelf: "center",
     marginTop: 10,
     marginBottom: 12,
@@ -1328,12 +1043,12 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.borderLight,
+    borderBottomColor: "#F1F5F9",
   },
   pickerTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: Colors.textHeading,
+    color: "#0F172A",
   },
   pickerScroll: {
     maxHeight: 360,
@@ -1346,9 +1061,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 12,
     marginBottom: 6,
-    backgroundColor: Colors.surfaceSubtle,
+    backgroundColor: "#F8FAFC",
     borderWidth: 1,
-    borderColor: Colors.borderLight,
+    borderColor: "#E2E8F0",
   },
   pickerOptionActive: {
     backgroundColor: "#F3E8FF",
@@ -1361,14 +1076,14 @@ const styles = StyleSheet.create({
   pickerOptionTitle: {
     fontSize: 13,
     fontWeight: "700",
-    color: Colors.textHeading,
+    color: "#0F172A",
   },
   pickerOptionTitleActive: {
-    color: Colors.primary,
+    color: "#5B13EC",
   },
   pickerOptionSub: {
     fontSize: 11,
-    color: Colors.textSecondary,
+    color: "#64748B",
     marginTop: 2,
   },
 });

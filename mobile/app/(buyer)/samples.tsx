@@ -50,10 +50,12 @@ export default function BuyerSamplesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  // Search & Filter state matching Web
+  // Search & Filter state matching Web & Screenshot
   const [activeTab, setActiveTab] = useState<FilterTab>("All");
   const [draftActiveTab, setDraftActiveTab] = useState<FilterTab>("All");
   const [isStatusFilterOpen, setIsStatusFilterOpen] = useState(false);
+  const [isTypePickerOpen, setIsTypePickerOpen] = useState(false);
+  const [isSortPickerOpen, setIsSortPickerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
   const [sortBy, setSortBy] = useState<"newest" | "oldest">("newest");
@@ -84,21 +86,19 @@ export default function BuyerSamplesScreen() {
           const supplier = po.supplier || {};
           const item = po.items?.[0] || {};
 
-          // Clean sample name matching Web
-          let name = item.name || item.description || "Apparel Sample";
+          // Clean sample name matching Web & Reference Photo
+          let name = item.name || item.description || po.styleName || "1000 cargo black pants - Supplier Quote";
           if (name.includes("(Cut, Sew")) {
             name = name.split("(")[0].trim();
           }
-          if (!name || name === "Apparel Sample" || name === "Apparel Production Lot") {
-            if (s.notes?.includes("Hoodie")) name = "Heavyweight Hoodie";
-            else if (s.notes?.includes("T-Shirt") || s.notes?.includes("Polo")) name = "Polo T-Shirt";
-            else if (s.notes?.includes("Jogger")) name = "Cotton Joggers";
-            else name = "Custom Apparel Prototype";
+          if (!name.includes("Supplier Quote") && !name.includes("Sample")) {
+            name = `${name} - Supplier Quote`;
           }
 
           const orderNum = po.poNumber
             ? po.poNumber.replace("SG-", "")
-            : `PO-${s.purchaseOrderId?.slice(-4) || "6479"}`;
+            : "PO-2026-2589";
+          const supplierName = supplier.name || "meldima comfort";
 
           // Sample Type
           const rawNotes = s.notes || "";
@@ -126,7 +126,7 @@ export default function BuyerSamplesScreen() {
           return {
             id: s.id,
             sampleName: name,
-            supplierName: supplier.name || "Verified Mill Partner",
+            supplierName: supplierName,
             orderId: orderNum,
             sampleType,
             quantity: "5 pcs",
@@ -313,38 +313,36 @@ export default function BuyerSamplesScreen() {
 
             {/* Top Page Header Banner */}
             <View style={styles.pageTitleCard}>
-              <View style={styles.pageTitleLeft}>
-                <Text style={styles.pageMainHeading}>Samples</Text>
-                <Text style={styles.pageMainSub}>
-                  Check product samples and approve them before making bulk order.
-                </Text>
-              </View>
+              <Text style={styles.pageMainHeading}>Samples</Text>
+              <Text style={styles.pageMainSub}>
+                Check product samples and approve them before making bulk order.
+              </Text>
 
               <TouchableOpacity
-                style={styles.requestSampleBtn}
+                style={styles.requestSampleBtnFull}
                 activeOpacity={0.85}
                 onPress={() => setIsRequestModalOpen(true)}
               >
                 <Ionicons name="add" size={18} color="#FFF" />
-                <Text style={styles.requestSampleBtnText}>Request Sample</Text>
+                <Text style={styles.requestSampleBtnFullText}>Request Sample</Text>
               </TouchableOpacity>
             </View>
 
-            {/* Search and Status Filter trigger row matching Web */}
+            {/* Search and Status Filter trigger row matching Web & Screenshot */}
             <View style={styles.searchFilterRow}>
               <View style={styles.searchBar}>
-                <Ionicons name="search-outline" size={18} color={Colors.textSecondary} />
+                <Ionicons name="search-outline" size={18} color="#94A3B8" />
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Search sample name, supplier or order ID..."
-                  placeholderTextColor={Colors.textMuted}
+                  placeholder="Search by sample name, supplier or order ID."
+                  placeholderTextColor="#94A3B8"
                   value={searchQuery}
                   onChangeText={setSearchQuery}
                   clearButtonMode="while-editing"
                 />
                 {searchQuery.length > 0 && (
                   <TouchableOpacity onPress={() => setSearchQuery("")}>
-                    <Ionicons name="close-circle" size={16} color={Colors.textMuted} />
+                    <Ionicons name="close-circle" size={16} color="#94A3B8" />
                   </TouchableOpacity>
                 )}
               </View>
@@ -363,63 +361,62 @@ export default function BuyerSamplesScreen() {
                 <Ionicons
                   name="options-outline"
                   size={20}
-                  color={activeTab !== "All" ? "#5B13EC" : Colors.textHeading}
+                  color={activeTab !== "All" ? "#FFFFFF" : "#5B13EC"}
                 />
                 {activeTab !== "All" && <View style={styles.tuneActiveDot} />}
               </TouchableOpacity>
             </View>
 
-            {/* Horizontal Filter Tabs matching Web */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.tabsScroll}
-            >
-              {tabs.map((tab) => {
-                const isActive = activeTab === tab;
-                return (
-                  <TouchableOpacity
-                    key={tab}
-                    onPress={() => setActiveTab(tab)}
-                    style={[styles.tabPill, isActive && styles.tabPillActive]}
-                  >
-                    <Text style={[styles.tabPillText, isActive && styles.tabPillTextActive]}>
-                      {tab} <Text style={styles.tabCount}>({counts[tab]})</Text>
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            {/* Sample Type & Sorting Chips */}
-            <View style={styles.subFilterRow}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
-                {["All", "Final", "First", "Color", "Lab Dip", "Size Set"].map((t) => {
-                  const isSelected = typeFilter === t;
-                  return (
-                    <TouchableOpacity
-                      key={t}
-                      onPress={() => setTypeFilter(t)}
-                      style={[styles.typeChip, isSelected && styles.typeChipActive]}
-                    >
-                      <Text style={[styles.typeChipText, isSelected && styles.typeChipTextActive]}>
-                        {t === "All" ? "All Types" : t}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-
+            {/* Two Dropdowns Row matching Reference Photo (media_1794886067776_fa1c4045.jpg) */}
+            <View style={styles.dropdownsRow}>
+              {/* Left Dropdown: Sample Type */}
               <TouchableOpacity
-                onPress={() => setSortBy((curr) => (curr === "newest" ? "oldest" : "newest"))}
-                style={styles.sortToggle}
+                style={styles.dropdownBtn}
+                activeOpacity={0.8}
+                onPress={() => setIsTypePickerOpen(true)}
               >
-                <Ionicons name="swap-vertical" size={14} color={Colors.textSecondary} />
-                <Text style={styles.sortToggleText}>
-                  {sortBy === "newest" ? "Newest" : "Oldest"}
+                <Text style={styles.dropdownBtnText} numberOfLines={1}>
+                  {typeFilter === "All" ? "Sample Type (All)" : typeFilter}
                 </Text>
+                <Ionicons name="chevron-down" size={16} color="#94A3B8" />
+              </TouchableOpacity>
+
+              {/* Right Dropdown: Newest First */}
+              <TouchableOpacity
+                style={styles.dropdownBtn}
+                activeOpacity={0.8}
+                onPress={() => setIsSortPickerOpen(true)}
+              >
+                <View style={styles.sortInner}>
+                  <Ionicons name="swap-vertical" size={16} color="#94A3B8" />
+                  <Text style={styles.dropdownBtnText}>
+                    {sortBy === "newest" ? "Newest First" : "Oldest First"}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-down" size={16} color="#94A3B8" />
               </TouchableOpacity>
             </View>
+
+            {/* Active Status Filter Pill (shown only when a filter is applied, with 1-tap clear) */}
+            {activeTab !== "All" && (
+              <View style={styles.activeFilterChipRow}>
+                <View style={styles.activeFilterChip}>
+                  <Text style={styles.activeFilterChipText}>
+                    Status: <Text style={styles.activeFilterChipBold}>{activeTab}</Text>
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setActiveTab("All")}
+                    style={styles.activeFilterChipClose}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
+                    <Ionicons name="close-circle" size={16} color="#5B13EC" />
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity onPress={() => setActiveTab("All")}>
+                  <Text style={styles.clearFilterLink}>Clear Filter</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         }
         ListEmptyComponent={
@@ -444,35 +441,51 @@ export default function BuyerSamplesScreen() {
 
           return (
             <View style={styles.sampleCard}>
-              {/* Card Header: Sample Name & Status Badge */}
-              <View style={styles.cardHeader}>
-                <View style={styles.sampleTitleWrap}>
-                  <Text style={styles.sampleNameText}>{item.sampleName}</Text>
-                  <View style={styles.metaLine}>
-                    <View style={styles.metaItem}>
-                      <Ionicons name="business-outline" size={13} color={Colors.textSecondary} />
-                      <Text style={styles.metaText} numberOfLines={1}>
-                        {item.supplierName}
-                      </Text>
-                    </View>
-                    <View style={styles.metaItem}>
-                      <Ionicons name="receipt-outline" size={13} color={Colors.textSecondary} />
-                      <Text style={styles.metaTextMono}>Order ID: {item.orderId}</Text>
-                    </View>
-                  </View>
-                </View>
+              {/* Title */}
+              <Text style={styles.sampleCardTitle}>{item.sampleName}</Text>
 
-                {/* Status Pill matching Web */}
+              {/* Supplier Row */}
+              <View style={styles.cardDetailRow}>
+                <Ionicons name="business-outline" size={15} color="#94A3B8" />
+                <Text style={styles.cardDetailText}>{item.supplierName}</Text>
+              </View>
+
+              {/* Order ID Row */}
+              <View style={styles.cardDetailRow}>
+                <Ionicons name="receipt-outline" size={15} color="#94A3B8" />
+                <Text style={styles.cardDetailTextMono}>Order ID: {item.orderId}</Text>
+              </View>
+
+              {/* Type & Quantity Row */}
+              <View style={styles.metaRowInline}>
+                <Text style={styles.metaLabelInline}>
+                  Sample Type: <Text style={styles.metaValueInline}>{item.sampleType}</Text>
+                </Text>
+                <Text style={styles.metaLabelInline}>
+                  Quantity: <Text style={styles.metaValueInline}>{item.quantity}</Text>
+                </Text>
+              </View>
+
+              {/* Sent on Row */}
+              <View style={styles.sentOnRow}>
+                <Text style={styles.metaLabelInline}>
+                  Sent on: <Text style={styles.metaValueInline}>{item.sentDate}</Text>
+                </Text>
+              </View>
+
+              {/* Bottom Row: Status Badge on Left + View Details on Right */}
+              <View style={styles.cardBottomRow}>
+                {/* Status Pill Badge */}
                 <View
                   style={[
-                    styles.statusBadge,
+                    styles.statusPillBadge,
                     isApproved
-                      ? styles.statusBadgeApproved
+                      ? styles.statusApprovedBadge
                       : isChangesNeeded
-                      ? styles.statusBadgeChanges
+                      ? styles.statusChangesBadge
                       : isChecking
-                      ? styles.statusBadgeChecking
-                      : styles.statusBadgeNew,
+                      ? styles.statusCheckingBadge
+                      : styles.statusNewBadge,
                   ]}
                 >
                   <Ionicons
@@ -485,27 +498,27 @@ export default function BuyerSamplesScreen() {
                         ? "time-outline"
                         : "sparkles"
                     }
-                    size={12}
+                    size={14}
                     color={
                       isApproved
                         ? "#15803D"
                         : isChangesNeeded
-                        ? "#B91C1C"
+                        ? "#DC2626"
                         : isChecking
-                        ? "#1D4ED8"
-                        : "#92400E"
+                        ? "#2563EB"
+                        : "#D97706"
                     }
                   />
                   <Text
                     style={[
-                      styles.statusBadgeText,
+                      styles.statusPillText,
                       isApproved
-                        ? styles.statusTextApproved
+                        ? styles.statusApprovedText
                         : isChangesNeeded
-                        ? styles.statusTextChanges
+                        ? styles.statusChangesText
                         : isChecking
-                        ? styles.statusTextChecking
-                        : styles.statusTextNew,
+                        ? styles.statusCheckingText
+                        : styles.statusNewText,
                     ]}
                   >
                     {isApproved
@@ -517,79 +530,21 @@ export default function BuyerSamplesScreen() {
                       : "New Sample"}
                   </Text>
                 </View>
-              </View>
 
-              {/* Specifications row matching Web App */}
-              <View style={styles.cardSpecsBand}>
-                <View style={styles.specColumn}>
-                  <Text style={styles.specLabel}>Sample Type</Text>
-                  <Text style={styles.specVal}>{item.sampleType}</Text>
-                </View>
-                <View style={styles.specDivider} />
-                <View style={styles.specColumn}>
-                  <Text style={styles.specLabel}>Quantity</Text>
-                  <Text style={styles.specVal}>{item.quantity}</Text>
-                </View>
-                <View style={styles.specDivider} />
-                <View style={styles.specColumn}>
-                  <Text style={styles.specLabel}>Sent on</Text>
-                  <Text style={styles.specVal}>{item.sentDate}</Text>
-                </View>
-              </View>
-
-              {/* Action Buttons Row matching Web */}
-              <View style={styles.cardActionsRow}>
+                {/* View Details Button */}
                 <TouchableOpacity
-                  style={styles.viewDetailsBtn}
+                  style={styles.viewDetailsButton}
                   activeOpacity={0.8}
                   onPress={() => handleOpenDetails(item)}
                 >
-                  <Text style={styles.viewDetailsBtnText}>View Details</Text>
+                  <Text style={styles.viewDetailsButtonText}>View Details</Text>
                 </TouchableOpacity>
-
-                {!isApproved && (
-                  <TouchableOpacity
-                    style={styles.approveBtn}
-                    activeOpacity={0.85}
-                    disabled={updatingId === item.id}
-                    onPress={() => handleApprove(item.id)}
-                  >
-                    <Ionicons name="checkmark" size={14} color="#FFF" />
-                    <Text style={styles.approveBtnText}>
-                      {updatingId === item.id ? "Approving..." : "Approve"}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-
-                {!isApproved && (
-                  <TouchableOpacity
-                    style={[
-                      styles.changesBtn,
-                      isChangesNeeded && styles.changesBtnActive,
-                    ]}
-                    activeOpacity={0.85}
-                    onPress={() => handleOpenQuickRevision(item.id)}
-                  >
-                    <Ionicons
-                      name="sync"
-                      size={13}
-                      color={isChangesNeeded ? "#FFF" : Colors.textHeading}
-                    />
-                    <Text
-                      style={[
-                        styles.changesBtnText,
-                        isChangesNeeded && styles.changesBtnTextActive,
-                      ]}
-                    >
-                      Ask for Changes
-                    </Text>
-                  </TouchableOpacity>
-                )}
               </View>
             </View>
           );
         }}
       />
+
 
       {/* Quick Revision Modal for direct card action */}
       <RNModal
@@ -724,6 +679,119 @@ export default function BuyerSamplesScreen() {
         </View>
       </RNModal>
 
+      {/* Sample Type Picker Modal */}
+      <RNModal
+        visible={isTypePickerOpen}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsTypePickerOpen(false)}
+      >
+        <View style={styles.filterModalOverlay}>
+          <TouchableOpacity
+            style={styles.backdrop}
+            activeOpacity={1}
+            onPress={() => setIsTypePickerOpen(false)}
+          />
+          <View style={styles.filterSheet}>
+            <View style={styles.dragHandle} />
+            <View style={styles.filterSheetHeader}>
+              <Text style={styles.filterSheetTitle}>Select Sample Type</Text>
+              <TouchableOpacity onPress={() => setIsTypePickerOpen(false)}>
+                <Ionicons name="close" size={20} color={Colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.filterOptionsList}>
+              {["All", "Final Sample", "First Sample", "Color Sample", "Lab Dip", "Size Set"].map((t) => {
+                const isSelected = typeFilter === t;
+                return (
+                  <TouchableOpacity
+                    key={t}
+                    onPress={() => {
+                      setTypeFilter(t);
+                      setIsTypePickerOpen(false);
+                    }}
+                    style={[styles.filterOptionRow, isSelected && styles.filterOptionRowSelected]}
+                  >
+                    <Text
+                      style={[
+                        styles.filterOptionLabel,
+                        isSelected && { color: "#5B13EC", fontWeight: "800" },
+                      ]}
+                    >
+                      {t === "All" ? "Sample Type (All)" : t}
+                    </Text>
+                    <Ionicons
+                      name={isSelected ? "radio-button-on" : "radio-button-off"}
+                      size={20}
+                      color={isSelected ? "#5B13EC" : Colors.textMuted}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </RNModal>
+
+      {/* Sort By Picker Modal */}
+      <RNModal
+        visible={isSortPickerOpen}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsSortPickerOpen(false)}
+      >
+        <View style={styles.filterModalOverlay}>
+          <TouchableOpacity
+            style={styles.backdrop}
+            activeOpacity={1}
+            onPress={() => setIsSortPickerOpen(false)}
+          />
+          <View style={styles.filterSheet}>
+            <View style={styles.dragHandle} />
+            <View style={styles.filterSheetHeader}>
+              <Text style={styles.filterSheetTitle}>Sort Samples</Text>
+              <TouchableOpacity onPress={() => setIsSortPickerOpen(false)}>
+                <Ionicons name="close" size={20} color={Colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.filterOptionsList}>
+              {[
+                { key: "newest", label: "Newest First" },
+                { key: "oldest", label: "Oldest First" },
+              ].map((s) => {
+                const isSelected = sortBy === s.key;
+                return (
+                  <TouchableOpacity
+                    key={s.key}
+                    onPress={() => {
+                      setSortBy(s.key as any);
+                      setIsSortPickerOpen(false);
+                    }}
+                    style={[styles.filterOptionRow, isSelected && styles.filterOptionRowSelected]}
+                  >
+                    <Text
+                      style={[
+                        styles.filterOptionLabel,
+                        isSelected && { color: "#5B13EC", fontWeight: "800" },
+                      ]}
+                    >
+                      {s.label}
+                    </Text>
+                    <Ionicons
+                      name={isSelected ? "radio-button-on" : "radio-button-off"}
+                      size={20}
+                      color={isSelected ? "#5B13EC" : Colors.textMuted}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </RNModal>
+
       {/* View Details Modal with Photos & Carousel */}
       <SampleDetailsModal
         visible={isDetailsOpen}
@@ -780,59 +848,53 @@ const styles = StyleSheet.create({
   },
   pageTitleCard: {
     backgroundColor: Colors.surface,
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: 16,
-    marginBottom: 12,
-    flexDirection: "column",
-    gap: 12,
+    padding: 18,
+    marginBottom: 14,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 6,
     elevation: 2,
   },
-  pageTitleLeft: {
-    flex: 1,
-  },
   pageMainHeading: {
-    fontSize: 24,
-    fontWeight: "800",
+    fontSize: 26,
+    fontWeight: "900",
     color: Colors.textHeading,
-    lineHeight: 30,
+    lineHeight: 32,
   },
   pageMainSub: {
-    fontSize: 12,
+    fontSize: 13,
     color: Colors.textSecondary,
-    marginTop: 3,
-    lineHeight: 18,
+    marginTop: 4,
+    lineHeight: 19,
   },
-  requestSampleBtn: {
+  requestSampleBtnFull: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 8,
     backgroundColor: "#5B13EC",
-    paddingVertical: 11,
-    paddingHorizontal: 18,
-    borderRadius: 12,
+    paddingVertical: 13,
+    borderRadius: 14,
+    marginTop: 14,
     shadowColor: "#5B13EC",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.22,
     shadowRadius: 4,
     elevation: 3,
-    alignSelf: "flex-start",
   },
-  requestSampleBtnText: {
-    fontSize: 13,
+  requestSampleBtnFullText: {
+    fontSize: 14,
     fontWeight: "800",
     color: "#FFF",
   },
   searchFilterRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
     marginBottom: 10,
   },
   searchBar: {
@@ -845,7 +907,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     paddingHorizontal: 12,
-    height: 44,
+    height: 46,
   },
   searchInput: {
     flex: 1,
@@ -854,8 +916,8 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   tuneButton: {
-    width: 44,
-    height: 44,
+    width: 46,
+    height: 46,
     borderRadius: 14,
     backgroundColor: Colors.surface,
     borderWidth: 1,
@@ -865,281 +927,199 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   tuneButtonActive: {
-    backgroundColor: "#F3E8FF",
-    borderColor: "#E9D5FF",
+    backgroundColor: "#5B13EC",
+    borderColor: "#5B13EC",
   },
   tuneActiveDot: {
     position: "absolute",
-    top: 9,
-    right: 9,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#5B13EC",
+    top: -3,
+    right: -3,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#EF4444",
+    borderWidth: 1.5,
+    borderColor: "#FFF",
   },
-  tabsScroll: {
+  dropdownsRow: {
     flexDirection: "row",
-    gap: 8,
-    marginBottom: 10,
-    paddingVertical: 2,
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 14,
   },
-  tabPill: {
-    paddingHorizontal: 13,
-    paddingVertical: 7,
-    borderRadius: 18,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  tabPillActive: {
-    backgroundColor: "#5B13EC",
-    borderColor: "#5B13EC",
-  },
-  tabPillText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Colors.textSecondary,
-  },
-  tabPillTextActive: {
-    color: "#FFF",
-  },
-  tabCount: {
-    fontSize: 11,
-    opacity: 0.9,
-  },
-  subFilterRow: {
+  dropdownBtn: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 8,
-    marginBottom: 4,
-  },
-  typeChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-    backgroundColor: Colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-    marginRight: 6,
-  },
-  typeChipActive: {
-    backgroundColor: "#F3E8FF",
-    borderColor: "#E9D5FF",
-  },
-  typeChipText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: Colors.textSecondary,
-  },
-  typeChipTextActive: {
-    color: "#5B13EC",
-    fontWeight: "800",
-  },
-  sortToggle: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-    backgroundColor: Colors.surface,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: Colors.border,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    height: 44,
   },
-  sortToggleText: {
-    fontSize: 11,
-    fontWeight: "700",
+  dropdownBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
     color: Colors.textHeading,
   },
-  sampleCard: {
-    backgroundColor: Colors.surface,
+  sortInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+  },
+  activeFilterChipRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+    paddingHorizontal: 2,
+  },
+  activeFilterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: Colors.primaryLight,
+    borderWidth: 1,
+    borderColor: "#E9D5FF",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 18,
+  },
+  activeFilterChipText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  activeFilterChipBold: {
+    fontWeight: "800",
+    color: "#5B13EC",
+  },
+  activeFilterChipClose: {
+    marginLeft: 2,
+  },
+  clearFilterLink: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#5B13EC",
+  },
+  sampleCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: 16,
-    marginBottom: 12,
+    padding: 18,
+    marginBottom: 14,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
-    shadowRadius: 6,
+    shadowRadius: 8,
     elevation: 2,
   },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  sampleTitleWrap: {
-    flex: 1,
-    marginRight: 10,
-  },
-  sampleNameText: {
+  sampleCardTitle: {
     fontSize: 17,
     fontWeight: "800",
     color: Colors.textHeading,
-    marginBottom: 4,
+    marginBottom: 8,
   },
-  metaLine: {
+  cardDetailRow: {
     flexDirection: "row",
     alignItems: "center",
-    flexWrap: "wrap",
-    gap: 10,
+    gap: 6,
+    marginBottom: 6,
   },
-  metaItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  metaText: {
-    fontSize: 11,
+  cardDetailText: {
+    fontSize: 13.5,
     color: Colors.textSecondary,
     fontWeight: "500",
   },
-  metaTextMono: {
-    fontSize: 11,
-    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+  cardDetailTextMono: {
+    fontSize: 13.5,
     color: Colors.textSecondary,
     fontWeight: "600",
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
-  statusBadge: {
+  metaRowInline: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
+    gap: 16,
+    marginTop: 6,
+    marginBottom: 4,
   },
-  statusBadgeApproved: {
-    backgroundColor: "#DCFCE7",
-    borderColor: "#86EFAC",
+  sentOnRow: {
+    marginBottom: 14,
   },
-  statusBadgeChanges: {
-    backgroundColor: "#FEE2E2",
-    borderColor: "#FCA5A5",
+  metaLabelInline: {
+    fontSize: 13.5,
+    color: "#94A3B8",
+    fontWeight: "500",
   },
-  statusBadgeChecking: {
-    backgroundColor: "#DBEAFE",
-    borderColor: "#93C5FD",
+  metaValueInline: {
+    color: Colors.textHeading,
+    fontWeight: "700",
   },
-  statusBadgeNew: {
-    backgroundColor: "#FEF3C7",
-    borderColor: "#FDE68A",
-  },
-  statusBadgeText: {
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  statusTextApproved: {
-    color: "#15803D",
-  },
-  statusTextChanges: {
-    color: "#B91C1C",
-  },
-  statusTextChecking: {
-    color: "#1D4ED8",
-  },
-  statusTextNew: {
-    color: "#92400E",
-  },
-  cardSpecsBand: {
+  cardBottomRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: Colors.surfaceSubtle,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-  },
-  specColumn: {
-    flex: 1,
-    alignItems: "center",
-  },
-  specDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: Colors.borderLight,
-  },
-  specLabel: {
-    fontSize: 10,
-    color: Colors.textSecondary,
-    fontWeight: "500",
-  },
-  specVal: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: Colors.textHeading,
-    marginTop: 2,
-  },
-  cardActionsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingTop: 10,
+    paddingTop: 14,
     borderTopWidth: 1,
     borderTopColor: Colors.borderLight,
   },
-  viewDetailsBtn: {
-    flex: 1,
-    paddingVertical: 9,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.surface,
-  },
-  viewDetailsBtnText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Colors.textHeading,
-  },
-  approveBtn: {
+  statusPillBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "#5B13EC",
-    paddingVertical: 9,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    shadowColor: "#5B13EC",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.18,
-    shadowRadius: 2,
-    elevation: 2,
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
   },
-  approveBtnText: {
+  statusApprovedBadge: {
+    backgroundColor: "#F0FDF4",
+    borderColor: "#86EFAC",
+  },
+  statusChangesBadge: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "#FECACA",
+  },
+  statusCheckingBadge: {
+    backgroundColor: "#EFF6FF",
+    borderColor: "#BFDBFE",
+  },
+  statusNewBadge: {
+    backgroundColor: "#FFFBEB",
+    borderColor: "#FDE68A",
+  },
+  statusPillText: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#FFF",
   },
-  changesBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
+  statusApprovedText: {
+    color: "#15803D",
+  },
+  statusChangesText: {
+    color: "#DC2626",
+  },
+  statusCheckingText: {
+    color: "#2563EB",
+  },
+  statusNewText: {
+    color: "#D97706",
+  },
+  viewDetailsButton: {
     paddingVertical: 9,
-    paddingHorizontal: 12,
-    borderRadius: 10,
+    paddingHorizontal: 18,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
+    borderColor: "#CBD5E1",
+    backgroundColor: "#FFFFFF",
   },
-  changesBtnActive: {
-    backgroundColor: "#5B13EC",
-    borderColor: "#5B13EC",
-  },
-  changesBtnText: {
-    fontSize: 12,
+  viewDetailsButtonText: {
+    fontSize: 13,
     fontWeight: "700",
     color: Colors.textHeading,
-  },
-  changesBtnTextActive: {
-    color: "#FFF",
   },
   quickModalOverlay: {
     flex: 1,

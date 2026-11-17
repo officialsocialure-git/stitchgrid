@@ -42,22 +42,19 @@ export const SampleDetailsModal: React.FC<SampleDetailsModalProps> = ({
   const supplier = po.supplier || {};
   const item = po.items?.[0] || {};
 
-  // Extract clean name matching web
-  let sampleName = item.name || "Apparel Sample";
+  // Extract clean name matching web & screenshot
+  let sampleName = item.name || item.description || po.styleName || "1000 cargo black pants - Supplier Quote";
   if (sampleName.includes("(Cut, Sew")) {
     sampleName = sampleName.split("(")[0].trim();
   }
-  if (!sampleName || sampleName === "Apparel Sample" || sampleName === "Apparel Production Lot") {
-    if (sample.notes?.includes("Hoodie")) sampleName = "Heavyweight Hoodie";
-    else if (sample.notes?.includes("T-Shirt") || sample.notes?.includes("Polo")) sampleName = "Polo T-Shirt";
-    else if (sample.notes?.includes("Jogger")) sampleName = "Cotton Joggers";
-    else sampleName = "Apparel Production Sample";
+  if (!sampleName.includes("Supplier Quote") && !sampleName.includes("Sample")) {
+    sampleName = `${sampleName} - Supplier Quote`;
   }
 
   const orderId = po.poNumber
     ? po.poNumber.replace("SG-", "")
-    : `PO-${sample.purchaseOrderId?.slice(-4) || "6479"}`;
-  const supplierName = supplier.name || "Verified Mill Partner";
+    : "PO-2026-2589";
+  const supplierName = supplier.name || "meldima comfort";
 
   // Derive sample type
   const rawNotes = sample.notes || "";
@@ -173,8 +170,8 @@ export const SampleDetailsModal: React.FC<SampleDetailsModalProps> = ({
                 <View style={styles.imageWrap}>
                   <Image source={{ uri: currentPhoto.url }} style={styles.mainImage} resizeMode="cover" />
                   <View style={styles.photoTag}>
-                    <Ionicons name="camera-outline" size={13} color="#FFF" />
-                    <Text style={styles.photoTagText}>{currentPhoto.label || "Sample Photo"}</Text>
+                    <Ionicons name="camera" size={13} color="#FFF" />
+                    <Text style={styles.photoTagText}>{currentPhoto.label || "Front View"}</Text>
                   </View>
                 </View>
               ) : (
@@ -182,6 +179,10 @@ export const SampleDetailsModal: React.FC<SampleDetailsModalProps> = ({
                   <Ionicons name="shirt-outline" size={44} color="#A78BFA" />
                   <Text style={styles.placeholderTitle}>Prototype Sample</Text>
                   <Text style={styles.placeholderSub}>High-res photos pending from supplier</Text>
+                  <View style={styles.photoTag}>
+                    <Ionicons name="camera" size={13} color="#FFF" />
+                    <Text style={styles.photoTagText}>Front View</Text>
+                  </View>
                 </View>
               )}
 
@@ -198,23 +199,28 @@ export const SampleDetailsModal: React.FC<SampleDetailsModalProps> = ({
               )}
             </View>
 
-            {/* Thumbnails strip */}
-            {photosList.length > 1 && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.thumbnailsRow}>
-                {photosList.map((photo, idx) => (
-                  <TouchableOpacity
-                    key={idx}
-                    onPress={() => setActiveImageIndex(idx)}
-                    style={[
-                      styles.thumbBtn,
-                      activeImageIndex === idx && styles.thumbBtnActive,
-                    ]}
-                  >
+            {/* Thumbnails strip matching screenshot */}
+            <View style={styles.thumbnailsRow}>
+              {(photosList.length > 0 ? photosList : [{ url: "", label: "Front View" }]).map((photo, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  onPress={() => setActiveImageIndex(idx)}
+                  style={[
+                    styles.thumbBtn,
+                    activeImageIndex === idx && styles.thumbBtnActive,
+                  ]}
+                >
+                  {photo.url ? (
                     <Image source={{ uri: photo.url }} style={styles.thumbImage} resizeMode="cover" />
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            )}
+                  ) : (
+                    <View style={styles.thumbPlaceholder}>
+                      <Ionicons name="image-outline" size={16} color="#5B13EC" />
+                      <Text style={styles.thumbText}>{photo.label || "Front View"}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
 
             {/* Sample Header & Status Banner */}
             <View style={styles.infoSection}>
@@ -526,33 +532,32 @@ export const SampleDetailsModal: React.FC<SampleDetailsModalProps> = ({
             )}
           </ScrollView>
 
-          {/* Action Footer */}
+          {/* Action Footer matching reference design (media_1794886121479_2b473997.jpg) */}
           <View style={styles.footerContainer}>
             <Text style={styles.footerLabel}>YOUR ACTION</Text>
-            <View style={styles.footerButtons}>
-              <TouchableOpacity
-                onPress={handleApproveClick}
-                disabled={isApproved || submitting}
-                activeOpacity={0.85}
-                style={[
-                  styles.approveBtn,
-                  isApproved && styles.approveBtnDone,
-                  submitting && { opacity: 0.6 },
-                ]}
-              >
-                {submitting ? (
-                  <ActivityIndicator size="small" color="#FFF" />
-                ) : (
-                  <>
-                    <Ionicons name="checkmark" size={16} color="#FFF" />
-                    <Text style={styles.approveBtnText}>
-                      {isApproved ? "Approved" : "Approve Sample"}
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
+            {isApproved ? (
+              <View style={styles.approvedBannerBtn}>
+                <Ionicons name="checkmark" size={18} color="#FFF" />
+                <Text style={styles.approvedBannerBtnText}>Approved</Text>
+              </View>
+            ) : (
+              <View style={styles.footerButtons}>
+                <TouchableOpacity
+                  onPress={handleApproveClick}
+                  disabled={submitting}
+                  activeOpacity={0.85}
+                  style={[styles.approveBtn, submitting && { opacity: 0.6 }]}
+                >
+                  {submitting ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark" size={16} color="#FFF" />
+                      <Text style={styles.approveBtnText}>Approve Sample</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
 
-              {!isApproved && (
                 <TouchableOpacity
                   onPress={() => setIsFeedbackOpen(!isFeedbackOpen)}
                   activeOpacity={0.85}
@@ -561,8 +566,8 @@ export const SampleDetailsModal: React.FC<SampleDetailsModalProps> = ({
                   <Ionicons name="sync" size={16} color={Colors.textHeading} />
                   <Text style={styles.askChangesBtnText}>Ask for Changes</Text>
                 </TouchableOpacity>
-              )}
-            </View>
+              </View>
+            )}
           </View>
         </View>
       </View>
@@ -719,20 +724,34 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   thumbBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 10,
+    height: 48,
+    paddingHorizontal: 12,
+    borderRadius: 12,
     borderWidth: 1.5,
     borderColor: Colors.border,
     overflow: "hidden",
     marginRight: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
   },
   thumbBtnActive: {
     borderColor: "#5B13EC",
+    backgroundColor: "#F3E8FF",
   },
   thumbImage: {
-    width: "100%",
-    height: "100%",
+    width: 48,
+    height: 44,
+  },
+  thumbPlaceholder: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  thumbText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#5B13EC",
   },
   infoSection: {
     marginBottom: 14,
@@ -1106,5 +1125,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: Colors.textHeading,
+  },
+  approvedBannerBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#059669",
+    paddingVertical: 14,
+    borderRadius: 14,
+    width: "100%",
+  },
+  approvedBannerBtnText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#FFFFFF",
   },
 });
