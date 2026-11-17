@@ -633,6 +633,40 @@ export async function me(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+export async function updateProfile(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = z.object({
+      fullName: z.string().min(2).max(100).optional(),
+      phone: z.string().max(20).optional(),
+    }).parse(req.body);
+
+    const user = await prisma.user.update({
+      where: { id: req.auth!.userId },
+      data: {
+        ...(input.fullName ? { fullName: input.fullName } : {}),
+        ...(input.phone !== undefined ? { phone: input.phone } : {}),
+      },
+      include: { memberships: { include: { organization: true } } },
+    });
+
+    const activeMembership =
+      user.memberships.find(
+        (m) => m.organizationId === req.auth?.organizationId && m.role === req.auth?.role
+      ) || (user.memberships.length > 0 ? user.memberships[0] : null);
+
+    return sendOk(res, {
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      phone: user.phone,
+      activeMembership,
+      memberships: user.memberships,
+    });
+  } catch (e) {
+    next(e);
+  }
+}
+
 /**
  * 5. Deprecated OTP Endpoints (Maintained as graceful no-ops)
  */

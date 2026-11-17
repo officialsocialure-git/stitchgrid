@@ -10,12 +10,18 @@ import {
   TouchableWithoutFeedback,
   ScrollView,
   Dimensions,
+  TextInput,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter, usePathname } from "expo-router";
+import { useRouter, usePathname, useNavigation } from "expo-router";
 import { Colors } from "../../constants/colors";
 import { useAuth } from "../../hooks/useAuth";
 import { useNotifications } from "../../hooks/useNotifications";
+import { authService } from "../../services/auth.service";
+import { marketplaceService } from "../../services/marketplace.service";
 import { APP_NAME } from "../../constants/config";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -30,6 +36,20 @@ interface HeaderProps {
   hideProfileButton?: boolean;
 }
 
+const formatTimeAgo = (dateStr?: string) => {
+  if (!dateStr) return "Recent";
+  try {
+    const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
+    if (diff < 60) return "Just now";
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+    return new Date(dateStr).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  } catch {
+    return "Recent";
+  }
+};
+
 export const Header: React.FC<HeaderProps> = ({
   title,
   subtitle,
@@ -40,22 +60,99 @@ export const Header: React.FC<HeaderProps> = ({
   hideProfileButton = false,
 }) => {
   const router = useRouter();
+  const navigation = useNavigation<any>();
   const pathname = usePathname();
-  const { user, activeMembership, isBuyer, isSupplier, switchRole, logout, memberships } = useAuth();
-  const { unreadCount } = useNotifications();
+  const { user, activeMembership, isBuyer, isSupplier, switchRole, logout, memberships, refreshUser } = useAuth();
+  const { notifications, unreadCount, refresh, markRead } = useNotifications();
 
   // Drawers and Modals
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+
+  // Edit Profile Form State
+  const [editFullName, setEditFullName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editOrgName, setEditOrgName] = useState("");
+  const [editCity, setEditCity] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState("");
+  const [saveErrorMsg, setSaveErrorMsg] = useState("");
 
   const initial = user?.fullName ? user.fullName[0].toUpperCase() : "S";
   const roleDisplay = isBuyer ? "Buyer / Brand" : "Supplier / Mill";
   const hasAlternativeRole = memberships.length > 1;
   const targetRole = isBuyer ? "SUPPLIER" : "BUYER";
 
+  const openProfileModal = () => {
+    setEditFullName(user?.fullName || "");
+    setEditPhone(user?.phone || "");
+    setEditOrgName(activeMembership?.organization?.name || "");
+    setEditCity(activeMembership?.organization?.city || "");
+    setSaveSuccessMsg("");
+    setSaveErrorMsg("");
+    setProfileModalOpen(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!editFullName.trim()) {
+      Alert.alert("Validation Error", "Full Name cannot be empty.");
+      return;
+    }
+    setSavingProfile(true);
+    setSaveSuccessMsg("");
+    setSaveErrorMsg("");
+    try {
+      // 1. Update personal info (fullName, phone)
+      await authService.updateProfile({
+        fullName: editFullName.trim(),
+        phone: editPhone.trim() || undefined,
+      });
+
+      // 2. If organization exists and org name or city provided, update org profile
+      if (activeMembership?.organizationId) {
+        await marketplaceService.updateOrganizationProfile({
+          organizationId: activeMembership.organizationId,
+          name: editOrgName.trim() || activeMembership.organization?.name,
+          city: editCity.trim() || activeMembership.organization?.city,
+        });
+      }
+
+      // 3. Refresh user state across the app
+      await refreshUser();
+      setSaveSuccessMsg("Profile details updated successfully!");
+      setTimeout(() => setSaveSuccessMsg(""), 3500);
+    } catch (error: any) {
+      console.error("Save profile error:", error);
+      setSaveErrorMsg(error?.response?.data?.error?.message || error?.message || "Failed to update profile.");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleConfirmLogout = () => {
+    Alert.alert(
+      "Sign Out",
+      "Are you sure you want to log out of your account?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Log Out",
+          style: "destructive",
+          onPress: async () => {
+            setProfileModalOpen(false);
+            setDrawerOpen(false);
+            await logout();
+            router.replace("/(auth)/login");
+          },
+        },
+      ]
+    );
+  };
+
   const handleRoleSwitch = async () => {
     try {
-      setProfileMenuOpen(false);
+      setProfileModalOpen(false);
       setDrawerOpen(false);
       await switchRole(targetRole);
       if (targetRole === "SUPPLIER") {
@@ -69,7 +166,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const handleLogout = async () => {
-    setProfileMenuOpen(false);
+    setProfileModalOpen(false);
     setDrawerOpen(false);
     await logout();
     router.replace("/(auth)/login");
@@ -77,7 +174,38 @@ export const Header: React.FC<HeaderProps> = ({
 
   const navigateTo = (route: any) => {
     setDrawerOpen(false);
-    router.push(route);
+    setTimeout(() => {
+      // 1. Direct screen name within current tab layout (prevents root stack push & index reset)
+      const cleanPath = String(route).split("?")[0];
+      const screenName = cleanPath.split("/").pop();
+
+      if (navigation && typeof navigation.navigate === "function" && screenName) {
+        try {
+          navigation.navigate(screenName);
+          return;
+        } catch (e) {
+          console.warn("Direct navigation.navigate failed:", e);
+        }
+      }
+
+      // 2. Try router.navigate (Expo Router tab-safe navigation)
+      if ((router as any).navigate) {
+        try {
+          (router as any).navigate(route);
+          return;
+        } catch (e) {
+          console.warn("router.navigate failed:", e);
+        }
+      }
+
+      // 3. Fallback
+      try {
+        router.push(route);
+      } catch (e) {
+        console.warn("Navigation push error, trying replace:", e);
+        router.replace(route);
+      }
+    }, 120);
   };
 
   // Buyer Navigation Links (matching Web Topbar Navigation)
@@ -86,14 +214,10 @@ export const Header: React.FC<HeaderProps> = ({
     { name: "My Requests (RFQs)", href: "/(buyer)/rfqs", icon: "document-text-outline" as const },
     { name: "My Offers (Quotes)", href: "/(buyer)/offers", icon: "pricetag-outline" as const },
     { name: "My Orders (POs)", href: "/(buyer)/orders", icon: "cube-outline" as const },
-    { name: "Order Tracking", href: "/(buyer)/production", icon: "speedometer-outline" as const },
     { name: "Samples Workflow", href: "/(buyer)/samples", icon: "shirt-outline" as const },
     { name: "Chat Messages", href: "/(buyer)/messages", icon: "chatbubble-ellipses-outline" as const },
     { name: "Escrow & Payments", href: "/(buyer)/payments", icon: "card-outline" as const },
     { name: "Verified Mills", href: "/(buyer)/suppliers", icon: "business-outline" as const },
-    { name: "My Profile", href: "/(buyer)/profile", icon: "person-outline" as const },
-    { name: "Organization Settings", href: "/(shared)/settings", icon: "settings-outline" as const },
-    { name: "Notifications", href: "/(shared)/notifications", icon: "notifications-outline" as const },
   ];
 
   // Supplier Navigation Links (matching Web Topbar Navigation)
@@ -102,13 +226,9 @@ export const Header: React.FC<HeaderProps> = ({
     { name: "Buyer Requests", href: "/(supplier)/buyer-requests", icon: "document-text-outline" as const },
     { name: "My Offers", href: "/(supplier)/my-offers", icon: "pricetag-outline" as const },
     { name: "My Orders", href: "/(supplier)/orders", icon: "cube-outline" as const },
-    { name: "Production Floor", href: "/(supplier)/production", icon: "hammer-outline" as const },
     { name: "Samples Dispatch", href: "/(supplier)/samples", icon: "shirt-outline" as const },
     { name: "Chat Messages", href: "/(supplier)/messages", icon: "chatbubble-ellipses-outline" as const },
     { name: "Escrow & Settlements", href: "/(supplier)/payments", icon: "card-outline" as const },
-    { name: "Factory Profile", href: "/(supplier)/profile", icon: "person-outline" as const },
-    { name: "Mill Settings", href: "/(shared)/settings", icon: "settings-outline" as const },
-    { name: "Notifications", href: "/(shared)/notifications", icon: "notifications-outline" as const },
   ];
 
   const currentNavLinks = isSupplier ? SUPPLIER_NAV_LINKS : BUYER_NAV_LINKS;
@@ -162,20 +282,22 @@ export const Header: React.FC<HeaderProps> = ({
         )}
       </View>
 
-      {/* Right Row: Notification Bell + Profile Avatar */}
+      {/* Right Row: Notification Bell Button & User Profile Avatar Button */}
       <View style={styles.rightRow}>
         {rightAction ? (
           rightAction
         ) : (
           <>
-            {/* Notification Bell Button */}
             <TouchableOpacity
-              onPress={() => router.push("/(shared)/notifications")}
+              onPress={() => {
+                refresh();
+                setNotificationsOpen(true);
+              }}
               style={styles.iconCircleButton}
               activeOpacity={0.8}
               accessibilityLabel="Notifications"
             >
-              <Ionicons name="notifications-outline" size={19} color={Colors.primary} />
+              <Ionicons name="notifications-outline" size={20} color={Colors.primary} />
               {unreadCount > 0 && (
                 <View style={styles.unreadBadge}>
                   <Text style={styles.unreadText}>
@@ -185,13 +307,12 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </TouchableOpacity>
 
-            {/* Profile Avatar Button */}
             {!hideProfileButton && (
               <TouchableOpacity
-                onPress={() => setProfileMenuOpen(true)}
+                onPress={openProfileModal}
                 style={styles.profileAvatarButton}
                 activeOpacity={0.8}
-                accessibilityLabel="Profile menu"
+                accessibilityLabel="User Profile and Settings"
               >
                 <Text style={styles.avatarInitial}>{initial}</Text>
               </TouchableOpacity>
@@ -333,110 +454,363 @@ export const Header: React.FC<HeaderProps> = ({
       </Modal>
 
       {/* ------------------------------------------------------------- */}
-      {/* PROFILE DROPDOWN MODAL (From Web Topbar Mobile View)           */}
+      {/* USER PROFILE & ACCOUNT MANAGEMENT MODAL / BOTTOM SHEET         */}
       {/* ------------------------------------------------------------- */}
       <Modal
-        visible={profileMenuOpen}
+        visible={profileModalOpen}
         transparent
-        animationType="fade"
-        onRequestClose={() => setProfileMenuOpen(false)}
+        animationType="slide"
+        onRequestClose={() => setProfileModalOpen(false)}
       >
-        <TouchableWithoutFeedback onPress={() => setProfileMenuOpen(false)}>
-          <View style={styles.profileModalOverlay}>
-            <TouchableWithoutFeedback>
-              <View style={styles.profileDropdownCard}>
-                {/* User Summary Header */}
-                <View style={styles.userSummaryHeader}>
-                  <View style={styles.largeAvatarCircle}>
-                    <Text style={styles.largeAvatarText}>{initial}</Text>
-                  </View>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={styles.userNameText} numberOfLines={1}>
-                      {user?.fullName || "User"}
-                    </Text>
-                    <Text style={styles.userOrgText} numberOfLines={1}>
-                      {activeMembership?.organization?.name || "Independent"}
-                    </Text>
-                    <View style={styles.roleTag}>
-                      <Text style={styles.roleTagText}>{roleDisplay}</Text>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.profileModalOverlay}
+        >
+          <TouchableWithoutFeedback onPress={() => setProfileModalOpen(false)}>
+            <View style={styles.profileBackdrop} />
+          </TouchableWithoutFeedback>
+
+          <View style={styles.profileSheet}>
+            {/* Drag Handle */}
+            <View style={styles.notifDragHandle} />
+
+            {/* Header */}
+            <View style={styles.profileModalHeader}>
+              <View>
+                <Text style={styles.profileModalTitle}>My Profile</Text>
+                <Text style={styles.profileModalSubtitle}>View & update your account details</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setProfileModalOpen(false)}
+                style={styles.notifCloseBtn}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={20} color={Colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.profileScroll}
+              contentContainerStyle={{ paddingBottom: 28 }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* User Identity Card */}
+              <View style={styles.profileHeroCard}>
+                <View style={styles.profileHeroAvatar}>
+                  <Text style={styles.profileHeroAvatarText}>{initial}</Text>
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.profileHeroName} numberOfLines={1}>
+                    {user?.fullName || "User"}
+                  </Text>
+                  <Text style={styles.profileHeroEmail} numberOfLines={1}>
+                    {user?.email || "No email"}
+                  </Text>
+                  <View style={styles.profileHeroBadgeRow}>
+                    <View style={styles.profileRoleBadge}>
+                      <Ionicons
+                        name={isBuyer ? "briefcase-outline" : "construct-outline"}
+                        size={12}
+                        color={Colors.primary}
+                      />
+                      <Text style={styles.profileRoleBadgeText}>{roleDisplay}</Text>
+                    </View>
+                    <View style={styles.profileVerifiedBadge}>
+                      <Ionicons name="checkmark-circle" size={12} color={Colors.success} />
+                      <Text style={styles.profileVerifiedBadgeText}>Verified</Text>
                     </View>
                   </View>
                 </View>
+              </View>
 
-                <View style={styles.dropdownDivider} />
+              {/* Feedback banners */}
+              {saveSuccessMsg ? (
+                <View style={styles.successBanner}>
+                  <Ionicons name="checkmark-circle" size={18} color="#166534" />
+                  <Text style={styles.successBannerText}>{saveSuccessMsg}</Text>
+                </View>
+              ) : null}
 
-                {/* Workspace Switcher */}
-                {hasAlternativeRole && (
+              {saveErrorMsg ? (
+                <View style={styles.errorBanner}>
+                  <Ionicons name="alert-circle" size={18} color="#991B1B" />
+                  <Text style={styles.errorBannerText}>{saveErrorMsg}</Text>
+                </View>
+              ) : null}
+
+              {/* Edit Details Section */}
+              <View style={styles.sectionHeaderWrap}>
+                <Ionicons name="person-circle-outline" size={18} color={Colors.primary} />
+                <Text style={styles.sectionHeaderTitle}>PERSONAL INFORMATION</Text>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Full Name</Text>
+                <View style={styles.inputFieldWrap}>
+                  <Ionicons name="person-outline" size={18} color={Colors.textSecondary} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.textInput}
+                    value={editFullName}
+                    onChangeText={setEditFullName}
+                    placeholder="Enter your full name"
+                    placeholderTextColor={Colors.textMuted}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Phone Number</Text>
+                <View style={styles.inputFieldWrap}>
+                  <Ionicons name="call-outline" size={18} color={Colors.textSecondary} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.textInput}
+                    value={editPhone}
+                    onChangeText={setEditPhone}
+                    placeholder="+91 98765 43210"
+                    placeholderTextColor={Colors.textMuted}
+                    keyboardType="phone-pad"
+                  />
+                </View>
+              </View>
+
+              {/* Organization & Location Section */}
+              <View style={[styles.sectionHeaderWrap, { marginTop: 14 }]}>
+                <Ionicons name="business-outline" size={18} color={Colors.primary} />
+                <Text style={styles.sectionHeaderTitle}>ORGANIZATION & LOCATION</Text>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Company / Brand Name</Text>
+                <View style={styles.inputFieldWrap}>
+                  <Ionicons name="business-outline" size={18} color={Colors.textSecondary} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.textInput}
+                    value={editOrgName}
+                    onChangeText={setEditOrgName}
+                    placeholder="e.g. Qspider Brand"
+                    placeholderTextColor={Colors.textMuted}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>City / Location</Text>
+                <View style={styles.inputFieldWrap}>
+                  <Ionicons name="location-outline" size={18} color={Colors.textSecondary} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.textInput}
+                    value={editCity}
+                    onChangeText={setEditCity}
+                    placeholder="e.g. Mumbai, Noida, Tirupur"
+                    placeholderTextColor={Colors.textMuted}
+                  />
+                </View>
+              </View>
+
+              {/* Readonly Account Details */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Registered Email (Account ID)</Text>
+                <View style={[styles.inputFieldWrap, styles.inputFieldDisabled]}>
+                  <Ionicons name="lock-closed-outline" size={18} color={Colors.textMuted} style={styles.inputIcon} />
+                  <Text style={styles.textInputDisabled}>{user?.email || "N/A"}</Text>
+                </View>
+              </View>
+
+              {/* Save Button */}
+              <TouchableOpacity
+                style={[styles.saveProfileBtn, savingProfile && styles.btnDisabled]}
+                onPress={handleSaveProfile}
+                disabled={savingProfile}
+                activeOpacity={0.8}
+              >
+                {savingProfile ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
                   <>
-                    <TouchableOpacity
-                      style={styles.dropdownItem}
-                      onPress={handleRoleSwitch}
-                      activeOpacity={0.7}
-                    >
-                      <View style={[styles.itemIconWrap, { backgroundColor: "#f0f7ff" }]}>
-                        <Ionicons name="swap-horizontal" size={18} color="#2563eb" />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.itemTitle}>
-                          Switch to {targetRole === "SUPPLIER" ? "Supplier" : "Buyer"}
-                        </Text>
-                        <Text style={styles.itemSubtitle}>Change active workspace</Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
-                    </TouchableOpacity>
-                    <View style={styles.dropdownDivider} />
+                    <Ionicons name="checkmark-done" size={18} color="#FFFFFF" />
+                    <Text style={styles.saveProfileBtnText}>Save Profile Changes</Text>
                   </>
                 )}
+              </TouchableOpacity>
 
-                {/* My Profile */}
+              {/* Workspace Switcher if multi-role */}
+              {hasAlternativeRole && (
+                <View style={styles.workspaceSwitchCard}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={styles.switchCardTitle}>Active Workspace</Text>
+                    <Text style={styles.switchCardSub}>
+                      Switch to {targetRole === "SUPPLIER" ? "Supplier / Mill" : "Buyer / Brand"} portal
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.switchRoleActionBtn}
+                    onPress={handleRoleSwitch}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="swap-horizontal" size={16} color="#FFFFFF" />
+                    <Text style={styles.switchRoleActionText}>Switch</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              <View style={styles.sheetDivider} />
+
+              {/* Sign Out / Logout Button at the bottom */}
+              <TouchableOpacity
+                style={styles.profileLogoutBtn}
+                onPress={handleConfirmLogout}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="log-out-outline" size={20} color={Colors.danger} />
+                <Text style={styles.profileLogoutBtnText}>Sign Out from Account</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.sheetFooterVersion}>STITCHGRID Mobile • App v1.0.0</Text>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ------------------------------------------------------------- */}
+      {/* NOTIFICATIONS CENTER MODAL / BOTTOM SHEET                      */}
+      {/* ------------------------------------------------------------- */}
+      <Modal
+        visible={notificationsOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setNotificationsOpen(false)}
+      >
+        <View style={styles.notifModalOverlay}>
+          <TouchableWithoutFeedback onPress={() => setNotificationsOpen(false)}>
+            <View style={styles.notifBackdrop} />
+          </TouchableWithoutFeedback>
+
+          <View style={styles.notifSheet}>
+            {/* Drag Handle */}
+            <View style={styles.notifDragHandle} />
+
+            {/* Header */}
+            <View style={styles.notifHeaderRow}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Text style={styles.notifSheetTitle}>Notifications</Text>
+                {unreadCount > 0 && (
+                  <View style={styles.notifCountPill}>
+                    <Text style={styles.notifCountPillText}>{unreadCount} new</Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                {unreadCount > 0 && (
+                  <TouchableOpacity
+                    onPress={async () => {
+                      for (const n of notifications) {
+                        if (!n.readAt) await markRead(n.id);
+                      }
+                    }}
+                    style={styles.markAllReadBtn}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.markAllReadBtnText}>Mark all read</Text>
+                  </TouchableOpacity>
+                )}
+
                 <TouchableOpacity
-                  style={styles.dropdownItem}
-                  onPress={() => {
-                    setProfileMenuOpen(false);
-                    router.push(isSupplier ? "/(supplier)/profile" : "/(buyer)/profile");
-                  }}
+                  onPress={() => setNotificationsOpen(false)}
+                  style={styles.notifCloseBtn}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.itemIconWrap}>
-                    <Ionicons name="person-outline" size={18} color={Colors.primary} />
-                  </View>
-                  <Text style={styles.itemTitle}>My Profile</Text>
-                  <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
-                </TouchableOpacity>
-
-                {/* Account Settings */}
-                <TouchableOpacity
-                  style={styles.dropdownItem}
-                  onPress={() => {
-                    setProfileMenuOpen(false);
-                    router.push("/(shared)/settings");
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.itemIconWrap}>
-                    <Ionicons name="settings-outline" size={18} color={Colors.slate600} />
-                  </View>
-                  <Text style={styles.itemTitle}>Account Settings</Text>
-                  <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
-                </TouchableOpacity>
-
-                <View style={styles.dropdownDivider} />
-
-                {/* Logout */}
-                <TouchableOpacity
-                  style={styles.dropdownItem}
-                  onPress={handleLogout}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.itemIconWrap, { backgroundColor: Colors.dangerLight }]}>
-                    <Ionicons name="log-out-outline" size={18} color={Colors.danger} />
-                  </View>
-                  <Text style={[styles.itemTitle, { color: Colors.danger }]}>Logout</Text>
+                  <Ionicons name="close" size={20} color={Colors.textSecondary} />
                 </TouchableOpacity>
               </View>
-            </TouchableWithoutFeedback>
+            </View>
+
+            {/* Notifications List */}
+            <ScrollView
+              style={styles.notifListScroll}
+              contentContainerStyle={{ paddingBottom: 24 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {notifications.length === 0 ? (
+                <View style={styles.notifEmptyWrap}>
+                  <View style={styles.notifEmptyIconBox}>
+                    <Ionicons name="notifications-off-outline" size={32} color={Colors.textMuted} />
+                  </View>
+                  <Text style={styles.notifEmptyTitle}>No notifications yet</Text>
+                  <Text style={styles.notifEmptySub}>
+                    When you receive quotations, order updates, sample reviews, or messages, they will appear here.
+                  </Text>
+                </View>
+              ) : (
+                notifications.map((item) => {
+                  const isUnread = !item.readAt;
+                  const titleLower = (item.title || "").toLowerCase();
+                  const iconName = titleLower.includes("quote") || titleLower.includes("offer")
+                    ? "pricetag"
+                    : titleLower.includes("order") || titleLower.includes("po")
+                    ? "cube"
+                    : titleLower.includes("sample")
+                    ? "shirt"
+                    : titleLower.includes("message") || titleLower.includes("chat")
+                    ? "chatbubble"
+                    : titleLower.includes("payment")
+                    ? "card"
+                    : "notifications";
+
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[styles.notifItemCard, isUnread && styles.notifItemUnread]}
+                      activeOpacity={0.75}
+                      onPress={async () => {
+                        if (isUnread) await markRead(item.id);
+                        setNotificationsOpen(false);
+                        // Smart Routing based on notification subject
+                        if (titleLower.includes("quote") || titleLower.includes("offer")) {
+                          router.push(isSupplier ? "/(supplier)/my-offers" : "/(buyer)/offers");
+                        } else if (titleLower.includes("order") || titleLower.includes("po")) {
+                          router.push(isSupplier ? "/(supplier)/orders" : "/(buyer)/orders");
+                        } else if (titleLower.includes("sample")) {
+                          router.push(isSupplier ? "/(supplier)/samples" : "/(buyer)/samples");
+                        } else if (titleLower.includes("message") || titleLower.includes("chat")) {
+                          router.push(isSupplier ? "/(supplier)/messages" : "/(buyer)/messages");
+                        } else if (titleLower.includes("payment")) {
+                          router.push(isSupplier ? "/(supplier)/payments" : "/(buyer)/payments");
+                        } else if (titleLower.includes("rfq") || titleLower.includes("request")) {
+                          router.push(isSupplier ? "/(supplier)/buyer-requests" : "/(buyer)/rfqs");
+                        }
+                      }}
+                    >
+                      <View style={[styles.notifItemIconWrap, isUnread && styles.notifItemIconWrapUnread]}>
+                        <Ionicons name={iconName as any} size={18} color={isUnread ? "#5B13EC" : Colors.textSecondary} />
+                      </View>
+
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
+                          <Text style={[styles.notifItemTitle, isUnread && styles.notifItemTitleBold]} numberOfLines={1}>
+                            {item.title}
+                          </Text>
+                          {isUnread && <View style={styles.unreadDot} />}
+                        </View>
+
+                        {item.content ? (
+                          <Text style={styles.notifItemContent} numberOfLines={2}>
+                            {item.content}
+                          </Text>
+                        ) : null}
+
+                        <Text style={styles.notifItemTime}>
+                          {formatTimeAgo(item.createdAt)}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </ScrollView>
           </View>
-        </TouchableWithoutFeedback>
+        </View>
       </Modal>
     </View>
   );
@@ -707,103 +1081,461 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
 
-  // ---------------- Profile Dropdown Styles ----------------
+  // ---------------- Profile Bottom Sheet Modal Styles ----------------
   profileModalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(11, 28, 48, 0.35)",
-    justifyContent: "flex-start",
-    alignItems: "flex-end",
-    paddingTop: Platform.OS === "ios" ? 64 : 56,
-    paddingRight: 16,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
   },
-  profileDropdownCard: {
-    width: 280,
-    backgroundColor: Colors.surface,
-    borderRadius: 20,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
+  profileBackdrop: {
+    ...StyleSheet.absoluteFill,
+  },
+  profileSheet: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: "90%",
+    minHeight: 400,
+    paddingTop: 12,
+    paddingHorizontal: 20,
+    paddingBottom: Platform.OS === "ios" ? 34 : 20,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 18,
-    elevation: 10,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 20,
   },
-  userSummaryHeader: {
+  profileModalHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    paddingBottom: 12,
+    justifyContent: "space-between",
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
   },
-  largeAvatarCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.primaryLight,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1.5,
-    borderColor: Colors.primary,
-  },
-  largeAvatarText: {
+  profileModalTitle: {
     fontSize: 18,
     fontWeight: "800",
-    color: Colors.primary,
+    color: "#0F172A",
   },
-  userNameText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: Colors.textHeading,
-  },
-  userOrgText: {
+  profileModalSubtitle: {
     fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 1,
+    color: "#64748B",
+    marginTop: 2,
   },
-  roleTag: {
-    alignSelf: "flex-start",
-    backgroundColor: Colors.primaryLight,
+  profileScroll: {
+    marginTop: 12,
+  },
+  profileHeroCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    marginBottom: 16,
+  },
+  profileHeroAvatar: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: "#5B13EC",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#5B13EC",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  profileHeroAvatarText: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#FFFFFF",
+  },
+  profileHeroName: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  profileHeroEmail: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
+  },
+  profileHeroBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 6,
+  },
+  profileRoleBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#F3E8FF",
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
-    marginTop: 4,
   },
-  roleTagText: {
+  profileRoleBadgeText: {
     fontSize: 10,
-    fontWeight: "700",
-    color: Colors.primary,
+    fontWeight: "800",
+    color: "#5B13EC",
     textTransform: "uppercase",
   },
-  dropdownDivider: {
-    height: 1,
-    backgroundColor: Colors.borderLight,
-    marginVertical: 6,
-  },
-  dropdownItem: {
+  profileVerifiedBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 3,
+    backgroundColor: "#DCFCE7",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  profileVerifiedBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#166534",
+  },
+  successBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#DCFCE7",
+    borderWidth: 1,
+    borderColor: "#86EFAC",
     paddingVertical: 10,
-    paddingHorizontal: 6,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginBottom: 14,
+  },
+  successBannerText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#166534",
+    flex: 1,
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#FEE2E2",
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginBottom: 14,
+  },
+  errorBannerText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#991B1B",
+    flex: 1,
+  },
+  sectionHeaderWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 10,
+    paddingLeft: 2,
+  },
+  sectionHeaderTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#475569",
+    letterSpacing: 0.6,
+  },
+  inputGroup: {
+    marginBottom: 12,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#334155",
+    marginBottom: 6,
+  },
+  inputFieldWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 44,
+  },
+  inputFieldDisabled: {
+    backgroundColor: "#F1F5F9",
+    borderColor: "#E2E8F0",
+  },
+  inputIcon: {
+    marginRight: 8,
+  },
+  textInput: {
+    flex: 1,
+    fontSize: 13,
+    color: "#0F172A",
+    fontWeight: "500",
+    paddingVertical: 0,
+  },
+  textInputDisabled: {
+    flex: 1,
+    fontSize: 13,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  saveProfileBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#5B13EC",
+    paddingVertical: 13,
+    borderRadius: 12,
+    marginTop: 6,
+    marginBottom: 12,
+    shadowColor: "#5B13EC",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  btnDisabled: {
+    opacity: 0.65,
+  },
+  saveProfileBtnText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#FFFFFF",
+  },
+  workspaceSwitchCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FAF5FF",
+    borderWidth: 1,
+    borderColor: "#E9D5FF",
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  switchCardTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#5B13EC",
+  },
+  switchCardSub: {
+    fontSize: 11,
+    color: "#6B7280",
+    marginTop: 2,
+  },
+  switchRoleActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#5B13EC",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  switchRoleActionText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  sheetDivider: {
+    height: 1,
+    backgroundColor: "#F1F5F9",
+    marginVertical: 12,
+  },
+  profileLogoutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+    marginBottom: 10,
+  },
+  profileLogoutBtnText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#DC2626",
+  },
+  sheetFooterVersion: {
+    fontSize: 10,
+    color: "#94A3B8",
+    textAlign: "center",
+    paddingVertical: 6,
+  },
+
+  // ---------------- Notification Modal Styles ----------------
+  notifModalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+  },
+  notifBackdrop: {
+    ...StyleSheet.absoluteFill,
+  },
+  notifSheet: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: "85%",
+    minHeight: 320,
+    paddingTop: 12,
+    paddingHorizontal: 20,
+    paddingBottom: Platform.OS === "ios" ? 34 : 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 20,
+  },
+  notifDragHandle: {
+    width: 42,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#E2E8F0",
+    alignSelf: "center",
+    marginBottom: 12,
+  },
+  notifHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+  },
+  notifSheetTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  notifCountPill: {
+    backgroundColor: "#F3E8FF",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderRadius: 12,
   },
-  itemIconWrap: {
+  notifCountPillText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#5B13EC",
+  },
+  markAllReadBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: "#F1F5F9",
+  },
+  markAllReadBtnText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#5B13EC",
+  },
+  notifCloseBtn: {
     width: 32,
     height: 32,
-    borderRadius: 10,
-    backgroundColor: Colors.primaryLight,
+    borderRadius: 16,
+    backgroundColor: "#F1F5F9",
     alignItems: "center",
     justifyContent: "center",
   },
-  itemTitle: {
-    flex: 1,
+  notifListScroll: {
+    marginTop: 10,
+  },
+  notifEmptyWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 48,
+    paddingHorizontal: 24,
+  },
+  notifEmptyIconBox: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  notifEmptyTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  notifEmptySub: {
+    fontSize: 12,
+    color: "#64748B",
+    textAlign: "center",
+    marginTop: 6,
+    lineHeight: 18,
+  },
+  notifItemCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+  },
+  notifItemUnread: {
+    backgroundColor: "#FAF5FF",
+    borderColor: "#E9D5FF",
+  },
+  notifItemIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  notifItemIconWrapUnread: {
+    backgroundColor: "#F3E8FF",
+  },
+  notifItemTitle: {
     fontSize: 13,
     fontWeight: "600",
-    color: Colors.textHeading,
+    color: "#334155",
+    flex: 1,
   },
-  itemSubtitle: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    marginTop: 1,
+  notifItemTitleBold: {
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  notifItemContent: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  notifItemTime: {
+    fontSize: 10,
+    color: "#94A3B8",
+    marginTop: 4,
+    fontWeight: "600",
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#5B13EC",
+    marginLeft: 6,
   },
 });

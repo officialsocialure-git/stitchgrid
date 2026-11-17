@@ -128,34 +128,6 @@ export default function SupplierProfileScreen() {
           </View>
         )}
 
-        {/* Preferences & Quick Links */}
-        <Text style={styles.sectionHeading}>Preferences</Text>
-        <View style={styles.menuCard}>
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => router.push("/(shared)/notifications")}
-          >
-            <View style={styles.menuIconWrap}>
-              <Ionicons name="notifications-outline" size={18} color={Colors.primary} />
-            </View>
-            <Text style={styles.menuText}>Notifications & Alerts</Text>
-            <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} style={{ marginLeft: "auto" }} />
-          </TouchableOpacity>
-
-          <View style={styles.menuDivider} />
-
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => router.push("/(shared)/settings")}
-          >
-            <View style={styles.menuIconWrap}>
-              <Ionicons name="settings-outline" size={18} color={Colors.slate600} />
-            </View>
-            <Text style={styles.menuText}>Mill Organization Settings</Text>
-            <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} style={{ marginLeft: "auto" }} />
-          </TouchableOpacity>
-        </View>
-
         {/* Sign Out Button */}
         <Button
           title="Sign Out"

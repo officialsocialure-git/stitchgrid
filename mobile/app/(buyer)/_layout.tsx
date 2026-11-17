@@ -61,22 +61,36 @@ export default function BuyerTabsLayout() {
           ),
         }}
       />
+
+      {/* Auxiliary screens accessible via navigation but hidden from bottom tab bar */}
       <Tabs.Screen
-        name="profile"
+        name="suppliers"
         options={{
-          title: "Profile",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "person" : "person-outline"} size={size} color={color as string} />
-          ),
+          tabBarButton: () => null,
+          tabBarStyle: { display: "none" },
         }}
       />
-
-      {/* Auxiliary screens accessible via navigation but hidden from tab bar */}
-      <Tabs.Screen name="suppliers" options={{ href: null }} />
-      <Tabs.Screen name="offers" options={{ href: null }} />
-      <Tabs.Screen name="samples" options={{ href: null }} />
-      <Tabs.Screen name="production" options={{ href: null }} />
-      <Tabs.Screen name="payments" options={{ href: null }} />
+      <Tabs.Screen
+        name="offers"
+        options={{
+          tabBarButton: () => null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+      <Tabs.Screen
+        name="samples"
+        options={{
+          tabBarButton: () => null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+      <Tabs.Screen
+        name="payments"
+        options={{
+          tabBarButton: () => null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
     </Tabs>
   );
 }

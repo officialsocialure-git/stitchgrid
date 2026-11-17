@@ -12,7 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useNavigation } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../src/constants/colors";
 import { Header } from "../../src/components/common/Header";
@@ -25,6 +25,7 @@ import { Rfq, PurchaseOrder, Sample } from "../../src/types";
 
 export default function SupplierDashboardScreen() {
   const router = useRouter();
+  const navigation = useNavigation<any>();
   const { user, activeMembership } = useAuth();
 
   const [rfqs, setRfqs] = useState<any[]>([]);
@@ -250,7 +251,15 @@ export default function SupplierDashboardScreen() {
             {/* Card 1: New RFQs (Purple #f8f5fe) */}
             <TouchableOpacity
               style={[styles.metricCard, { backgroundColor: "#f8f5fe", borderColor: "#ede5fc" }]}
-              onPress={() => router.push("/(supplier)/buyer-requests")}
+              onPress={() => {
+                if (navigation?.navigate) {
+                  navigation.navigate("buyer-requests");
+                } else if ((router as any).navigate) {
+                  (router as any).navigate("/(supplier)/buyer-requests");
+                } else {
+                  router.push("/(supplier)/buyer-requests");
+                }
+              }}
               activeOpacity={0.8}
             >
               <View style={[styles.metricIconWrap, { backgroundColor: "#ede5fc" }]}>
@@ -263,7 +272,15 @@ export default function SupplierDashboardScreen() {
             {/* Card 2: Quotes Pending (Amber #fffbf0) */}
             <TouchableOpacity
               style={[styles.metricCard, { backgroundColor: "#fffbf0", borderColor: "#fde68a" }]}
-              onPress={() => router.push("/(supplier)/my-offers")}
+              onPress={() => {
+                if (navigation?.navigate) {
+                  navigation.navigate("my-offers");
+                } else if ((router as any).navigate) {
+                  (router as any).navigate("/(supplier)/my-offers");
+                } else {
+                  router.push("/(supplier)/my-offers");
+                }
+              }}
               activeOpacity={0.8}
             >
               <View style={[styles.metricIconWrap, { backgroundColor: "#fef3c7" }]}>
@@ -276,7 +293,15 @@ export default function SupplierDashboardScreen() {
             {/* Card 3: Active Orders (Emerald #f0fbf4) */}
             <TouchableOpacity
               style={[styles.metricCard, { backgroundColor: "#f0fbf4", borderColor: "#a7f3d0" }]}
-              onPress={() => router.push("/(supplier)/orders")}
+              onPress={() => {
+                if (navigation?.navigate) {
+                  navigation.navigate("orders");
+                } else if ((router as any).navigate) {
+                  (router as any).navigate("/(supplier)/orders");
+                } else {
+                  router.push("/(supplier)/orders");
+                }
+              }}
               activeOpacity={0.8}
             >
               <View style={[styles.metricIconWrap, { backgroundColor: "#d1fae5" }]}>
@@ -289,7 +314,15 @@ export default function SupplierDashboardScreen() {
             {/* Card 4: Samples Pending (Blue #f0f7ff) */}
             <TouchableOpacity
               style={[styles.metricCard, { backgroundColor: "#f0f7ff", borderColor: "#bfdbfe" }]}
-              onPress={() => router.push("/(supplier)/samples")}
+              onPress={() => {
+                if (navigation?.navigate) {
+                  navigation.navigate("samples");
+                } else if ((router as any).navigate) {
+                  (router as any).navigate("/(supplier)/samples");
+                } else {
+                  router.push("/(supplier)/samples");
+                }
+              }}
               activeOpacity={0.8}
             >
               <View style={[styles.metricIconWrap, { backgroundColor: "#dbeafe" }]}>

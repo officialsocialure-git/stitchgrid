@@ -283,7 +283,6 @@ export default function BuyerDashboardScreen() {
     >
       <Header
         showMenuButton
-        hideProfileButton
         onMenuPress={() => setNavigationMenuOpen(true)}
       />
 
@@ -317,12 +316,8 @@ export default function BuyerDashboardScreen() {
               { label: "My Offers", icon: "pricetags-outline", route: "/(buyer)/offers" },
               { label: "Orders", icon: "cube-outline", route: "/(buyer)/orders" },
               { label: "Samples", icon: "layers-outline", route: "/(buyer)/samples" },
-              { label: "Production", icon: "construct-outline", route: "/(buyer)/production" },
               { label: "Payments", icon: "card-outline", route: "/(buyer)/payments" },
               { label: "Messages", icon: "chatbubble-ellipses-outline", route: "/(buyer)/messages" },
-              { label: "Profile", icon: "person-outline", route: "/(buyer)/profile" },
-              { label: "Settings", icon: "settings-outline", route: "/(shared)/settings" },
-              { label: "Notifications", icon: "notifications-outline", route: "/(shared)/notifications" },
             ].map((item) => (
               <TouchableOpacity
                 key={item.label}

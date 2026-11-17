@@ -257,13 +257,9 @@ export default function BuyerOrdersScreen() {
               { label: "My Offers", icon: "pricetags-outline", route: "/(buyer)/offers" },
               { label: "Orders", icon: "cube-outline", route: "/(buyer)/orders" },
               { label: "Samples", icon: "layers-outline", route: "/(buyer)/samples" },
-              { label: "Production", icon: "construct-outline", route: "/(buyer)/production" },
               { label: "Payments", icon: "card-outline", route: "/(buyer)/payments" },
               { label: "Messages", icon: "chatbubble-ellipses-outline", route: "/(buyer)/messages" },
               { label: "Suppliers", icon: "business-outline", route: "/(buyer)/suppliers" },
-              { label: "Profile", icon: "person-outline", route: "/(buyer)/profile" },
-              { label: "Settings", icon: "settings-outline", route: "/(shared)/settings" },
-              { label: "Notifications", icon: "notifications-outline", route: "/(shared)/notifications" },
             ].map((item) => (
               <TouchableOpacity
                 key={item.label}
@@ -583,7 +579,7 @@ export default function BuyerOrdersScreen() {
               <View style={styles.cardThreeActionsRow}>
                 {/* 1. Track Milestones (Outline Button) */}
                 <TouchableOpacity
-                  onPress={() => router.push(`/(buyer)/production?orderId=${item.id}`)}
+                  onPress={() => setSelectedOrderForDetails(item)}
                   style={styles.outlineActionBox}
                   activeOpacity={0.8}
                 >
@@ -858,7 +854,6 @@ export default function BuyerOrdersScreen() {
         visible={Boolean(selectedOrderForDetails)}
         onClose={() => setSelectedOrderForDetails(null)}
         order={selectedOrderForDetails}
-        onTrackProduction={(orderId) => router.push(`/(buyer)/production?orderId=${orderId}`)}
         onSecurePayment={() => router.push("/(buyer)/payments")}
         onStatusChange={handleStatusChange}
         updating={Boolean(updatingId)}

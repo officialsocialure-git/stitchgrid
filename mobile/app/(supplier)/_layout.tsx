@@ -1,7 +1,7 @@
 import React from "react";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { Platform } from "react-native";
+import { Platform, View, StyleSheet } from "react-native";
 import { Colors } from "../../src/constants/colors";
 
 export default function SupplierTabsLayout() {
@@ -9,18 +9,18 @@ export default function SupplierTabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: Colors.textMuted,
+        tabBarActiveTintColor: "#5B13EC",
+        tabBarInactiveTintColor: "#64748B",
         tabBarStyle: {
-          backgroundColor: Colors.surface,
+          backgroundColor: "#FFFFFF",
           borderTopWidth: 1,
-          borderTopColor: Colors.border,
-          height: Platform.OS === "ios" ? 92 : 72,
-          paddingBottom: Platform.OS === "ios" ? 30 : 16,
+          borderTopColor: "#E2E8F0",
+          height: Platform.OS === "ios" ? 88 : 68,
+          paddingBottom: Platform.OS === "ios" ? 28 : 10,
           paddingTop: 8,
         },
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: "600",
         },
       }}
@@ -30,16 +30,16 @@ export default function SupplierTabsLayout() {
         options={{
           title: "Home",
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "business" : "business-outline"} size={size} color={color as string} />
+            <Ionicons name={focused ? "home" : "home-outline"} size={22} color={color as string} />
           ),
         }}
       />
       <Tabs.Screen
         name="buyer-requests"
         options={{
-          title: "RFQs",
+          title: "Buyer Requests",
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "reader" : "reader-outline"} size={size} color={color as string} />
+            <Ionicons name={focused ? "list" : "list-outline"} size={22} color={color as string} />
           ),
         }}
       />
@@ -48,7 +48,9 @@ export default function SupplierTabsLayout() {
         options={{
           title: "My Orders",
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "cube" : "cube-outline"} size={size} color={color as string} />
+            <View style={focused ? styles.activeTabPill : undefined}>
+              <Ionicons name={focused ? "cube" : "cube-outline"} size={22} color={color as string} />
+            </View>
           ),
         }}
       />
@@ -56,8 +58,19 @@ export default function SupplierTabsLayout() {
         name="messages"
         options={{
           title: "Messages",
+          tabBarBadge: 3,
+          tabBarBadgeStyle: {
+            backgroundColor: "#5B13EC",
+            color: "#FFFFFF",
+            fontSize: 10,
+            fontWeight: "700",
+            minWidth: 16,
+            height: 16,
+            borderRadius: 8,
+            lineHeight: 16,
+          },
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "chatbubble-ellipses" : "chatbubble-ellipses-outline"} size={size} color={color as string} />
+            <Ionicons name={focused ? "chatbubble-ellipses" : "chatbubble-ellipses-outline"} size={22} color={color as string} />
           ),
         }}
       />
@@ -66,17 +79,59 @@ export default function SupplierTabsLayout() {
         options={{
           title: "Profile",
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "person" : "person-outline"} size={size} color={color as string} />
+            <Ionicons name={focused ? "person" : "person-outline"} size={22} color={color as string} />
           ),
         }}
       />
 
-      {/* Auxiliary screens accessible via navigation but hidden from tab bar */}
-      <Tabs.Screen name="my-offers" options={{ href: null }} />
-      <Tabs.Screen name="samples" options={{ href: null }} />
-      <Tabs.Screen name="production" options={{ href: null }} />
-      <Tabs.Screen name="payments" options={{ href: null }} />
+      {/* Auxiliary screens accessible via navigation but hidden from bottom tab bar */}
+      <Tabs.Screen
+        name="my-offers"
+        options={{
+          tabBarButton: () => null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+      <Tabs.Screen
+        name="offers"
+        options={{
+          tabBarButton: () => null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+      <Tabs.Screen
+        name="samples"
+        options={{
+          tabBarButton: () => null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+      <Tabs.Screen
+        name="production"
+        options={{
+          tabBarButton: () => null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+      <Tabs.Screen
+        name="payments"
+        options={{
+          tabBarButton: () => null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  activeTabPill: {
+    backgroundColor: "#F1ECFE",
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});
 

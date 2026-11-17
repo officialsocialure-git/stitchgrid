@@ -110,7 +110,6 @@ export default function RootLayout() {
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(buyer)" />
             <Stack.Screen name="(supplier)" />
-            <Stack.Screen name="(shared)" />
           </Stack>
           <RouteSynchronizer />
         </AuthProvider>

@@ -7,6 +7,7 @@ import {
   completeGoogleOnboarding,
   switchContext,
   me,
+  updateProfile,
   forgotPassword,
   resetPassword,
   legacyVerifyOtp,
@@ -40,6 +41,7 @@ router.post("/forgot-password", authLimiter, forgotPassword);
 router.post("/reset-password", authLimiter, resetPassword);
 router.post("/switch-context", authenticate, switchContext);
 router.get("/me", authenticate, me);
+router.patch("/profile", authenticate, updateProfile);
 
 // Deprecated routes kept to avoid 404s for cached or legacy clients
 router.post("/verify-otp", legacyVerifyOtp);

@@ -130,6 +130,18 @@ export const authService = {
     return res.data?.data || res.data;
   },
 
+  async updateProfile(data: { fullName?: string; phone?: string }): Promise<{
+    id: string;
+    fullName: string;
+    email?: string;
+    phone?: string;
+    activeMembership: Membership | null;
+    memberships: Membership[];
+  }> {
+    const res = await api.patch("/auth/profile", data);
+    return res.data?.data || res.data;
+  },
+
   async logout(): Promise<void> {
     await storage.clearAll();
   },
