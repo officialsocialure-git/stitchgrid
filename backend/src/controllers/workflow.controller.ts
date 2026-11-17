@@ -281,11 +281,50 @@ export async function listConversations(req: Request, res: Response, next: NextF
     });
     const orgMap = new Map(orgs.map(o => [o.id, o]));
 
-    const withOrgs = conversations.map(c => ({
-      ...c,
-      buyer: orgMap.get(c.buyerOrgId) || { id: c.buyerOrgId, name: "Buyer Organization" },
-      supplier: orgMap.get(c.supplierOrgId) || { id: c.supplierOrgId, name: "Supplier Partner" }
-    }));
+    // Fetch linked orders for these organization pairs
+    const linkedOrders = await prisma.purchaseOrder.findMany({
+      where: {
+        OR: [
+          { buyerOrgId: { in: orgIds }, supplierOrgId: { in: relatedOrgIds } },
+          { supplierOrgId: { in: orgIds }, buyerOrgId: { in: relatedOrgIds } }
+        ]
+      },
+      select: {
+        id: true,
+        poNumber: true,
+        status: true,
+        totalAmount: true,
+        buyerOrgId: true,
+        supplierOrgId: true,
+        items: { select: { name: true }, take: 1 }
+      },
+      orderBy: { createdAt: "desc" }
+    });
+
+    const withOrgs = conversations.map(c => {
+      const order = linkedOrders.find(
+        o => (o.buyerOrgId === c.buyerOrgId && o.supplierOrgId === c.supplierOrgId) ||
+             (o.buyerOrgId === c.supplierOrgId && o.supplierOrgId === c.buyerOrgId)
+      );
+      return {
+        ...c,
+        buyer: orgMap.get(c.buyerOrgId) || { id: c.buyerOrgId, name: "Buyer Organization" },
+        supplier: orgMap.get(c.supplierOrgId) || { id: c.supplierOrgId, name: "Supplier Partner" },
+        linkedOrder: order ? {
+          id: order.id,
+          poNumber: order.poNumber,
+          status: order.status,
+          item: order.items?.[0]?.name || "Garment Order"
+        } : null,
+      };
+    });
+
+    // Sort by latest message date if available, otherwise conversation creation date
+    withOrgs.sort((a, b) => {
+      const dateA = a.messages?.[0]?.createdAt ? new Date(a.messages[0].createdAt).getTime() : new Date(a.createdAt).getTime();
+      const dateB = b.messages?.[0]?.createdAt ? new Date(b.messages[0].createdAt).getTime() : new Date(b.createdAt).getTime();
+      return dateB - dateA;
+    });
 
     return sendOk(res, withOrgs);
   } catch (e) { next(e); }
@@ -298,7 +337,20 @@ export async function getConversationMessages(req: Request, res: Response, next:
       where: { conversationId: convId },
       orderBy: { createdAt: "asc" }
     });
-    return sendOk(res, messages);
+
+    const userIds = [...new Set(messages.map(m => m.senderUserId))];
+    const users = await prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, fullName: true, email: true }
+    });
+    const userMap = new Map(users.map(u => [u.id, u]));
+
+    const withSenders = messages.map(m => ({
+      ...m,
+      sender: userMap.get(m.senderUserId) || { id: m.senderUserId, fullName: "Member" }
+    }));
+
+    return sendOk(res, withSenders);
   } catch (e) { next(e); }
 }
 

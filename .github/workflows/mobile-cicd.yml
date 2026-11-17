@@ -1,0 +1,194 @@
+name: Mobile CI/CD (EAS Build & OTA Updates)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile-cicd.yml'
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Workflow Task to Execute'
+        required: true
+        default: 'auto'
+        type: choice
+        options:
+          - 'auto'
+          - 'ota_preview'
+          - 'full_build_preview'
+          - 'full_build_production'
+      platform:
+        description: 'Target Platform for Full Native Builds'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - 'all'
+          - 'android'
+          - 'ios'
+      message:
+        description: 'Release / Update Note'
+        required: false
+        default: 'Manual update triggered from GitHub Actions'
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate_and_detect:
+    name: Validate & Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      native_changed: ${{ steps.filter.outputs.native }}
+      code_changed: ${{ steps.filter.outputs.code }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect Modified Mobile Paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            native:
+              - 'mobile/package.json'
+              - 'mobile/package-lock.json'
+              - 'mobile/app.json'
+              - 'mobile/eas.json'
+            code:
+              - 'mobile/app/**'
+              - 'mobile/src/**'
+              - 'mobile/assets/**'
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'mobile/package-lock.json'
+
+      - name: Install Mobile Dependencies
+        working-directory: ./mobile
+        run: npm ci
+
+      - name: Run TypeScript Typecheck
+        working-directory: ./mobile
+        run: npm run typecheck
+
+  publish_ota_update:
+    name: Publish Instant OTA Update (expo-updates)
+    needs: validate_and_detect
+    runs-on: ubuntu-latest
+    if: |
+      always() &&
+      needs.validate_and_detect.result == 'success' &&
+      (
+        (github.event_name == 'push' && needs.validate_and_detect.outputs.native_changed == 'false') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.task == 'ota_preview') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.task == 'auto' && needs.validate_and_detect.outputs.native_changed == 'false')
+      )
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'mobile/package-lock.json'
+
+      - name: Setup Expo & EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install Mobile Dependencies
+        working-directory: ./mobile
+        run: npm ci
+
+      - name: Publish Over-The-Air Update to Preview Channel
+        id: publish_ota
+        working-directory: ./mobile
+        run: |
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          INPUT_MSG="${{ github.event.inputs.message }}"
+          UPDATE_MSG="${INPUT_MSG:-$COMMIT_MSG}"
+          UPDATE_MSG="${UPDATE_MSG:-Automated CI/CD OTA update from commit $GITHUB_SHA}"
+          
+          # Clean single-line message
+          CLEAN_MSG=$(echo "$UPDATE_MSG" | head -n 1 | tr -d '"\r\n')
+          
+          echo "Publishing OTA update on branch 'preview' with message: $CLEAN_MSG"
+          npx eas-cli update --branch preview --message "$CLEAN_MSG" --non-interactive
+
+      - name: Write OTA Update Summary
+        run: |
+          echo "### 🚀 Instant Over-The-Air (OTA) Update Published!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target Channel / Branch:** \`preview\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Delivery:** Next time any installed client/owner opens the app, the update downloads automatically in the background and applies on restart without re-downloading the APK/IPA." >> $GITHUB_STEP_SUMMARY
+
+  native_build:
+    name: Build Native Binaries (APK & Ad-Hoc IPA)
+    needs: validate_and_detect
+    runs-on: ubuntu-latest
+    if: |
+      always() &&
+      needs.validate_and_detect.result == 'success' &&
+      (
+        (github.event_name == 'push' && needs.validate_and_detect.outputs.native_changed == 'true') ||
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.task == 'full_build_preview' || github.event.inputs.task == 'full_build_production')) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.task == 'auto' && needs.validate_and_detect.outputs.native_changed == 'true')
+      )
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'mobile/package-lock.json'
+
+      - name: Setup Expo & EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install Mobile Dependencies
+        working-directory: ./mobile
+        run: npm ci
+
+      - name: Trigger EAS Build
+        working-directory: ./mobile
+        run: |
+          PROFILE="preview"
+          if [ "${{ github.event.inputs.task }}" = "full_build_production" ]; then
+            PROFILE="production"
+          fi
+          
+          PLATFORM="${{ github.event.inputs.platform || 'all' }}"
+          
+          echo "Starting EAS Build for platform: $PLATFORM, profile: $PROFILE"
+          npx eas-cli build --platform "$PLATFORM" --profile "$PROFILE" --non-interactive --no-wait
+
+      - name: Write Build Summary
+        run: |
+          echo "### 📦 Native Build Triggered on EAS Cloud!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Platform:** \`${{ github.event.inputs.platform || 'all' }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Profile:** \`preview\` (Android Standalone \`.apk\` + iOS Ad-Hoc \`.ipa\`)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Live Build Status:** Monitor progress and download artifacts from your [Expo Dashboard](https://expo.dev/accounts/socialures-team/projects/stitchguard-mobile/builds)." >> $GITHUB_STEP_SUMMARY
+          echo "- **Client Direct Share Link:** Once the build completes, copy the public install link / QR code and send it directly to the owner." >> $GITHUB_STEP_SUMMARY
+

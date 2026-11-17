@@ -5,7 +5,7 @@ import {
   adminVerification, createPurchaseOrder, createRfq, deleteRfq, getPurchaseOrderDetails,
   getRfqDetails, inviteSupplier, listAdminOrganizations, listMyRfqs, listPurchaseOrders,
   submitQuote, supplierSearch, updateOrderStatus, upsertSupplierProfile,
-  updateOrganizationProfile
+  updateOrganizationProfile, updateQuotationStatus
 } from "../controllers/marketplace.controller";
 const router = Router();
 
@@ -23,6 +23,7 @@ router.get("/rfqs/:rfqId", getRfqDetails);
 router.delete("/rfqs/:rfqId", deleteRfq);
 router.post("/rfqs/:rfqId/invitations", inviteSupplier);
 router.post("/quotations", submitQuote);
+router.patch("/quotations/:quotationId/status", updateQuotationStatus);
 router.get("/purchase-orders", listPurchaseOrders);
 router.get("/purchase-orders/:orderId", getPurchaseOrderDetails);
 router.post("/purchase-orders", createPurchaseOrder);
