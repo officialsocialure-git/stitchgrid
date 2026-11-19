@@ -1,9 +1,8 @@
 import React from "react";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { Platform, View, StyleSheet } from "react-native";
+import { Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Colors } from "../../src/constants/colors";
 
 export default function SupplierTabsLayout() {
   const insets = useSafeAreaInsets();
@@ -23,120 +22,105 @@ export default function SupplierTabsLayout() {
           height: tabHeight,
           paddingBottom: bottomInset,
           paddingTop: 8,
+          elevation: 8,
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.05,
+          shadowRadius: 8,
         },
         tabBarLabelStyle: {
           fontSize: 11,
-          fontWeight: "600",
+          fontWeight: "700",
+          marginTop: 2,
         },
       }}
     >
+      {/* 1. Home */}
       <Tabs.Screen
         name="dashboard"
         options={{
           title: "Home",
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? "home" : "home-outline"} size={22} color={color as string} />
           ),
         }}
       />
+
+      {/* 2. RFQs (Buyer Requests) */}
       <Tabs.Screen
         name="buyer-requests"
         options={{
-          title: "Buyer Requests",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "list" : "list-outline"} size={22} color={color as string} />
+          title: "RFQs",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "reader" : "reader-outline"} size={22} color={color as string} />
           ),
         }}
       />
+
+      {/* 3. Orders */}
       <Tabs.Screen
         name="orders"
         options={{
-          title: "My Orders",
-          tabBarIcon: ({ color, size, focused }) => (
-            <View style={focused ? styles.activeTabPill : undefined}>
-              <Ionicons name={focused ? "cube" : "cube-outline"} size={22} color={color as string} />
-            </View>
+          title: "Orders",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "checkmark-circle" : "checkmark-circle-outline"} size={22} color={color as string} />
           ),
         }}
       />
+
+      {/* 4. Messages */}
       <Tabs.Screen
         name="messages"
         options={{
           title: "Messages",
-          tabBarBadge: 3,
-          tabBarBadgeStyle: {
-            backgroundColor: "#5B13EC",
-            color: "#FFFFFF",
-            fontSize: 10,
-            fontWeight: "700",
-            minWidth: 16,
-            height: 16,
-            borderRadius: 8,
-            lineHeight: 16,
-          },
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "chatbubble-ellipses" : "chatbubble-ellipses-outline"} size={22} color={color as string} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "mail" : "mail-outline"} size={22} color={color as string} />
           ),
         }}
       />
+
+      {/* 5. Profile */}
       <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? "person" : "person-outline"} size={22} color={color as string} />
           ),
         }}
       />
 
-      {/* Auxiliary screens accessible via navigation but hidden from bottom tab bar */}
+      {/* Auxiliary screens accessible via navigation with bottom tab bar preserved */}
       <Tabs.Screen
         name="my-offers"
         options={{
-          tabBarButton: () => null,
-          tabBarStyle: { display: "none" },
+          href: null,
         }}
       />
       <Tabs.Screen
         name="offers"
         options={{
-          tabBarButton: () => null,
-          tabBarStyle: { display: "none" },
+          href: null,
         }}
       />
       <Tabs.Screen
         name="samples"
         options={{
-          tabBarButton: () => null,
-          tabBarStyle: { display: "none" },
+          href: null,
         }}
       />
       <Tabs.Screen
         name="production"
         options={{
-          tabBarButton: () => null,
-          tabBarStyle: { display: "none" },
+          href: null,
         }}
       />
       <Tabs.Screen
         name="payments"
         options={{
-          tabBarButton: () => null,
-          tabBarStyle: { display: "none" },
+          href: null,
         }}
       />
     </Tabs>
   );
 }
-
-const styles = StyleSheet.create({
-  activeTabPill: {
-    backgroundColor: "#F1ECFE",
-    paddingHorizontal: 14,
-    paddingVertical: 4,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});
-

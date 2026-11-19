@@ -14,89 +14,108 @@ export default function BuyerTabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: Colors.textMuted,
+        tabBarActiveTintColor: "#5B13EC",
+        tabBarInactiveTintColor: "#64748B",
         tabBarStyle: {
-          backgroundColor: Colors.surface,
+          backgroundColor: "#FFFFFF",
           borderTopWidth: 1,
-          borderTopColor: Colors.border,
+          borderTopColor: "#E2E8F0",
           height: tabHeight,
           paddingBottom: bottomInset,
           paddingTop: 8,
+          elevation: 8,
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.05,
+          shadowRadius: 8,
         },
         tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: "600",
+          fontSize: 11,
+          fontWeight: "700",
+          marginTop: 2,
         },
       }}
     >
+      {/* 1. Home */}
       <Tabs.Screen
         name="dashboard"
         options={{
           title: "Home",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "home" : "home-outline"} size={size} color={color as string} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="rfqs"
-        options={{
-          title: "Requests",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "document-text" : "document-text-outline"} size={size} color={color as string} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="orders"
-        options={{
-          title: "Orders",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "cube" : "cube-outline"} size={size} color={color as string} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="messages"
-        options={{
-          title: "Messages",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "chatbubble-ellipses" : "chatbubble-ellipses-outline"} size={size} color={color as string} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "home" : "home-outline"} size={22} color={color as string} />
           ),
         }}
       />
 
-      {/* Auxiliary screens accessible via navigation but hidden from bottom tab bar */}
+      {/* 2. RFQs */}
+      <Tabs.Screen
+        name="rfqs"
+        options={{
+          title: "RFQs",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "reader" : "reader-outline"} size={22} color={color as string} />
+          ),
+        }}
+      />
+
+      {/* 3. Orders */}
+      <Tabs.Screen
+        name="orders"
+        options={{
+          title: "Orders",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "checkmark-circle" : "checkmark-circle-outline"} size={22} color={color as string} />
+          ),
+        }}
+      />
+
+      {/* 4. Messages */}
+      <Tabs.Screen
+        name="messages"
+        options={{
+          title: "Messages",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "mail" : "mail-outline"} size={22} color={color as string} />
+          ),
+        }}
+      />
+
+      {/* 5. Profile */}
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: "Profile",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "person" : "person-outline"} size={22} color={color as string} />
+          ),
+        }}
+      />
+
+      {/* Auxiliary screens accessible via navigation with bottom tab bar preserved */}
       <Tabs.Screen
         name="suppliers"
         options={{
-          tabBarButton: () => null,
-          tabBarStyle: { display: "none" },
+          href: null,
         }}
       />
       <Tabs.Screen
         name="offers"
         options={{
-          tabBarButton: () => null,
-          tabBarStyle: { display: "none" },
+          href: null,
         }}
       />
       <Tabs.Screen
         name="samples"
         options={{
-          tabBarButton: () => null,
-          tabBarStyle: { display: "none" },
+          href: null,
         }}
       />
       <Tabs.Screen
         name="payments"
         options={{
-          tabBarButton: () => null,
-          tabBarStyle: { display: "none" },
+          href: null,
         }}
       />
     </Tabs>
   );
 }
-
