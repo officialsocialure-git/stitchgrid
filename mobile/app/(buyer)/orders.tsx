@@ -441,19 +441,15 @@ export default function BuyerOrdersScreen() {
           // Title formatting matching Web & Reference Photo (media_1794887617949_9787e417.jpg)
           const firstItem = item.items?.[0];
           let itemTitle = firstItem
-            ? `${Number(firstItem.quantity || 1000).toLocaleString()} pcs ${firstItem.description || (firstItem as any).name || "1000 cargo black pants - Supplier Quote"}`
-            : "1,000 pcs 1000 cargo black pants - Supplier Quote";
-          if (!itemTitle.includes("Supplier Quote") && !itemTitle.includes("Quote")) {
-            itemTitle = `${itemTitle} - Supplier Quote`;
-          }
-
-          const buyerName = item.buyerOrg?.name || item.buyer?.name || "Qspider";
+            ? `${firstItem.quantity != null ? Number(firstItem.quantity).toLocaleString("en-IN") : "Quantity not specified"} pcs ${firstItem.description || (firstItem as any).name || "Item details not provided"}`
+            : "Order item details not provided";
+          const buyerName = item.supplier?.name || item.supplierOrg?.name || "Supplier not available";
 
           const deliveryFormatted = item.expectedDate
             ? new Date(item.expectedDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
-            : "18 Nov 2026";
+            : "—";
 
-          const rawAmt = Number(item.totalAmount) || 499000;
+          const rawAmt = Number(item.totalAmount) || 0;
           const amountFormatted = rawAmt >= 100000
             ? `₹${(rawAmt / 100000).toFixed(2)}L`
             : `₹${rawAmt.toLocaleString("en-IN")}`;
@@ -488,7 +484,7 @@ export default function BuyerOrdersScreen() {
                 {itemTitle}
               </Text>
               <Text style={styles.buyerText}>
-                Buyer: <Text style={styles.buyerName}>{buyerName}</Text>
+                Supplier: <Text style={styles.buyerName}>{buyerName}</Text>
               </Text>
 
               {/* Amount & Target Date */}

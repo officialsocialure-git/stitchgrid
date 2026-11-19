@@ -135,7 +135,7 @@ export const SupplierNewChatModal: React.FC<SupplierNewChatModalProps> = ({
           <View style={styles.headerRow}>
             <View>
               <Text style={styles.sheetTitle}>New Message</Text>
-              <Text style={styles.sheetSubtitle}>Choose a verified garment buyer or brand</Text>
+              <Text style={styles.sheetSubtitle}>Choose a buyer connected to your RFQs or purchase orders</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color={Colors.textSecondary} />
@@ -197,7 +197,6 @@ export const SupplierNewChatModal: React.FC<SupplierNewChatModalProps> = ({
                     >
                       <View style={styles.avatarCircle}>
                         <Text style={styles.avatarText}>{initial}</Text>
-                        <View style={styles.onlineBadge} />
                       </View>
 
                       <View style={styles.buyerInfo}>
@@ -212,7 +211,7 @@ export const SupplierNewChatModal: React.FC<SupplierNewChatModalProps> = ({
                         </View>
 
                         <Text style={styles.buyerMeta} numberOfLines={1}>
-                          📍 {buyer.city || "India"}
+                          📍 {buyer.city || "Location not provided"}
                           {buyer.category ? ` • ${buyer.category}` : ""}
                         </Text>
 

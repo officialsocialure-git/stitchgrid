@@ -367,7 +367,7 @@ export default function BuyerMessagesScreen() {
     orgName ||
     "Supplier not available";
 
-  const activeSupplierCity = selectedConv?.supplier?.city || "India";
+  const activeSupplierCity = selectedConv?.supplier?.city || "Location not provided";
 
   // VIEW 1: WhatsApp Chat List Screen
   if (!selectedConv) {
@@ -488,7 +488,7 @@ export default function BuyerMessagesScreen() {
                 {/* Avatar with Online Indicator */}
                 <View style={styles.chatAvatar}>
                   <Text style={styles.chatAvatarText}>{initial}</Text>
-                  <View style={styles.chatOnlineDot} />
+                  
                 </View>
 
                 {/* Conversation Details */}

@@ -43,9 +43,9 @@ export default function SupplierDashboardScreen() {
   const [isCompleteProfileOpen, setIsCompleteProfileOpen] = useState(false);
 
   // Quote Submission Form
-  const [quoteUnitPrice, setQuoteUnitPrice] = useState("");
+  const [quoteUnitPrice, setQuoteUnitPrice] = useState("185");
   const [quoteLeadDays, setQuoteLeadDays] = useState("21");
-  const [quoteTerms, setQuoteTerms] = useState("30% advance, 70% before dispatch");
+  const [quoteTerms, setQuoteTerms] = useState("50% payment on PO confirmation, 50% after final quality approval");
   const [quoteNotes, setQuoteNotes] = useState("");
   const [quoteSubmitting, setQuoteSubmitting] = useState(false);
   const [quoteSuccessMsg, setQuoteSuccessMsg] = useState<string | null>(null);
@@ -79,9 +79,18 @@ export default function SupplierDashboardScreen() {
   const loadDashboardData = useCallback(async () => {
     try {
       const [rfqList, orderList, sampleList] = await Promise.all([
-        marketplaceService.listMyRfqs(activeMembership?.organizationId),
-        marketplaceService.listOrders(),
-        marketplaceService.listSamples(),
+        marketplaceService.listMyRfqs(activeMembership?.organizationId).catch((error) => {
+          console.warn("Supplier dashboard RFQs failed to load:", error);
+          return [];
+        }),
+        marketplaceService.listOrders().catch((error) => {
+          console.warn("Supplier dashboard orders failed to load:", error);
+          return [];
+        }),
+        marketplaceService.listSamples().catch((error) => {
+          console.warn("Supplier dashboard samples failed to load:", error);
+          return [];
+        }),
       ]);
 
       const supplierOrganizationId = activeMembership?.organizationId;
@@ -143,7 +152,7 @@ export default function SupplierDashboardScreen() {
 
   const handleOpenQuoteModal = (rfq: any) => {
     setSelectedRfqForQuote(rfq);
-    setQuoteUnitPrice(rfq.targetPrice ? String(rfq.targetPrice) : "210");
+    setQuoteUnitPrice("185");
     setQuoteLeadDays("21");
     setQuoteSuccessMsg(null);
     setQuoteErrorMsg(null);
@@ -174,6 +183,8 @@ export default function SupplierDashboardScreen() {
         supplierOrgId,
         totalAmount: price * quantity,
         leadTimeDays: parseInt(quoteLeadDays, 10) || 21,
+        sampleCost: 0,
+        sampleLeadDays: 7,
         terms: quoteTerms.trim() || undefined,
         items: [
           {
@@ -969,6 +980,13 @@ const styles = StyleSheet.create({
     color: Colors.slate600,
     fontWeight: "500",
     marginTop: 1,
+  },
+
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Colors.textSecondary,
+    marginBottom: 6,
   },
 
   // Recent RFQs Section

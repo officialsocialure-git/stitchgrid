@@ -661,7 +661,7 @@ export default function SupplierMessagesScreen() {
                 {/* Circular Avatar with Online Indicator */}
                 <View style={styles.chatAvatar}>
                   <Text style={styles.chatAvatarText}>{initial}</Text>
-                  <View style={styles.chatOnlineDot} />
+                  
                 </View>
 
                 {/* Conversation Details */}

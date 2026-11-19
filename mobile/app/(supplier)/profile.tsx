@@ -64,9 +64,11 @@ export default function SupplierProfileScreen() {
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                 <Text style={styles.userName}>{user?.fullName || "Name not provided"}</Text>
-                <View style={styles.verifiedBadge}>
-                  <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
-                </View>
+                {org?.verificationStatus === "APPROVED" && (
+                  <View style={styles.verifiedBadge}>
+                    <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
+                  </View>
+                )}
               </View>
               <Text style={styles.userEmail}>{user?.email || "Email not provided"}</Text>
               <View style={styles.roleTag}>

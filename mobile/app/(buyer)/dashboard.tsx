@@ -60,6 +60,7 @@ export default function BuyerDashboardScreen() {
   const [rfqTitle, setRfqTitle] = useState("");
   const [rfqCategory, setRfqCategory] = useState("T-Shirts");
   const [rfqQuantity, setRfqQuantity] = useState("1000");
+  const [rfqTargetPrice, setRfqTargetPrice] = useState("");
   const [rfqTargetDate, setRfqTargetDate] = useState("");
   const [rfqDescription, setRfqDescription] = useState("");
   const [rfqSubmitting, setRfqSubmitting] = useState(false);
@@ -166,6 +167,7 @@ export default function BuyerDashboardScreen() {
         title: rfqTitle.trim(),
         garmentType: rfqCategory,
         targetQuantity: quantity,
+        targetPrice: rfqTargetPrice.trim() ? Number(rfqTargetPrice) : undefined,
         targetDate: rfqTargetDate || undefined,
         description: rfqDescription.trim() || undefined,
         status: "OPEN",

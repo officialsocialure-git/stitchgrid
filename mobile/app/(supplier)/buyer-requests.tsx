@@ -162,10 +162,10 @@ export default function SupplierBuyerRequestsScreen() {
   // Quotation Submission Modal state
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
   const [quoteTargetRfq, setQuoteTargetRfq] = useState<Rfq | null>(null);
-  const [unitPrice, setUnitPrice] = useState("180");
+  const [unitPrice, setUnitPrice] = useState("185");
   const [leadTimeDays, setLeadTimeDays] = useState("21 Days");
   const [sampleCost, setSampleCost] = useState("0");
-  const [terms, setTerms] = useState("50% Advance, 50% on QC Pass");
+  const [terms, setTerms] = useState("50% payment on PO confirmation, 50% after final quality approval");
   const [submittingQuote, setSubmittingQuote] = useState(false);
 
   // Initialize viewed IDs from storage
@@ -370,11 +370,11 @@ export default function SupplierBuyerRequestsScreen() {
   const handleOpenQuote = (rfq: Rfq) => {
     setQuoteTargetRfq(rfq);
     markAsViewed(rfq.id);
-    const initialPrice = rfq.targetPrice ? String(rfq.targetPrice) : "180";
+    const initialPrice = "185";
     setUnitPrice(initialPrice);
     setLeadTimeDays("21 Days");
     setSampleCost("0");
-    setTerms("50% Advance, 50% on QC Pass");
+    setTerms("50% payment on PO confirmation, 50% after final quality approval");
     setQuoteModalOpen(true);
   };
 
@@ -634,9 +634,9 @@ export default function SupplierBuyerRequestsScreen() {
             </View>
           )
         }
-        renderItem={({ item, index }) => {
+        renderItem={({ item }) => {
           const status = getRfqStatus(item);
-          const rfqNumber = formatRfqNumber(item.id, index);
+          const rfqNumber = formatRfqNumber(item.id);
           const fabric = getFabricSpec(item);
           const location = getLocation(item);
           const qtyFormatted = `${(item.targetQuantity || item.items?.[0]?.quantity || 1000).toLocaleString()} pcs`;

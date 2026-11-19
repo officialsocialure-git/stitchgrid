@@ -16,6 +16,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../constants/colors";
 import { marketplaceService } from "../../services/marketplace.service";
 
+const dateAfterDays = (days: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+};
+
 interface PostRfqModalProps {
   visible: boolean;
   onClose: () => void;
@@ -53,9 +59,9 @@ export const PostRfqModal: React.FC<PostRfqModalProps> = ({
   );
 
   // Section 3: Delivery & Target
-  const [targetDeliveryDate, setTargetDeliveryDate] = useState("2026-05-12");
-  const [deliveryLocation, setDeliveryLocation] = useState("Noida, Uttar Pradesh – 201301");
-  const [quoteDeadline, setQuoteDeadline] = useState("2026-11-08");
+  const [targetDeliveryDate, setTargetDeliveryDate] = useState(() => dateAfterDays(30));
+  const [deliveryLocation, setDeliveryLocation] = useState("");
+  const [quoteDeadline, setQuoteDeadline] = useState(() => dateAfterDays(7));
 
   // Accordion active sections
   const [openSections, setOpenSections] = useState<{ [key: string]: boolean }>({

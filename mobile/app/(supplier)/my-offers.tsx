@@ -231,8 +231,9 @@ export default function SupplierMyOffersScreen() {
       const unitPrice = q.items?.[0]?.unitPrice
         ? Number(q.items[0].unitPrice)
         : quantity > 0 ? total / quantity : 0;
-      const isMyQuote = Boolean(activeMembership?.organizationId) &&
-        q.supplierOrgId === activeMembership.organizationId;
+      const supplierOrganizationId = activeMembership?.organizationId;
+      const isMyQuote = Boolean(supplierOrganizationId) &&
+        q.supplierOrgId === supplierOrganizationId;
 
       return {
         id: q.id,
@@ -366,10 +367,10 @@ export default function SupplierMyOffersScreen() {
             Buyer requests and your submitted quotations will appear here when available.
           </Text>
           <TouchableOpacity
-            style={[styles.modalPrimaryActionBtn, { marginTop: 18, paddingHorizontal: 20 }]}
+            style={[styles.backToRfqsBtn, { marginTop: 18, paddingHorizontal: 20 }]}
             onPress={() => router.push("/(supplier)/buyer-requests")}
           >
-            <Text style={styles.modalPrimaryActionText}>View Buyer Requests</Text>
+            <Text style={styles.backToRfqsBtnText}>View Buyer Requests</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>

@@ -123,6 +123,9 @@ export const authService = {
     fullName: string;
     email?: string;
     phone?: string;
+    isActive?: boolean;
+    emailVerified?: boolean;
+    phoneVerified?: boolean;
     activeMembership: Membership | null;
     memberships: Membership[];
   }> {
