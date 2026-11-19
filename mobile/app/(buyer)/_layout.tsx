@@ -2,9 +2,14 @@ import React from "react";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Platform } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "../../src/constants/colors";
 
 export default function BuyerTabsLayout() {
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, Platform.OS === "ios" ? 28 : 12);
+  const tabHeight = 56 + bottomInset;
+
   return (
     <Tabs
       screenOptions={{
@@ -15,8 +20,8 @@ export default function BuyerTabsLayout() {
           backgroundColor: Colors.surface,
           borderTopWidth: 1,
           borderTopColor: Colors.border,
-          height: Platform.OS === "ios" ? 92 : 72,
-          paddingBottom: Platform.OS === "ios" ? 30 : 16,
+          height: tabHeight,
+          paddingBottom: bottomInset,
           paddingTop: 8,
         },
         tabBarLabelStyle: {

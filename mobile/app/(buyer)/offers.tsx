@@ -249,12 +249,7 @@ export default function BuyerOffersScreen() {
     : "cmw4yap0u00059";
 
   return (
-    <SafeAreaView
-      style={[
-        styles.safeArea,
-        Platform.OS === "android" ? { paddingTop: StatusBar.currentHeight || 0 } : null,
-      ]}
-    >
+    <View style={styles.safeArea}>
       <Header
         title="Quotation Comparison"
         subtitle="Review supplier bids & accept contracts"
@@ -641,7 +636,7 @@ export default function BuyerOffersScreen() {
           </View>
         </View>
       </RNModal>
-    </SafeAreaView>
+    </View>
   );
 }
 

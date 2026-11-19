@@ -65,7 +65,7 @@ export default function SuppliersDiscoveryScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.safeArea}>
       <Header
         title="Verified Mills"
         subtitle="Source directly from vetted garment factories"
@@ -207,7 +207,7 @@ export default function SuppliersDiscoveryScreen() {
           );
         }}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -262,7 +262,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 110,
   },
   supplierCard: {
     backgroundColor: Colors.surface,

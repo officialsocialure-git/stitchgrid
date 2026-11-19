@@ -51,7 +51,7 @@ export default function SupplierProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.safeArea}>
       <Header title="Factory Profile" subtitle="Account & manufacturing mill settings" />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -137,7 +137,7 @@ export default function SupplierProfileScreen() {
           style={{ marginTop: 22, marginBottom: 20 }}
         />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 110,
   },
   profileCard: {
     backgroundColor: Colors.surface,

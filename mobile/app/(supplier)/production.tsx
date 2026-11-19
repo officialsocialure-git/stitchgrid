@@ -86,7 +86,7 @@ export default function SupplierProductionScreen() {
   const progressPercent = Math.round((completedCount / milestonesList.length) * 100);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.safeArea}>
       <Header
         title="Factory Floor Timeline"
         subtitle="Update milestone progression for buyer visibility"
@@ -275,7 +275,7 @@ export default function SupplierProductionScreen() {
           </>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 110,
   },
   orderPillsScroll: {
     gap: 8,

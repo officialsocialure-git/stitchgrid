@@ -271,12 +271,7 @@ export default function BuyerSamplesScreen() {
   const tabs: FilterTab[] = ["All", "New Samples", "Checking", "Approved", "Changes Needed"];
 
   return (
-    <SafeAreaView
-      style={[
-        styles.safeArea,
-        Platform.OS === "android" ? { paddingTop: StatusBar.currentHeight || 0 } : null,
-      ]}
-    >
+    <View style={styles.safeArea}>
       <Header
         title="Samples"
         subtitle="Check product samples and approve them before making bulk order"
@@ -810,7 +805,7 @@ export default function BuyerSamplesScreen() {
         onClose={() => setIsRequestModalOpen(false)}
         onSuccess={loadSamples}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 

@@ -15,6 +15,7 @@ import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "../../src/constants/colors";
 import { Input } from "../../src/components/common/Input";
 import { Button } from "../../src/components/common/Button";
@@ -25,6 +26,7 @@ WebBrowser.maybeCompleteAuthSession();
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { signup, googleLogin, completeGoogleOnboarding } = useAuth();
 
   const [role, setRole] = useState<"BUYER" | "SUPPLIER">("BUYER");
@@ -164,7 +166,16 @@ export default function RegisterScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={styles.container}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: Math.max(insets.top + 16, 36),
+            paddingBottom: Math.max(insets.bottom + 20, 36),
+          },
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <TouchableOpacity
             onPress={() => router.back()}

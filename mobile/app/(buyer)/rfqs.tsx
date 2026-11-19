@@ -200,12 +200,7 @@ export default function BuyerRfqsScreen() {
   }, [rfqs, searchQuery, statusFilter, sortBy]);
 
   return (
-    <SafeAreaView
-      style={[
-        styles.safeArea,
-        Platform.OS === "android" ? { paddingTop: StatusBar.currentHeight || 0 } : null,
-      ]}
-    >
+    <View style={styles.safeArea}>
       {/* Top Header Bar */}
       <Header showMenuButton onMenuPress={() => setNavigationMenuOpen(true)} />
 
@@ -702,7 +697,7 @@ export default function BuyerRfqsScreen() {
           rfqTitle={selectedRfqForInvite?.title || ""}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -712,7 +707,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   listContent: {
-    paddingBottom: 40,
+    paddingBottom: 110,
   },
   pageHeaderWrap: {
     paddingHorizontal: 16,

@@ -275,12 +275,7 @@ export default function BuyerDashboardScreen() {
   };
 
   return (
-    <SafeAreaView
-      style={[
-        styles.safeArea,
-        Platform.OS === "android" ? { paddingTop: StatusBar.currentHeight || 0 } : null,
-      ]}
-    >
+    <View style={styles.safeArea}>
       <Header
         showMenuButton
         onMenuPress={() => setNavigationMenuOpen(true)}
@@ -711,7 +706,7 @@ export default function BuyerDashboardScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -784,7 +779,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 40,
+    paddingBottom: 110,
   },
   // Hero Banner (Deep Purple #5B13EC matching web)
   heroBanner: {

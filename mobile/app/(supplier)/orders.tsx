@@ -275,7 +275,7 @@ export default function SupplierOrdersScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.safeArea}>
       {/* 1. Shared App Header (Hamburger, Stitchgrid Logo, Bell with 6 badge, Profile) */}
       <Header />
 
@@ -910,7 +910,7 @@ export default function SupplierOrdersScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -923,7 +923,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   mainScrollContent: {
-    paddingBottom: 40,
+    paddingBottom: 110,
   },
 
   // Page Header

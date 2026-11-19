@@ -520,7 +520,7 @@ export default function SupplierBuyerRequestsScreen() {
     selectedCategory !== "ALL" || selectedLocation !== "ALL" || selectedStatus !== "ALL";
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.safeArea}>
       {/* Shared Header with StitchGrid Logo, Notification Bell and Profile Avatar */}
       <Header />
 
@@ -1270,7 +1270,7 @@ export default function SupplierBuyerRequestsScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -1399,7 +1399,7 @@ const styles = StyleSheet.create({
 
   // ---------------- Requests List Content ----------------
   listContent: {
-    paddingBottom: 32,
+    paddingBottom: 110,
   },
   rfqCard: {
     backgroundColor: "#FFFFFF",

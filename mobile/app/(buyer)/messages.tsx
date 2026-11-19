@@ -20,6 +20,7 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "../../src/constants/colors";
 import { Header } from "../../src/components/common/Header";
 import { EmptyState } from "../../src/components/common/EmptyState";
@@ -96,6 +97,9 @@ function formatChatTime(dateString?: string): string {
 
 export default function BuyerMessagesScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const topInset = Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 0);
+  const bottomInset = Math.max(insets.bottom, Platform.OS === "ios" ? 24 : 10);
   const { user, activeMembership } = useAuth();
   const { targetSupplierOrgId, supplierId, orgId, orgName } = useLocalSearchParams<{
     targetSupplierOrgId?: string;
@@ -366,12 +370,7 @@ export default function BuyerMessagesScreen() {
   // VIEW 1: WhatsApp Chat List Screen
   if (!selectedConv) {
     return (
-      <SafeAreaView
-        style={[
-          styles.safeArea,
-          Platform.OS === "android" ? { paddingTop: StatusBar.currentHeight || 0 } : null,
-        ]}
-      >
+      <View style={styles.safeArea}>
         <Header
           title="Messages"
           subtitle="Multi-supplier B2B messaging network"
@@ -577,20 +576,15 @@ export default function BuyerMessagesScreen() {
             }
           }}
         />
-      </SafeAreaView>
+      </View>
     );
   }
 
   // VIEW 2: WhatsApp Individual Conversation Screen
   return (
-    <SafeAreaView
-      style={[
-        styles.safeArea,
-        Platform.OS === "android" ? { paddingTop: StatusBar.currentHeight || 0 } : null,
-      ]}
-    >
+    <View style={styles.safeArea}>
       {/* WhatsApp Chat Navigation Bar */}
-      <View style={styles.chatNavBar}>
+      <View style={[styles.chatNavBar, { paddingTop: topInset + 6 }]}>
         <TouchableOpacity
           onPress={() => setSelectedConv(null)}
           style={styles.navBackBtn}
@@ -774,7 +768,7 @@ export default function BuyerMessagesScreen() {
         />
 
         {/* WhatsApp-Style Bottom Input Bar */}
-        <View style={styles.bottomBarContainer}>
+        <View style={[styles.bottomBarContainer, { paddingBottom: bottomInset }]}>
           {/* Attachment Paperclip Button */}
           <TouchableOpacity
             style={styles.attachBtn}
@@ -827,7 +821,7 @@ export default function BuyerMessagesScreen() {
             activeOpacity={1}
             onPress={() => setIsAttachmentSheetOpen(false)}
           />
-          <View style={styles.attachmentSheet}>
+          <View style={[styles.attachmentSheet, { paddingBottom: Math.max(insets.bottom, 24) }]}>
             <View style={styles.sheetDrag} />
             <Text style={styles.attachmentTitle}>Share with Manufacturer</Text>
 
@@ -896,7 +890,7 @@ export default function BuyerMessagesScreen() {
           )}
         </View>
       </RNModal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -966,7 +960,7 @@ const styles = StyleSheet.create({
     color: "#5B13EC",
   },
   chatListContent: {
-    paddingBottom: 90,
+    paddingBottom: 110,
   },
   chatItemRow: {
     flexDirection: "row",

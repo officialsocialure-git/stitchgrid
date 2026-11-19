@@ -186,7 +186,7 @@ export default function SupplierDashboardScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.safeArea}>
       <Header />
 
       <ScrollView
@@ -684,7 +684,7 @@ export default function SupplierDashboardScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -696,7 +696,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 40,
+    paddingBottom: 110,
   },
 
   // Hero Banner: Gradient Purple

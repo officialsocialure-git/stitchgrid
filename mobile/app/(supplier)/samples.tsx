@@ -13,10 +13,12 @@ import {
   Platform,
   Modal,
   TouchableWithoutFeedback,
+  StatusBar as RNStatusBar,
 } from "react-native";
 import { useRouter, useNavigation } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Header } from "../../src/components/common/Header";
 import { EmptyState } from "../../src/components/common/EmptyState";
 import { marketplaceService } from "../../src/services/marketplace.service";
@@ -139,6 +141,9 @@ type DetailTab = "PHOTOS" | "DETAILS" | "BUYER_NOTE" | "FILES" | "HISTORY";
 export default function SupplierSamplesScreen() {
   const router = useRouter();
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  const topInset = Math.max(insets.top, Platform.OS === "android" ? (RNStatusBar.currentHeight || 24) : 0);
+  const bottomInset = Math.max(insets.bottom, Platform.OS === "ios" ? 24 : 12);
 
   const [samples, setSamples] = useState<SampleItem[]>(DEFAULT_SUPPLIER_SAMPLES);
   const [loading, setLoading] = useState(true);
@@ -304,9 +309,9 @@ export default function SupplierSamplesScreen() {
   // -----------------------------------------------------------------
   if (selectedSample) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <View style={styles.safeArea}>
         {/* Custom Header: Back Arrow + "Sample Details" + Status Badge */}
-        <View style={styles.detailsHeaderRow}>
+        <View style={[styles.detailsHeaderRow, { paddingTop: topInset + 6 }]}>
           <TouchableOpacity
             style={styles.detailsBackBtn}
             onPress={() => setSelectedSample(null)}
@@ -324,7 +329,7 @@ export default function SupplierSamplesScreen() {
 
         <ScrollView
           style={styles.mainScroll}
-          contentContainerStyle={styles.mainScrollContent}
+          contentContainerStyle={[styles.mainScrollContent, { paddingBottom: bottomInset + 30 }]}
           showsVerticalScrollIndicator={false}
         >
           {/* Top Card: Photo Preview + Title + Specs (Reference Photos 2 & 3) */}
@@ -661,7 +666,7 @@ export default function SupplierSamplesScreen() {
             </View>
           )}
         </ScrollView>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -669,7 +674,7 @@ export default function SupplierSamplesScreen() {
   // VIEW 1: SAMPLES LIST VIEW (Matching Reference Photo 1)
   // -----------------------------------------------------------------
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.safeArea}>
       {/* 1. App Top Header (Hamburger, Stitchgrid Logo, Bell, Profile) */}
       <Header />
 
@@ -967,7 +972,7 @@ export default function SupplierSamplesScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -980,7 +985,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   mainScrollContent: {
-    paddingBottom: 40,
+    paddingBottom: 110,
   },
 
   // ---------------- Page Title (Photo 1) ----------------

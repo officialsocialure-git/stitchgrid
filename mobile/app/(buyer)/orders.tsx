@@ -218,12 +218,7 @@ export default function BuyerOrdersScreen() {
   }, [orders, searchQuery, statusFilter]);
 
   return (
-    <SafeAreaView
-      style={[
-        styles.safeArea,
-        Platform.OS === "android" ? { paddingTop: StatusBar.currentHeight || 0 } : null,
-      ]}
-    >
+    <View style={styles.safeArea}>
       {/* Header with Menu Drawer Trigger */}
       <Header showMenuButton onMenuPress={() => setNavigationMenuOpen(true)} />
 
@@ -858,7 +853,7 @@ export default function BuyerOrdersScreen() {
         onStatusChange={handleStatusChange}
         updating={Boolean(updatingId)}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -868,7 +863,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   listContent: {
-    paddingBottom: 40,
+    paddingBottom: 110,
   },
   pageHeaderWrap: {
     paddingHorizontal: 16,

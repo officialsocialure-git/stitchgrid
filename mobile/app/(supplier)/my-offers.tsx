@@ -431,7 +431,7 @@ export default function SupplierMyOffersScreen() {
     : "1000 (2 quotes)";
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.safeArea}>
       {/* Shared Header with Hamburger, StitchGrid Logo, Notification Bell and Profile Avatar */}
       <Header />
 
@@ -852,7 +852,7 @@ export default function SupplierMyOffersScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -865,7 +865,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   mainScrollContent: {
-    paddingBottom: 36,
+    paddingBottom: 110,
   },
 
   // ---------------- Top Summary Card ----------------

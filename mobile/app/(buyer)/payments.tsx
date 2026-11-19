@@ -163,7 +163,7 @@ export default function PaymentsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.safeArea}>
       <Header
         title={isSupplier ? "Secure Payments & Milestone Releases" : "Payments"}
         subtitle="Secure garment payments backed by milestone-based releases"
@@ -500,7 +500,7 @@ export default function PaymentsScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -511,7 +511,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 16,
-    paddingBottom: 40,
+    paddingBottom: 110,
   },
   headerContainer: {
     paddingTop: 16,

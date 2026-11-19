@@ -14,9 +14,11 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  StatusBar as RNStatusBar,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, usePathname, useNavigation } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "../../constants/colors";
 import { useAuth } from "../../hooks/useAuth";
 import { useNotifications } from "../../hooks/useNotifications";
@@ -64,6 +66,12 @@ export const Header: React.FC<HeaderProps> = ({
   const pathname = usePathname();
   const { user, activeMembership, isBuyer, isSupplier, switchRole, logout, memberships, refreshUser } = useAuth();
   const { notifications, unreadCount, refresh, markRead } = useNotifications();
+  const insets = useSafeAreaInsets();
+
+  const topInset = Math.max(
+    insets.top,
+    Platform.OS === "android" ? (RNStatusBar.currentHeight || 24) : 0
+  );
 
   // Drawers and Modals
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -234,8 +242,9 @@ export const Header: React.FC<HeaderProps> = ({
   const currentNavLinks = isSupplier ? SUPPLIER_NAV_LINKS : BUYER_NAV_LINKS;
 
   return (
-    <View style={styles.container}>
-      {/* Left Row: Hamburger Button + Back Button + Brand Logo */}
+    <View style={[styles.headerOuterWrap, { paddingTop: topInset }]}>
+      <View style={styles.container}>
+        {/* Left Row: Hamburger Button + Back Button + Brand Logo */}
       <View style={styles.leftRow}>
         {showBack ? (
           <TouchableOpacity
@@ -320,6 +329,7 @@ export const Header: React.FC<HeaderProps> = ({
           </>
         )}
       </View>
+    </View>
 
       {/* ------------------------------------------------------------- */}
       {/* MOBILE HAMBURGER NAVIGATION DRAWER (Slide-in from Left)        */}
@@ -335,7 +345,7 @@ export const Header: React.FC<HeaderProps> = ({
             <View style={styles.drawerBackdrop} />
           </TouchableWithoutFeedback>
 
-          <View style={styles.drawerSheet}>
+          <View style={[styles.drawerSheet, { paddingTop: topInset + 12, paddingBottom: Math.max(insets.bottom, 24) }]}>
             {/* Drawer Header */}
             <View style={styles.drawerHeader}>
               <Image
@@ -470,7 +480,7 @@ export const Header: React.FC<HeaderProps> = ({
             <View style={styles.profileBackdrop} />
           </TouchableWithoutFeedback>
 
-          <View style={styles.profileSheet}>
+          <View style={[styles.profileSheet, { paddingBottom: Math.max(insets.bottom, Platform.OS === "ios" ? 34 : 20) }]}>
             {/* Drag Handle */}
             <View style={styles.notifDragHandle} />
 
@@ -686,7 +696,7 @@ export const Header: React.FC<HeaderProps> = ({
             <View style={styles.notifBackdrop} />
           </TouchableWithoutFeedback>
 
-          <View style={styles.notifSheet}>
+          <View style={[styles.notifSheet, { paddingBottom: Math.max(insets.bottom, Platform.OS === "ios" ? 34 : 20) }]}>
             {/* Drag Handle */}
             <View style={styles.notifDragHandle} />
 
@@ -817,6 +827,12 @@ export const Header: React.FC<HeaderProps> = ({
 };
 
 const styles = StyleSheet.create({
+  headerOuterWrap: {
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    zIndex: 10,
+  },
   container: {
     height: 58,
     flexDirection: "row",
@@ -824,8 +840,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 16,
     backgroundColor: Colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
   },
   leftRow: {
     flexDirection: "row",
