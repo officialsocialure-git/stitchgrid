@@ -17,7 +17,7 @@ import {
   StatusBar as RNStatusBar,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter, usePathname, useNavigation } from "expo-router";
+import { useRouter, usePathname } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "../../constants/colors";
 import { useAuth } from "../../hooks/useAuth";
@@ -62,7 +62,6 @@ export const Header: React.FC<HeaderProps> = ({
   hideProfileButton = false,
 }) => {
   const router = useRouter();
-  const navigation = useNavigation<any>();
   const pathname = usePathname();
   const { user, activeMembership, isBuyer, isSupplier, switchRole, logout, memberships, refreshUser } = useAuth();
   const { notifications, unreadCount, refresh, markRead } = useNotifications();
@@ -181,39 +180,11 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const navigateTo = (route: any) => {
+    // Always navigate using the complete Expo Router href. Navigating by the
+    // last segment (e.g. "orders") can resolve against the wrong navigator
+    // and repeatedly reopen the dashboard.
     setDrawerOpen(false);
-    setTimeout(() => {
-      // 1. Direct screen name within current tab layout (prevents root stack push & index reset)
-      const cleanPath = String(route).split("?")[0];
-      const screenName = cleanPath.split("/").pop();
-
-      if (navigation && typeof navigation.navigate === "function" && screenName) {
-        try {
-          navigation.navigate(screenName);
-          return;
-        } catch (e) {
-          console.warn("Direct navigation.navigate failed:", e);
-        }
-      }
-
-      // 2. Try router.navigate (Expo Router tab-safe navigation)
-      if ((router as any).navigate) {
-        try {
-          (router as any).navigate(route);
-          return;
-        } catch (e) {
-          console.warn("router.navigate failed:", e);
-        }
-      }
-
-      // 3. Fallback
-      try {
-        router.push(route);
-      } catch (e) {
-        console.warn("Navigation push error, trying replace:", e);
-        router.replace(route);
-      }
-    }, 120);
+    router.push(route);
   };
 
   // Buyer Navigation Links (matching Web Topbar Navigation)
@@ -235,8 +206,10 @@ export const Header: React.FC<HeaderProps> = ({
     { name: "My Offers", href: "/(supplier)/my-offers", icon: "pricetag-outline" as const },
     { name: "My Orders", href: "/(supplier)/orders", icon: "cube-outline" as const },
     { name: "Samples Dispatch", href: "/(supplier)/samples", icon: "shirt-outline" as const },
+    { name: "Production Tracking", href: "/(supplier)/production", icon: "construct-outline" as const },
     { name: "Chat Messages", href: "/(supplier)/messages", icon: "chatbubble-ellipses-outline" as const },
     { name: "Escrow & Settlements", href: "/(supplier)/payments", icon: "card-outline" as const },
+    { name: "Profile", href: "/(supplier)/profile", icon: "person-outline" as const },
   ];
 
   const currentNavLinks = isSupplier ? SUPPLIER_NAV_LINKS : BUYER_NAV_LINKS;

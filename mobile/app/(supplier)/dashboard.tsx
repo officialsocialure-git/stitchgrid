@@ -13,7 +13,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { useRouter, useNavigation } from "expo-router";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../src/constants/colors";
 import { Header } from "../../src/components/common/Header";
@@ -26,7 +26,6 @@ import { Rfq, PurchaseOrder, Sample } from "../../src/types";
 
 export default function SupplierDashboardScreen() {
   const router = useRouter();
-  const navigation = useNavigation<any>();
   const { user, activeMembership } = useAuth();
 
   const [rfqs, setRfqs] = useState<any[]>([]);
@@ -325,7 +324,7 @@ export default function SupplierDashboardScreen() {
               style={[styles.metricCard, { backgroundColor: "#f8f5fe", borderColor: "#ede5fc" }]}
               onPress={() => {
                 if (navigation?.navigate) {
-                  navigation.navigate("buyer-requests");
+                  router.push("/(supplier)/buyer-requests");
                 } else if ((router as any).navigate) {
                   (router as any).navigate("/(supplier)/buyer-requests");
                 } else {
@@ -346,7 +345,7 @@ export default function SupplierDashboardScreen() {
               style={[styles.metricCard, { backgroundColor: "#fffbf0", borderColor: "#fde68a" }]}
               onPress={() => {
                 if (navigation?.navigate) {
-                  navigation.navigate("my-offers");
+                  router.push("/(supplier)/my-offers");
                 } else if ((router as any).navigate) {
                   (router as any).navigate("/(supplier)/my-offers");
                 } else {
@@ -367,7 +366,7 @@ export default function SupplierDashboardScreen() {
               style={[styles.metricCard, { backgroundColor: "#f0fbf4", borderColor: "#a7f3d0" }]}
               onPress={() => {
                 if (navigation?.navigate) {
-                  navigation.navigate("orders");
+                  router.push("/(supplier)/orders");
                 } else if ((router as any).navigate) {
                   (router as any).navigate("/(supplier)/orders");
                 } else {
@@ -388,7 +387,7 @@ export default function SupplierDashboardScreen() {
               style={[styles.metricCard, { backgroundColor: "#f0f7ff", borderColor: "#bfdbfe" }]}
               onPress={() => {
                 if (navigation?.navigate) {
-                  navigation.navigate("samples");
+                  router.push("/(supplier)/samples");
                 } else if ((router as any).navigate) {
                   (router as any).navigate("/(supplier)/samples");
                 } else {

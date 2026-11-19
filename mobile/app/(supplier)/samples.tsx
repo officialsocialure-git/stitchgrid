@@ -15,7 +15,7 @@ import {
   TouchableWithoutFeedback,
   StatusBar as RNStatusBar,
 } from "react-native";
-import { useRouter, useNavigation } from "expo-router";
+import { useRouter } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -141,7 +141,6 @@ type DetailTab = "PHOTOS" | "DETAILS" | "BUYER_NOTE" | "FILES" | "HISTORY";
 
 export default function SupplierSamplesScreen() {
   const router = useRouter();
-  const navigation = useNavigation<any>();
   const { activeMembership } = useAuth();
   const insets = useSafeAreaInsets();
   const topInset = Math.max(insets.top, Platform.OS === "android" ? (RNStatusBar.currentHeight || 24) : 0);
@@ -875,7 +874,7 @@ export default function SupplierSamplesScreen() {
                 setSelectedFilter("ALL");
               } else {
                 if (navigation?.navigate) {
-                  navigation.navigate("dashboard");
+                  router.push("/(supplier)/dashboard");
                 } else {
                   router.push("/(supplier)/dashboard");
                 }

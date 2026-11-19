@@ -16,7 +16,7 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
-import { useRouter, useLocalSearchParams, useNavigation } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../src/constants/colors";
 import { Header } from "../../src/components/common/Header";
@@ -160,7 +160,6 @@ const DEFAULT_SUPPLIER_RFQS: Rfq[] = [
 
 export default function SupplierMyOffersScreen() {
   const router = useRouter();
-  const navigation = useNavigation<any>();
   const { rfqId } = useLocalSearchParams<{ rfqId?: string }>();
   const { activeMembership } = useAuth();
 
@@ -447,7 +446,7 @@ export default function SupplierMyOffersScreen() {
               style={styles.backToRfqsBtn}
               onPress={() => {
                 if (navigation?.navigate) {
-                  navigation.navigate("buyer-requests");
+                  router.push("/(supplier)/buyer-requests");
                 } else if ((router as any).navigate) {
                   (router as any).navigate("/(supplier)/buyer-requests");
                 } else {

@@ -239,6 +239,8 @@ export default function BuyerDashboardScreen() {
               { label: "Samples", icon: "layers-outline", route: "/(buyer)/samples" },
               { label: "Payments", icon: "card-outline", route: "/(buyer)/payments" },
               { label: "Messages", icon: "chatbubble-ellipses-outline", route: "/(buyer)/messages" },
+              { label: "Find Suppliers", icon: "business-outline", route: "/(buyer)/suppliers" },
+              { label: "Profile", icon: "person-outline", route: "/(buyer)/profile" },
             ].map((item) => (
               <TouchableOpacity
                 key={item.label}

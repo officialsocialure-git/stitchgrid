@@ -14,7 +14,7 @@ import {
   Modal,
   TouchableWithoutFeedback,
 } from "react-native";
-import { useRouter, useNavigation } from "expo-router";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../src/constants/colors";
 import { Header } from "../../src/components/common/Header";
@@ -119,7 +119,6 @@ const formatTargetDate = (dateStr?: string) => {
 
 export default function SupplierOrdersScreen() {
   const router = useRouter();
-  const navigation = useNavigation<any>();
   const { activeMembership } = useAuth();
 
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
@@ -455,7 +454,7 @@ export default function SupplierOrdersScreen() {
                 setSelectedFilter("ALL");
               } else {
                 if (navigation?.navigate) {
-                  navigation.navigate("buyer-requests");
+                  router.push("/(supplier)/buyer-requests");
                 } else {
                   router.push("/(supplier)/buyer-requests");
                 }
@@ -888,7 +887,7 @@ export default function SupplierOrdersScreen() {
               onPress={() => {
                 setSelectedOrderForSamples(null);
                 if (navigation?.navigate) {
-                  navigation.navigate("samples");
+                  router.push("/(supplier)/samples");
                 } else {
                   router.push("/(supplier)/samples");
                 }
