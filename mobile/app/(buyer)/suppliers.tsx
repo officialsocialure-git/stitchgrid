@@ -138,9 +138,9 @@ export default function SuppliersDiscoveryScreen() {
         renderItem={({ item }) => {
           const isApproved = item.organization?.verificationStatus === "APPROVED";
           const icon = getSupplierIcon(item.organization?.businessType);
-          const capacityText = item.productionCapacity
-            ? `${item.productionCapacity.toLocaleString()} pcs / mo`
-            : "50,000 pcs / mo";
+          const capacityText = item.productionCapacity != null
+            ? `${Number(item.productionCapacity).toLocaleString("en-IN")} pcs / mo`
+            : "Not provided";
 
           return (
             <View style={styles.supplierCard}>
@@ -159,7 +159,7 @@ export default function SuppliersDiscoveryScreen() {
 
                 <View style={styles.businessTypePill}>
                   <Text style={styles.businessTypeText}>
-                    {item.organization?.businessType || "Garments & Textiles"}
+                    {item.organization?.businessType || "Not specified"}
                   </Text>
                 </View>
               </View>
@@ -170,12 +170,12 @@ export default function SuppliersDiscoveryScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.supplierName} numberOfLines={1}>
-                    {item.organization?.name || "Apparel Mill"}
+                    {item.organization?.name || "Unnamed supplier"}
                   </Text>
                   <View style={styles.locationRow}>
                     <Ionicons name="location-outline" size={14} color={Colors.textSecondary} />
                     <Text style={styles.locationText} numberOfLines={1}>
-                      {item.organization?.city || "Tirupur, India"}
+                      {item.organization?.city || "Location not provided"}
                     </Text>
                   </View>
                 </View>
@@ -189,7 +189,7 @@ export default function SuppliersDiscoveryScreen() {
                 <View style={styles.statDivider} />
                 <View style={styles.statCol}>
                   <Text style={styles.statLabel}>Experience</Text>
-                  <Text style={styles.statVal}>{item.yearsInBusiness || 10} Years</Text>
+                  <Text style={styles.statVal}>{item.yearsInBusiness != null ? `${item.yearsInBusiness} Years` : "Not provided"}</Text>
                 </View>
               </View>
 

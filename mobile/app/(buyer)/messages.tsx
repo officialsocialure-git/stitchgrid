@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  Linking,
   SafeAreaView,
   ActivityIndicator,
   ScrollView,
@@ -60,8 +61,8 @@ function parseMessageBody(body?: string): ParsedMessage {
         return {
           type: "FILE",
           text: parsed.text || "",
-          fileName: parsed.filename || parsed.fileName || "TechPack_Specification.pdf",
-          fileSize: parsed.size || parsed.fileSize || "2.4 MB",
+          fileName: parsed.filename || parsed.fileName || "File",
+          fileSize: parsed.size || parsed.fileSize || "Size not available",
           fileUrl: parsed.url || parsed.fileUrl,
         };
       }
@@ -70,7 +71,7 @@ function parseMessageBody(body?: string): ParsedMessage {
           type: "ORDER",
           text: parsed.text || "",
           orderPo: parsed.orderPo || parsed.poNumber,
-          orderStatus: parsed.orderStatus || parsed.status || "ACTIVE",
+          orderStatus: parsed.orderStatus || parsed.status || "Not available",
         };
       }
     } catch {}
@@ -79,8 +80,9 @@ function parseMessageBody(body?: string): ParsedMessage {
 }
 
 function formatChatTime(dateString?: string): string {
-  if (!dateString) return "Live";
+  if (!dateString) return "—";
   const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "—";
   const now = new Date();
   const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 3600 * 24));
 
@@ -133,7 +135,9 @@ export default function BuyerMessagesScreen() {
   const loadConversations = useCallback(async () => {
     try {
       const data = await marketplaceService.listConversations();
-      const list = Array.isArray(data) ? data : [];
+      const list = (Array.isArray(data) ? data : []).filter(
+        (conversation) => conversation.buyerOrgId === activeMembership?.organizationId
+      );
       setConversations(list);
 
       // Handle deep-link to a specific supplier
@@ -158,6 +162,7 @@ export default function BuyerMessagesScreen() {
       }
     } catch (e) {
       console.warn("Failed to load conversations:", e);
+      setConversations([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -171,6 +176,7 @@ export default function BuyerMessagesScreen() {
       setMessages(Array.isArray(msgs) ? msgs : []);
     } catch (e) {
       console.warn("Failed to load messages:", e);
+      setMessages([]);
     }
   }, []);
 
@@ -225,8 +231,13 @@ export default function BuyerMessagesScreen() {
       const sent = await marketplaceService.sendMessage(selectedConv.id, body);
       setMessages((prev) => prev.map((m) => (m.id === tempId ? sent : m)));
       loadConversations();
-    } catch (e) {
-      console.warn("Send message failed:", e);
+    } catch (e: any) {
+      setMessages((prev) => prev.filter((message) => message.id !== tempId));
+      setInputText(body);
+      Alert.alert(
+        "Message Not Sent",
+        e?.response?.data?.message || e?.message || "Your message could not be sent. Please try again."
+      );
     } finally {
       setSending(false);
     }
@@ -254,12 +265,15 @@ export default function BuyerMessagesScreen() {
         const asset = res.assets[0];
         setUploadingImage(true);
 
-        const base64Uri = asset.base64
-          ? `data:image/jpeg;base64,${asset.base64}`
-          : asset.uri;
+        if (!asset.base64) {
+          throw new Error("The selected image could not be prepared for upload. Please select it again.");
+        }
+        const mimeType = asset.mimeType || "image/jpeg";
+        const extension = mimeType.split("/")[1] || "jpg";
+        const base64Uri = `data:${mimeType};base64,${asset.base64}`;
 
         const uploaded = await marketplaceService.uploadFile({
-          filename: `sample_${Date.now()}.jpg`,
+          filename: asset.fileName || `sample_${Date.now()}.${extension}`,
           data: base64Uri,
           label: "Sample Proof Photo",
         });
@@ -283,30 +297,10 @@ export default function BuyerMessagesScreen() {
     }
   };
 
-  // 6. Send Tech Pack / PDF Attachment
-  const handleSendTechpack = async () => {
-    if (!selectedConv) return;
+  // The Web App exposes a Tech Pack action but does not yet provide a connected file-upload flow.
+  const handleSendTechpack = () => {
     setIsAttachmentSheetOpen(false);
-
-    const techPackPayload = JSON.stringify({
-      type: "FILE",
-      filename: "TechPack_Specification_v2.pdf",
-      size: "2.4 MB",
-      url: "https://example.com/techpack.pdf",
-      text: "Attached is the official garment Tech Pack and measurement tolerance sheet.",
-    });
-
-    try {
-      setSending(true);
-      const sent = await marketplaceService.sendMessage(selectedConv.id, techPackPayload);
-      setMessages((prev) => [...prev, sent]);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
-      loadConversations();
-    } catch (err) {
-      console.warn("Failed to send Techpack:", err);
-    } finally {
-      setSending(false);
-    }
+    Alert.alert("Document Sharing", "Document upload is not connected to the Web App messaging workflow yet.");
   };
 
   // 7. Send Purchase Order Milestone Reference
@@ -314,8 +308,13 @@ export default function BuyerMessagesScreen() {
     if (!selectedConv) return;
     setIsAttachmentSheetOpen(false);
 
-    const poNumber = selectedConv.linkedOrder?.poNumber || "SG-PO-2026-4807";
-    const status = selectedConv.linkedOrder?.status || "IN_PRODUCTION";
+    const linkedOrder = selectedConv.linkedOrder;
+    if (!linkedOrder?.poNumber) {
+      Alert.alert("No Linked Order", "This conversation does not have a purchase order to share.");
+      return;
+    }
+    const poNumber = linkedOrder.poNumber;
+    const status = linkedOrder.status || "Not available";
 
     const orderPayload = JSON.stringify({
       type: "ORDER",
@@ -330,8 +329,11 @@ export default function BuyerMessagesScreen() {
       setMessages((prev) => [...prev, sent]);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
       loadConversations();
-    } catch (err) {
-      console.warn("Failed to send Order Reference:", err);
+    } catch (err: any) {
+      Alert.alert(
+        "Message Not Sent",
+        err?.response?.data?.message || err?.message || "The order reference could not be sent. Please try again."
+      );
     } finally {
       setSending(false);
     }
@@ -363,7 +365,7 @@ export default function BuyerMessagesScreen() {
     selectedConv?.supplier?.name ||
     selectedConv?.otherPartyName ||
     orgName ||
-    "Verified Manufacturer";
+    "Supplier not available";
 
   const activeSupplierCity = selectedConv?.supplier?.city || "India";
 
@@ -470,7 +472,7 @@ export default function BuyerMessagesScreen() {
             )
           }
           renderItem={({ item }) => {
-            const supplierName = item.supplier?.name || "Verified Factory Partner";
+            const supplierName = item.supplier?.name || "Supplier not available";
             const initial = supplierName[0]?.toUpperCase() || "M";
             const lastMsg = item.messages?.[0];
             const parsed = parseMessageBody(lastMsg?.body);
@@ -511,7 +513,7 @@ export default function BuyerMessagesScreen() {
                       <View style={styles.locationTag}>
                         <Ionicons name="location-outline" size={10} color={Colors.textSecondary} />
                         <Text style={styles.locationTagText}>
-                          {item.supplier?.city ? `${item.supplier.city}, India` : "Verified Mill"}
+                          {item.supplier?.city ? `${item.supplier.city}, India` : "Location not provided"}
                         </Text>
                       </View>
                     )}
@@ -571,8 +573,12 @@ export default function BuyerMessagesScreen() {
               });
               setSelectedConv(conv);
               loadConversations();
-            } catch (err) {
+            } catch (err: any) {
               console.warn("Failed to create conversation:", err);
+              Alert.alert(
+                "Unable to Start Conversation",
+                err?.response?.data?.message || err?.message || "The conversation could not be created. Please try again."
+              );
             }
           }}
         />
@@ -596,7 +602,7 @@ export default function BuyerMessagesScreen() {
         {/* Avatar */}
         <View style={styles.navAvatar}>
           <Text style={styles.navAvatarText}>{activeSupplierName[0]?.toUpperCase() || "M"}</Text>
-          <View style={styles.navOnlineDot} />
+
         </View>
 
         {/* Supplier Title & Status */}
@@ -604,9 +610,7 @@ export default function BuyerMessagesScreen() {
           <Text style={styles.navSupplierName} numberOfLines={1}>
             {activeSupplierName}
           </Text>
-          <Text style={styles.navSupplierStatus}>
-            ● Active Now • {activeSupplierCity}, India
-          </Text>
+          <Text style={styles.navSupplierStatus}>STITCHGRID Conversation</Text>
         </View>
 
         {/* Linked Contract Action */}
@@ -646,7 +650,7 @@ export default function BuyerMessagesScreen() {
         <FlatList
           ref={flatListRef}
           data={messages}
-          keyExtractor={(item) => item.id || String(Math.random())}
+          keyExtractor={(item) => item.id || `${item.conversationId || "message"}-${item.createdAt || "unknown"}`}
           contentContainerStyle={styles.messagesContainer}
           showsVerticalScrollIndicator={false}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
@@ -655,7 +659,7 @@ export default function BuyerMessagesScreen() {
               <View style={styles.dateSeparatorPill}>
                 <Ionicons name="shield-checkmark" size={12} color="#15803D" />
                 <Text style={styles.dateSeparatorText}>
-                  Messages are end-to-end encrypted with Milestone Escrow Protection.
+                  Keep RFQ, sample and order updates together in one conversation.
                 </Text>
               </View>
             </View>
@@ -719,7 +723,15 @@ export default function BuyerMessagesScreen() {
                         <Text style={styles.fileSizeText}>{parsed.fileSize}</Text>
                       </View>
                       <TouchableOpacity
-                        onPress={() => Alert.alert("Download", `Downloading ${parsed.fileName}...`)}
+                        onPress={() => {
+                          if (!parsed.fileUrl) {
+                            Alert.alert("File Unavailable", "This message does not contain a valid file link.");
+                            return;
+                          }
+                          Linking.openURL(parsed.fileUrl).catch(() =>
+                            Alert.alert("Unable to Open File", "The file link could not be opened. Please try again later.")
+                          );
+                        }}
                         style={styles.fileDownloadBtn}
                       >
                         <Ionicons name="download-outline" size={16} color="#5B13EC" />

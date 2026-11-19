@@ -20,6 +20,7 @@ import { Colors } from "../../src/constants/colors";
 import { Header } from "../../src/components/common/Header";
 import { EmptyState } from "../../src/components/common/EmptyState";
 import { marketplaceService } from "../../src/services/marketplace.service";
+import { useAuth } from "../../src/hooks/useAuth";
 import { useRealtimeSync } from "../../src/hooks/useRealtimeSync";
 import { Sample } from "../../src/types";
 import { SampleDetailsModal } from "../../src/components/samples/SampleDetailsModal";
@@ -44,6 +45,7 @@ interface SampleRow {
 
 export default function BuyerSamplesScreen() {
   const router = useRouter();
+  const { activeMembership } = useAuth();
   const [samples, setSamples] = useState<SampleRow[]>([]);
   const [rawSamples, setRawSamples] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,31 +80,30 @@ export default function BuyerSamplesScreen() {
     try {
       setLoading(true);
       const data = await marketplaceService.listSamples();
-      setRawSamples(Array.isArray(data) ? data : []);
+      const buyerOrganizationId = activeMembership?.organizationId;
+      const buyerSamples = (Array.isArray(data) ? data : []).filter((sample: any) =>
+        Boolean(buyerOrganizationId) &&
+        (sample.buyerOrgId === buyerOrganizationId || sample.purchaseOrder?.buyerOrgId === buyerOrganizationId)
+      );
+      setRawSamples(buyerSamples);
 
-      if (Array.isArray(data) && data.length > 0) {
-        const mapped: SampleRow[] = data.map((s: any) => {
+      if (buyerSamples.length > 0) {
+        const mapped: SampleRow[] = buyerSamples.map((s: any) => {
           const po = s.purchaseOrder || {};
           const supplier = po.supplier || {};
           const item = po.items?.[0] || {};
 
-          // Clean sample name matching Web & Reference Photo
-          let name = item.name || item.description || po.styleName || "1000 cargo black pants - Supplier Quote";
+          const rawNotes = s.notes || s.parsedMeta?.description || "";
+          let name = item.name || item.description || po.styleName || s.parsedMeta?.description || "Sample details not provided";
           if (name.includes("(Cut, Sew")) {
             name = name.split("(")[0].trim();
           }
-          if (!name.includes("Supplier Quote") && !name.includes("Sample")) {
-            name = `${name} - Supplier Quote`;
-          }
 
-          const orderNum = po.poNumber
-            ? po.poNumber.replace("SG-", "")
-            : "PO-2026-2589";
-          const supplierName = supplier.name || "meldima comfort";
+          const orderNum = po.poNumber ? po.poNumber.replace("SG-", "") : "—";
+          const supplierName = supplier.name || "Supplier not available";
 
-          // Sample Type
-          const rawNotes = s.notes || "";
-          let sampleType = s.parsedMeta?.sampleType || "Final Sample";
+          // Read the sample type and requested quantity from the persisted sample metadata.
+          let sampleType = s.parsedMeta?.sampleType || "Not specified";
           if (rawNotes.toLowerCase().includes("first")) sampleType = "First Sample";
           else if (rawNotes.toLowerCase().includes("color") || rawNotes.toLowerCase().includes("swatch")) sampleType = "Color Sample";
           else if (rawNotes.toLowerCase().includes("lab dip")) sampleType = "Lab Dip";
@@ -116,12 +117,14 @@ export default function BuyerSamplesScreen() {
           else if (s.status === "IN_PROGRESS" || s.status === "DISPATCHED") category = "Checking";
           else category = "New Samples";
 
-          const rawDate = new Date(s.createdAt || Date.now());
-          const sentDate = rawDate.toLocaleDateString("en-IN", {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-          });
+          const rawDate = s.createdAt ? new Date(s.createdAt) : new Date(0);
+          const sentDate = s.createdAt && !Number.isNaN(rawDate.getTime())
+            ? rawDate.toLocaleDateString("en-IN", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })
+            : "—";
 
           return {
             id: s.id,
@@ -129,7 +132,9 @@ export default function BuyerSamplesScreen() {
             supplierName: supplierName,
             orderId: orderNum,
             sampleType,
-            quantity: "5 pcs",
+            quantity: rawNotes.match(/\((\d+)\s*(?:pcs?|pieces?)\)/i)?.[1]
+              ? `${rawNotes.match(/\((\d+)\s*(?:pcs?|pieces?)\)/i)?.[1]} pcs`
+              : "Not specified",
             sentDate,
             rawDate,
             status: s.status || "REQUESTED",
@@ -150,7 +155,7 @@ export default function BuyerSamplesScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [activeMembership?.organizationId]);
 
   useEffect(() => {
     loadSamples();

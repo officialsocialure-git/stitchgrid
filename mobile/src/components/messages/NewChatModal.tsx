@@ -43,17 +43,19 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({
       setSuppliers(Array.isArray(data) ? data : []);
     } catch (err) {
       console.warn("Failed to load suppliers:", err);
+      setSuppliers([]);
     } finally {
       setLoading(false);
     }
   };
 
   const filtered = suppliers.filter((s) => {
+    if (!s.organizationId) return false;
     const q = search.toLowerCase().trim();
     if (!q) return true;
     const name = (s.name || s.organization?.name || "").toLowerCase();
     const city = (s.city || s.organization?.city || "").toLowerCase();
-    const type = (s.businessType || "").toLowerCase();
+    const type = (s.businessType || s.organization?.businessType || "").toLowerCase();
     return name.includes(q) || city.includes(q) || type.includes(q);
   });
 
@@ -74,7 +76,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({
           <View style={styles.headerRow}>
             <View>
               <Text style={styles.sheetTitle}>New Message</Text>
-              <Text style={styles.sheetSubtitle}>Choose a verified garment mill to chat</Text>
+              <Text style={styles.sheetSubtitle}>Choose a supplier to start a conversation</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color={Colors.textSecondary} />
@@ -108,19 +110,20 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({
             {loading ? (
               <View style={styles.centerContainer}>
                 <ActivityIndicator size="small" color="#5B13EC" />
-                <Text style={styles.loadingText}>Fetching verified mills...</Text>
+                <Text style={styles.loadingText}>Fetching suppliers...</Text>
               </View>
             ) : filtered.length === 0 ? (
               <View style={styles.centerContainer}>
                 <Ionicons name="business-outline" size={32} color={Colors.textMuted} />
-                <Text style={styles.emptyTitle}>No Manufacturers Found</Text>
-                <Text style={styles.emptySub}>Try searching for a different city or company name.</Text>
+                <Text style={styles.emptyTitle}>No Suppliers Found</Text>
+                <Text style={styles.emptySub}>Try another company name or city, or check again later.</Text>
               </View>
             ) : (
               filtered.map((s) => {
-                const name = s.name || s.organization?.name || "Verified Factory";
-                const city = s.city || s.organization?.city || "India";
-                const orgId = s.organizationId || s.id;
+                const name = s.name || s.organization?.name || "Supplier not available";
+                const city = s.city || s.organization?.city || "Location not provided";
+                const orgId = s.organizationId;
+                const isVerified = (s.organization?.verificationStatus || s.verificationStatus) === "APPROVED";
                 const initial = name[0]?.toUpperCase() || "M";
 
                 return (
@@ -135,7 +138,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({
                   >
                     <View style={styles.avatarCircle}>
                       <Text style={styles.avatarInitial}>{initial}</Text>
-                      <View style={styles.onlineBadge} />
+
                     </View>
 
                     <View style={styles.supplierInfo}>
@@ -144,16 +147,16 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({
                           {name}
                         </Text>
                         <View style={styles.verifiedTag}>
-                          <Ionicons name="checkmark-circle" size={12} color="#15803D" />
-                          <Text style={styles.verifiedText}>Verified</Text>
+                          <Ionicons name={isVerified ? "checkmark-circle" : "time-outline"} size={12} color={isVerified ? "#15803D" : Colors.warningText} />
+                          <Text style={[styles.verifiedText, !isVerified && { color: Colors.warningText }]}>{isVerified ? "Verified" : "Under review"}</Text>
                         </View>
                       </View>
 
                       <View style={styles.supplierSubRow}>
                         <Ionicons name="location-outline" size={12} color={Colors.textSecondary} />
-                        <Text style={styles.supplierCity}>{city}, India</Text>
+                        <Text style={styles.supplierCity}>{city}</Text>
                         <Text style={styles.supplierType}>
-                          • {s.businessType || "Garment Manufacturer"}
+                          • {s.organization?.businessType || s.businessType || "Not specified"}
                         </Text>
                       </View>
                     </View>

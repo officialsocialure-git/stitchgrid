@@ -9,6 +9,7 @@ import {
   Modal,
   SafeAreaView,
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
@@ -52,29 +53,58 @@ export default function SupplierDashboardScreen() {
 
   // Catalog update state
   const [newCatalogItem, setNewCatalogItem] = useState("");
+  const [newCatalogCategory, setNewCatalogCategory] = useState("Garment (Apparel)");
   const [newCatalogPrice, setNewCatalogPrice] = useState("");
-  const [newCatalogMoq, setNewCatalogMoq] = useState("200");
+  const [newCatalogMoq, setNewCatalogMoq] = useState("300");
+  const [newCatalogFabricSpec, setNewCatalogFabricSpec] = useState("");
   const [catalogSaving, setCatalogSaving] = useState(false);
+
+  const organization = activeMembership?.organization;
+  const supplierProfile = organization?.supplierProfile;
+  const profileCompletionFields = [
+    organization?.name,
+    organization?.city,
+    organization?.businessType,
+    organization?.taxId,
+    organization?.address,
+    supplierProfile?.description,
+    supplierProfile?.yearsInBusiness != null,
+    supplierProfile?.productionCapacity != null,
+    Array.isArray(supplierProfile?.categories) && supplierProfile.categories.length > 0,
+  ];
+  const profileCompletion = Math.round(
+    (profileCompletionFields.filter(Boolean).length / profileCompletionFields.length) * 100
+  );
 
   const loadDashboardData = useCallback(async () => {
     try {
       const [rfqList, orderList, sampleList] = await Promise.all([
-        marketplaceService.listMyRfqs(),
+        marketplaceService.listMyRfqs(activeMembership?.organizationId),
         marketplaceService.listOrders(),
         marketplaceService.listSamples(),
       ]);
 
+      const supplierOrganizationId = activeMembership?.organizationId;
       const safeRfqs = Array.isArray(rfqList) ? rfqList : [];
       setRfqs(safeRfqs);
-      setOrders(Array.isArray(orderList) ? orderList : []);
-      setSamples(Array.isArray(sampleList) ? sampleList : []);
+      setOrders(
+        (Array.isArray(orderList) ? orderList : []).filter(
+          (order) => Boolean(supplierOrganizationId) && order.supplierOrgId === supplierOrganizationId
+        )
+      );
+      setSamples(
+        (Array.isArray(sampleList) ? sampleList : []).filter((sample: any) =>
+          Boolean(supplierOrganizationId) &&
+          (sample.supplierOrgId === supplierOrganizationId || sample.purchaseOrder?.supplierOrgId === supplierOrganizationId)
+        )
+      );
     } catch (e) {
       console.warn("Supplier dashboard error:", e);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [activeMembership?.organizationId]);
 
   useEffect(() => {
     loadDashboardData();
@@ -92,42 +122,24 @@ export default function SupplierDashboardScreen() {
   };
 
   // 4 Business Metrics (Matching Web Calculation Exactly)
-  const newRfqsCount = rfqs.filter((r: any) => !r.quotations || r.quotations.length === 0).length || (rfqs.length > 0 ? rfqs.length : 3);
-  const quotesPendingCount = rfqs.filter((r: any) => r.quotations && r.quotations.length > 0).length || 2;
-  const activeOrdersCount = orders.filter((o) =>
-    ["ACCEPTED", "IN_PRODUCTION", "QC", "DISPATCHED", "SAMPLE_PENDING", "SAMPLE_APPROVED", "PRODUCTION_STARTED"].includes(o.status)
-  ).length || (orders.length > 0 ? orders.length : 4);
-  const samplesPendingCount = samples.filter((s) =>
-    ["REQUESTED", "IN_PROGRESS", "REVISION_REQUIRED", "DISPATCHED"].includes(s.status)
-  ).length || 2;
+  const newRfqsCount = rfqs.filter((rfq: any) =>
+    ["OPEN"].includes(String(rfq.status || "").toUpperCase())
+  ).length;
+  const quotesPendingCount = rfqs.reduce(
+    (total: number, rfq: any) =>
+      total + (rfq.quotations || []).filter((quote: any) =>
+        ["SUBMITTED", "PENDING", "REVISED"].includes(String(quote.status || "").toUpperCase())
+      ).length,
+    0
+  );
+  const activeOrdersCount = orders.filter((order) =>
+    ["ACCEPTED", "IN_PRODUCTION", "QC", "DISPATCHED", "SAMPLE_PENDING", "SAMPLE_APPROVED", "PRODUCTION_STARTED"].includes(String(order.status).toUpperCase())
+  ).length;
+  const samplesPendingCount = samples.filter((sample) =>
+    ["REQUESTED", "IN_PROGRESS", "REVISION_REQUIRED", "DISPATCHED"].includes(String(sample.status).toUpperCase())
+  ).length;
 
-  // Format RFQs for display (matching Web fallback if empty)
-  const displayRfqs = (rfqs.length > 0 ? rfqs : [
-    {
-      id: "rfq-demo-1042",
-      title: "100% Combed Cotton Bio-Washed T-Shirts",
-      buyer: { name: "Zara Fashion India" },
-      targetQuantity: 2500,
-      targetDate: "2026-11-28",
-      status: "OPEN",
-    },
-    {
-      id: "rfq-demo-1043",
-      title: "French Terry Oversized Hoodies (360 GSM)",
-      buyer: { name: "Urban Threads Apparel" },
-      targetQuantity: 1200,
-      targetDate: "2026-12-05",
-      status: "OPEN",
-    },
-    {
-      id: "rfq-demo-1044",
-      title: "Men's Piqué Polo Shirts (220 GSM)",
-      buyer: { name: "Classic Brand Retails" },
-      targetQuantity: 3000,
-      targetDate: "2026-12-15",
-      status: "AWARDED",
-    },
-  ]).slice(0, 5);
+  const displayRfqs = rfqs.slice(0, 5);
 
   const handleOpenQuoteModal = (rfq: any) => {
     setSelectedRfqForQuote(rfq);
@@ -146,27 +158,34 @@ export default function SupplierDashboardScreen() {
     try {
       setQuoteSubmitting(true);
       setQuoteErrorMsg(null);
-      const price = parseFloat(quoteUnitPrice);
-      const qty = selectedRfqForQuote?.targetQuantity || 1000;
+      const price = Number(quoteUnitPrice);
+      const quantity = selectedRfqForQuote?.targetQuantity;
+      const supplierOrgId = activeMembership?.organizationId;
+
+      if (!selectedRfqForQuote?.id || !supplierOrgId) {
+        throw new Error("Select a valid buyer request and supplier organization before submitting.");
+      }
+      if (!Number.isFinite(price) || price <= 0 || !quantity || quantity <= 0) {
+        throw new Error("Enter a valid unit price and make sure the buyer request has a target quantity.");
+      }
+
       await marketplaceService.submitQuote({
-        rfqId: selectedRfqForQuote?.id,
-        supplierOrgId: activeMembership?.organizationId || "org-supplier-default",
-        totalAmount: price * qty,
+        rfqId: selectedRfqForQuote.id,
+        supplierOrgId,
+        totalAmount: price * quantity,
         leadTimeDays: parseInt(quoteLeadDays, 10) || 21,
-        terms: quoteTerms,
+        terms: quoteTerms.trim() || undefined,
         items: [
           {
-            description: selectedRfqForQuote?.title || "Garment Order",
-            quantity: qty,
+            description: selectedRfqForQuote.title,
+            quantity,
             unitPrice: price,
           },
         ],
       });
+      await loadDashboardData();
+      setSelectedRfqForQuote(null);
       setQuoteSuccessMsg("Quote submitted successfully to buyer!");
-      setTimeout(() => {
-        setSelectedRfqForQuote(null);
-        loadDashboardData();
-      }, 1200);
     } catch (err: any) {
       const msg = err.response?.data?.message || err.message || "Failed to submit quotation.";
       setQuoteErrorMsg(msg);
@@ -175,14 +194,56 @@ export default function SupplierDashboardScreen() {
     }
   };
 
-  const handleSaveCatalog = () => {
-    setCatalogSaving(true);
-    setTimeout(() => {
-      setCatalogSaving(false);
+  const handleSaveCatalog = async () => {
+    const organizationId = activeMembership?.organizationId;
+    const itemName = newCatalogItem.trim();
+    const unitPrice = Number(newCatalogPrice);
+    const minimumOrderQuantity = Number(newCatalogMoq);
+
+    if (!organizationId) {
+      Alert.alert("Account Required", "Select your supplier organization before updating the catalogue.");
+      return;
+    }
+    if (itemName.length < 2) {
+      Alert.alert("Invalid Item", "Enter a product or fabric name with at least 2 characters.");
+      return;
+    }
+    if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+      Alert.alert("Invalid Price", "Enter a valid wholesale price greater than zero.");
+      return;
+    }
+    if (!Number.isInteger(minimumOrderQuantity) || minimumOrderQuantity <= 0) {
+      Alert.alert("Invalid MOQ", "Enter a valid minimum order quantity greater than zero.");
+      return;
+    }
+
+    try {
+      setCatalogSaving(true);
+      await marketplaceService.createCatalogItem({
+        organizationId,
+        name: itemName,
+        itemType: newCatalogCategory,
+        moq: minimumOrderQuantity,
+        unitPrice,
+        currency: "INR",
+        description: `Fabric specification: ${newCatalogFabricSpec.trim() || "Standard Garment Grade"}`,
+      });
+      await loadDashboardData();
       setIsUpdateCatalogOpen(false);
       setNewCatalogItem("");
+      setNewCatalogCategory("Garment (Apparel)");
       setNewCatalogPrice("");
-    }, 800);
+      setNewCatalogMoq("300");
+      setNewCatalogFabricSpec("");
+      Alert.alert("Catalogue Submitted", "Your catalogue item has been submitted for verification and moderation.");
+    } catch (error: any) {
+      Alert.alert(
+        "Unable to Save Catalogue",
+        error?.response?.data?.message || error?.message || "The catalogue item could not be saved. Please try again."
+      );
+    } finally {
+      setCatalogSaving(false);
+    }
   };
 
   return (
@@ -219,7 +280,7 @@ export default function SupplierDashboardScreen() {
         {/* 2. PROFILE COMPLETION CARD (Matches Web Circular 75%) */}
         <View style={styles.profileProgressCard}>
           <View style={styles.progressCircle}>
-            <Text style={styles.progressPercent}>75%</Text>
+            <Text style={styles.progressPercent}>{profileCompletion}%</Text>
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.progressTitle}>Profile Completion</Text>
@@ -228,7 +289,7 @@ export default function SupplierDashboardScreen() {
             </Text>
             <TouchableOpacity
               style={styles.completeProfileBtn}
-              onPress={() => setIsCompleteProfileOpen(true)}
+              onPress={() => router.push("/(supplier)/settings")}
               activeOpacity={0.8}
             >
               <Text style={styles.completeProfileText}>Complete Profile</Text>
@@ -353,12 +414,14 @@ export default function SupplierDashboardScreen() {
             </View>
           ) : (
             displayRfqs.map((rfq, idx) => {
-              const rfqIdDisplay = `RFQ-2026-${(rfq.id || "1042").slice(-4).replace(/\D/g, "").padStart(4, "0") || (1040 + idx).toString()}`;
-              const buyerName = rfq.buyer?.name || "Verified Brand Buyer";
-              const prod = rfq.title || "Garment Manufacturing Order";
-              const qty = `${(rfq.targetQuantity || 1000).toLocaleString()} pcs`;
-              const deliv = rfq.targetDate || "25 Nov 2026";
-              const isAwarded = rfq.status === "AWARDED";
+              const rfqIdDisplay = rfq.rfqNumber || `RFQ-${String(rfq.id || "").slice(0, 8).toUpperCase()}`;
+              const buyerName = rfq.buyer?.name || rfq.buyerOrg?.name || "Buyer";
+              const prod = rfq.title || "Garment request";
+              const qty = rfq.targetQuantity ? `${rfq.targetQuantity.toLocaleString()} pcs` : "Not specified";
+              const deliv = rfq.targetDate
+                ? new Date(rfq.targetDate).toLocaleDateString("en-IN")
+                : "Not specified";
+              const isAwarded = String(rfq.status || "").toUpperCase() === "AWARDED";
 
               return (
                 <View key={rfq.id || idx} style={styles.rfqCard}>
@@ -541,18 +604,17 @@ export default function SupplierDashboardScreen() {
 
               <Text style={styles.modalSectionLabel}>TARGET QUANTITY</Text>
               <Text style={styles.modalDesc}>
-                {(selectedRfqDetails?.targetQuantity || 1000).toLocaleString()} pieces
+                {selectedRfqDetails?.targetQuantity != null ? Number(selectedRfqDetails.targetQuantity).toLocaleString("en-IN") : "Not specified"} pieces
               </Text>
 
               <Text style={styles.modalSectionLabel}>DELIVERY TARGET</Text>
               <Text style={styles.modalDesc}>
-                {selectedRfqDetails?.targetDate || "25 Nov 2026"}
+                {selectedRfqDetails?.targetDate ? new Date(selectedRfqDetails.targetDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Not specified"}
               </Text>
 
               <Text style={styles.modalSectionLabel}>SPECIFICATIONS</Text>
               <Text style={styles.modalDesc}>
-                {selectedRfqDetails?.description ||
-                  "Premium export quality garment finish. Pre-shrunk bio-washed single jersey with reinforced shoulder stitching."}
+                {selectedRfqDetails?.description || "No additional requirements were provided by the buyer."}
               </Text>
             </ScrollView>
 
@@ -595,11 +657,31 @@ export default function SupplierDashboardScreen() {
             </View>
 
             <Input
-              label="Apparel / Fabric Name *"
-              placeholder="e.g. 100% Cotton Heavyweight Tee"
+              label="Product / Item Name *"
+              placeholder="e.g. 240 GSM Oversized Heavy Cotton T-Shirt"
               value={newCatalogItem}
               onChangeText={setNewCatalogItem}
             />
+
+            <Text style={styles.inputLabel}>Category</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
+              {["Garment (Apparel)", "Knits & Cut-Sew", "Woven & Formal", "Fabric Mill", "Trims & Accessories"].map((category) => (
+                <TouchableOpacity
+                  key={category}
+                  onPress={() => setNewCatalogCategory(category)}
+                  style={{
+                    paddingHorizontal: 10,
+                    paddingVertical: 8,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: newCatalogCategory === category ? Colors.primary : Colors.border,
+                    backgroundColor: newCatalogCategory === category ? Colors.primaryLight : "#FFFFFF",
+                  }}
+                >
+                  <Text style={{ fontSize: 10, fontWeight: "700", color: newCatalogCategory === category ? Colors.primary : Colors.textSecondary }}>{category}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
             <Input
               label="Wholesale Price (₹) *"
@@ -611,10 +693,17 @@ export default function SupplierDashboardScreen() {
 
             <Input
               label="Minimum Order Quantity (MOQ)"
-              placeholder="e.g. 250"
+              placeholder="e.g. 300"
               value={newCatalogMoq}
               onChangeText={setNewCatalogMoq}
               keyboardType="numeric"
+            />
+
+            <Input
+              label="Fabric Specifications"
+              placeholder="e.g. 100% Combed Cotton, Bio-Washed"
+              value={newCatalogFabricSpec}
+              onChangeText={setNewCatalogFabricSpec}
             />
 
             <View style={styles.modalActionRow}>

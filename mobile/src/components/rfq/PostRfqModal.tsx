@@ -48,7 +48,6 @@ export const PostRfqModal: React.FC<PostRfqModalProps> = ({
     XL: 1000,
     XXL: 750,
   });
-  const [targetPrice, setTargetPrice] = useState("180");
   const [requirementDetails, setRequirementDetails] = useState(
     "Sample: Yes (5 pcs) | Quality: AQL 2.5 | Packaging: Individual polybag, size sticker, 20 pcs per carton | Additional: Custom woven label, brand tag, and export quality stitching."
   );
@@ -56,7 +55,7 @@ export const PostRfqModal: React.FC<PostRfqModalProps> = ({
   // Section 3: Delivery & Target
   const [targetDeliveryDate, setTargetDeliveryDate] = useState("2026-05-12");
   const [deliveryLocation, setDeliveryLocation] = useState("Noida, Uttar Pradesh – 201301");
-  const [quoteDeadline, setQuoteDeadline] = useState("2026-11-20");
+  const [quoteDeadline, setQuoteDeadline] = useState("2026-11-08");
 
   // Accordion active sections
   const [openSections, setOpenSections] = useState<{ [key: string]: boolean }>({
@@ -99,18 +98,35 @@ export const PostRfqModal: React.FC<PostRfqModalProps> = ({
       return;
     }
 
+    if (title.trim().length < 3) {
+      Alert.alert("Missing Field", "Please enter an RFQ title with at least 3 characters.");
+      return;
+    }
+    const quantityValue = Number(totalQuantity);
+    if (!Number.isInteger(quantityValue) || quantityValue <= 0) {
+      Alert.alert("Invalid Quantity", "Total quantity must be a whole number greater than zero.");
+      return;
+    }
+
     if (mode === "PUBLISH") {
-      if (!title.trim()) {
-        Alert.alert("Missing Field", "Please enter an RFQ Title.");
-        return;
-      }
       if (!fabricSpec.trim()) {
         Alert.alert("Missing Field", "Please specify the Fabric / Material specification.");
         return;
       }
-      const qtyNum = parseInt(totalQuantity, 10);
-      if (!qtyNum || qtyNum <= 0) {
-        Alert.alert("Invalid Quantity", "Total quantity must be greater than 0.");
+      if (!requirementDetails.trim() || requirementDetails.length > 500) {
+        Alert.alert("Requirement Details Required", "Enter requirement details and packaging information (maximum 500 characters).");
+        return;
+      }
+      if (!targetDeliveryDate || Number.isNaN(new Date(targetDeliveryDate).getTime())) {
+        Alert.alert("Missing Delivery Date", "Please select a valid target delivery date.");
+        return;
+      }
+      if (!deliveryLocation.trim()) {
+        Alert.alert("Missing Delivery Location", "Please enter the delivery location.");
+        return;
+      }
+      if (!quoteDeadline || Number.isNaN(new Date(quoteDeadline).getTime())) {
+        Alert.alert("Missing Quote Deadline", "Please select a valid quote submission deadline.");
         return;
       }
     }
@@ -131,12 +147,12 @@ export const PostRfqModal: React.FC<PostRfqModalProps> = ({
         .filter(Boolean)
         .join(" | ");
 
-      const targetDateIso = targetDeliveryDate
-        ? new Date(targetDeliveryDate).toISOString()
+      const parsedTargetDate = targetDeliveryDate ? new Date(targetDeliveryDate) : null;
+      const targetDateIso = parsedTargetDate && !Number.isNaN(parsedTargetDate.getTime())
+        ? parsedTargetDate.toISOString()
         : undefined;
 
-      const qty = parseInt(totalQuantity, 10) || 1000;
-      const price = parseFloat(targetPrice) || undefined;
+      const qty = Number(totalQuantity);
 
       await marketplaceService.createRfq({
         buyerOrgId,
@@ -144,7 +160,6 @@ export const PostRfqModal: React.FC<PostRfqModalProps> = ({
         garmentType: productType || productCategory,
         fabricSpec: fabricSpec.trim(),
         targetQuantity: qty,
-        targetPrice: price,
         targetDate: targetDateIso,
         status: mode === "DRAFT" ? "DRAFT" : "OPEN",
         description: combinedDescription,
@@ -349,22 +364,40 @@ export const PostRfqModal: React.FC<PostRfqModalProps> = ({
                       />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.inputLabel}>Unit</Text>
-                      <TextInput
-                        style={styles.textInput}
-                        value={unit}
-                        onChangeText={setUnit}
-                        placeholder="Pieces"
-                        placeholderTextColor={Colors.textMuted}
-                      />
+                      <Text style={styles.inputLabel}>Unit *</Text>
+                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                        {["Pieces", "Meters", "Kg", "Sets"].map((option) => (
+                          <TouchableOpacity
+                            key={option}
+                            onPress={() => setUnit(option)}
+                            style={{
+                              paddingHorizontal: 9,
+                              paddingVertical: 9,
+                              borderRadius: 10,
+                              borderWidth: 1,
+                              borderColor: unit === option ? Colors.primary : Colors.border,
+                              backgroundColor: unit === option ? Colors.primaryLight : "#FFFFFF",
+                            }}
+                          >
+                            <Text style={{ fontSize: 11, fontWeight: "700", color: unit === option ? Colors.primary : Colors.textSecondary }}>{option}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
                     </View>
                   </View>
 
                   <View style={styles.sizeSectionHeader}>
-                    <Text style={styles.inputLabel}>Size Breakdown</Text>
-                    <Text style={[styles.sizeSumText, sizeSum === Number(totalQuantity) && styles.sizeSumMatch]}>
-                      Total: {sizeSum.toLocaleString()} / {Number(totalQuantity || 0).toLocaleString()}
-                    </Text>
+                    <Text style={styles.inputLabel}>Size-wise Quantity (Optional)</Text>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text style={[styles.sizeSumText, sizeSum === Number(totalQuantity) && styles.sizeSumMatch]}>
+                        Total: {sizeSum.toLocaleString()} / {Number(totalQuantity || 0).toLocaleString()}
+                      </Text>
+                      {sizeSum > 0 && sizeSum !== Number(totalQuantity) && (
+                        <TouchableOpacity onPress={() => setTotalQuantity(String(sizeSum))}>
+                          <Text style={{ color: Colors.primary, fontSize: 10, fontWeight: "800", marginTop: 3 }}>Set Total to {sizeSum.toLocaleString()}</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   </View>
 
                   <View style={styles.sizeGrid}>
@@ -386,6 +419,7 @@ export const PostRfqModal: React.FC<PostRfqModalProps> = ({
                     style={[styles.textInput, styles.textArea]}
                     value={requirementDetails}
                     onChangeText={setRequirementDetails}
+                    maxLength={500}
                     multiline
                     numberOfLines={3}
                     placeholder="Quality AQL, Polybag packaging, tags..."
@@ -406,7 +440,7 @@ export const PostRfqModal: React.FC<PostRfqModalProps> = ({
                   <View style={styles.sectionNumberCircle}>
                     <Text style={styles.sectionNumberText}>3</Text>
                   </View>
-                  <Text style={styles.sectionTitle}>Delivery & Target Budget</Text>
+                  <Text style={styles.sectionTitle}>Delivery & Publish</Text>
                 </View>
                 <Ionicons
                   name={openSections.delivery ? "chevron-up" : "chevron-down"}
@@ -419,7 +453,7 @@ export const PostRfqModal: React.FC<PostRfqModalProps> = ({
                 <View style={styles.sectionBody}>
                   <View style={styles.rowTwoCols}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.inputLabel}>Target Delivery Date</Text>
+                      <Text style={styles.inputLabel}>Target Delivery Date *</Text>
                       <TextInput
                         style={styles.textInput}
                         value={targetDeliveryDate}
@@ -429,28 +463,18 @@ export const PostRfqModal: React.FC<PostRfqModalProps> = ({
                       />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.inputLabel}>Target Unit Price (₹)</Text>
+                      <Text style={styles.inputLabel}>Delivery Location *</Text>
                       <TextInput
                         style={styles.textInput}
-                        value={targetPrice}
-                        onChangeText={setTargetPrice}
-                        keyboardType="numeric"
-                        placeholder="e.g. 180"
+                        value={deliveryLocation}
+                        onChangeText={setDeliveryLocation}
+                        placeholder="City, State, PIN"
                         placeholderTextColor={Colors.textMuted}
                       />
                     </View>
                   </View>
 
-                  <Text style={styles.inputLabel}>Delivery Location / City</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    value={deliveryLocation}
-                    onChangeText={setDeliveryLocation}
-                    placeholder="Noida, Uttar Pradesh – 201301"
-                    placeholderTextColor={Colors.textMuted}
-                  />
-
-                  <Text style={styles.inputLabel}>Quotes Deadline Date</Text>
+                  <Text style={styles.inputLabel}>Quote Submission Deadline *</Text>
                   <TextInput
                     style={styles.textInput}
                     value={quoteDeadline}

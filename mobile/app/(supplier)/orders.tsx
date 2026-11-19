@@ -20,6 +20,7 @@ import { Colors } from "../../src/constants/colors";
 import { Header } from "../../src/components/common/Header";
 import { EmptyState } from "../../src/components/common/EmptyState";
 import { marketplaceService } from "../../src/services/marketplace.service";
+import { useAuth } from "../../src/hooks/useAuth";
 import { useRealtimeSync } from "../../src/hooks/useRealtimeSync";
 import { PurchaseOrder } from "../../src/types";
 
@@ -106,24 +107,23 @@ const formatOrderPrice = (amount?: number) => {
 
 // Helper to format date like reference photo: 18 Nov 2026
 const formatTargetDate = (dateStr?: string) => {
-  if (!dateStr) return "18 Nov 2026";
-  try {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return "18 Nov 2026";
-  }
+  if (!dateStr) return "Not set";
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "Not set";
+  return d.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 };
 
 export default function SupplierOrdersScreen() {
   const router = useRouter();
   const navigation = useNavigation<any>();
+  const { activeMembership } = useAuth();
 
-  const [orders, setOrders] = useState<PurchaseOrder[]>(DEFAULT_SUPPLIER_ORDERS);
+  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -135,29 +135,83 @@ export default function SupplierOrdersScreen() {
   const [selectedOrderForSamples, setSelectedOrderForSamples] = useState<PurchaseOrder | null>(null);
   const [selectedOrderForPayment, setSelectedOrderForPayment] = useState<PurchaseOrder | null>(null);
 
-  // Load orders from backend and merge with standard reference orders
+  // Load only purchase orders returned for the authenticated account.
   const loadOrders = useCallback(async () => {
     try {
       const data = await marketplaceService.listOrders();
-      if (Array.isArray(data) && data.length > 0) {
-        const merged = [...data];
-        for (const def of DEFAULT_SUPPLIER_ORDERS) {
-          if (!merged.some((o) => o.id === def.id || o.poNumber === def.poNumber)) {
-            merged.push(def);
-          }
-        }
-        setOrders(merged);
-      } else {
-        setOrders(DEFAULT_SUPPLIER_ORDERS);
-      }
+      const supplierOrganizationId = activeMembership?.organizationId;
+      setOrders(
+        (Array.isArray(data) ? data : []).filter(
+          (order) => Boolean(supplierOrganizationId) && order.supplierOrgId === supplierOrganizationId
+        )
+      );
     } catch (e) {
-      console.warn("Failed to load supplier orders, using reference data:", e);
-      setOrders(DEFAULT_SUPPLIER_ORDERS);
+      console.warn("Failed to load supplier orders:", e);
+      setOrders([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [activeMembership?.organizationId]);
+
+  const updateSupplierOrderStatus = async (order: PurchaseOrder, nextStatus: string, actionLabel: string) => {
+    Alert.alert(
+      actionLabel,
+      `Are you sure you want to update ${order.poNumber || "this purchase order"}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Confirm",
+          onPress: async () => {
+            try {
+              setUpdatingOrderId(order.id);
+              await marketplaceService.updateOrderStatus(order.id, nextStatus, {
+                note: `${actionLabel} completed by supplier.`,
+              });
+              await loadOrders();
+              Alert.alert("Order Updated", `${order.poNumber || "Purchase order"}: ${actionLabel} completed successfully.`);
+            } catch (error: any) {
+              Alert.alert(
+                "Unable to Update Order",
+                error?.response?.data?.message || error?.message || "Please try again."
+              );
+            } finally {
+              setUpdatingOrderId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const getNextSupplierOrderAction = (status: string) => {
+    switch ((status || "").toUpperCase()) {
+      case "PENDING_ACCEPTANCE":
+      case "PO_CREATED":
+      case "ISSUED":
+        return { status: "ACCEPTED", label: "Accept Purchase Order" };
+      case "ACCEPTED":
+        return { status: "SAMPLE_PENDING", label: "Dispatch PP Sample" };
+      case "SAMPLE_APPROVED":
+        return { status: "PRODUCTION_STARTED", label: "Start Bulk Production" };
+      case "PRODUCTION_STARTED":
+      case "IN_PRODUCTION":
+        return { status: "QC_PENDING", label: "Submit for Quality Inspection" };
+      case "QC_PENDING":
+      case "QC":
+        return { status: "READY_TO_DISPATCH", label: "Quality Check Passed" };
+      case "READY_TO_DISPATCH":
+        return { status: "DISPATCHED", label: "Dispatch Shipment" };
+      default:
+        return null;
+    }
+  };
+
+  const handleSupplierOrderAction = (order: PurchaseOrder) => {
+    const action = getNextSupplierOrderAction(order.status);
+    if (!action) return;
+    updateSupplierOrderStatus(order, action.status, action.label);
+  };
 
   useEffect(() => {
     loadOrders();
@@ -175,7 +229,10 @@ export default function SupplierOrdersScreen() {
       // 1. Filter match
       const statusUpper = (order.status || "").toUpperCase();
       if (selectedFilter !== "ALL") {
-        if (selectedFilter === "PO_CREATED" && statusUpper !== "ISSUED" && statusUpper !== "PO_CREATED") {
+        if (
+          selectedFilter === "PO_CREATED" &&
+          !["ISSUED", "PO_CREATED", "PENDING_ACCEPTANCE"].includes(statusUpper)
+        ) {
           return false;
         }
         if (selectedFilter === "ACCEPTED" && statusUpper !== "ACCEPTED") {
@@ -252,6 +309,16 @@ export default function SupplierOrdersScreen() {
         progressText: "Pre-Production Sample Approved",
         progressPercent: 40,
         progressPercentLabel: "40% Completed",
+      };
+    }
+    if (s === "PENDING_ACCEPTANCE" || s === "PO_CREATED" || s === "ISSUED") {
+      return {
+        badgeText: "AWAITING ACCEPTANCE",
+        badgeBg: "#FEF3C7",
+        badgeColor: "#D97706",
+        progressText: "Review and accept this purchase order",
+        progressPercent: 15,
+        progressPercentLabel: "Awaiting Action",
       };
     }
     if (s === "ACCEPTED") {
@@ -397,13 +464,10 @@ export default function SupplierOrdersScreen() {
           />
         ) : (
           filteredOrders.map((order, index) => {
-            const poNumberDisplay =
-              order.poNumber || `SG-PO-2026-${(index + 2589).toString()}`;
-            const itemDescription =
-              order.items?.[0]?.description ||
-              "1,000 pcs 1000 cargo black pants - Supplier Quote";
-            const buyerName = order.buyerOrg?.name || "Qspider";
-            const priceDisplay = formatOrderPrice(order.totalAmount || 499000);
+            const poNumberDisplay = order.poNumber || "Purchase Order";
+            const itemDescription = order.items?.[0]?.description || "Purchase order details";
+            const buyerName = order.buyerOrg?.name || order.buyer?.name || "Buyer";
+            const priceDisplay = formatOrderPrice(order.totalAmount);
             const targetDateDisplay = formatTargetDate(order.expectedDate || (order as any).targetDate);
             const statusConfig = getOrderStatusConfig(order.status);
 
@@ -472,7 +536,23 @@ export default function SupplierOrdersScreen() {
                 {/* Divider Line */}
                 <View style={styles.cardDivider} />
 
-                {/* Card Row 6: 3 Action Buttons (Track Milestones, View Samples, Secure Payment) */}
+                {getNextSupplierOrderAction(order.status) && (
+                  <TouchableOpacity
+                    style={[styles.modalPrimaryActionBtn, { marginTop: 14, opacity: updatingOrderId === order.id ? 0.6 : 1 }]}
+                    onPress={() => handleSupplierOrderAction(order)}
+                    disabled={updatingOrderId === order.id}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                    <Text style={styles.modalPrimaryActionText}>
+                      {updatingOrderId === order.id
+                        ? "Updating..."
+                        : getNextSupplierOrderAction(order.status)?.label}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Card Row 6: Order actions */}
                 <View style={styles.actionsRow}>
                   {/* Button 1: Track Milestones (Outlined Card style matching photo) */}
                   <TouchableOpacity
@@ -543,7 +623,7 @@ export default function SupplierOrdersScreen() {
                 {
                   key: "PO_CREATED",
                   label: "PO Created",
-                  count: orders.filter((o) => o.status === "ISSUED" || o.status === "PO_CREATED").length,
+                  count: orders.filter((o) => ["ISSUED", "PO_CREATED", "PENDING_ACCEPTANCE"].includes(o.status)).length,
                 },
                 {
                   key: "ACCEPTED",
@@ -648,7 +728,7 @@ export default function SupplierOrdersScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.modalSheetTitle}>Manufacturing Milestones</Text>
                 <Text style={styles.modalSheetSubtitle}>
-                  {selectedOrderForMilestones?.poNumber} • {selectedOrderForMilestones?.buyerOrg?.name || "Qspider"}
+                  {selectedOrderForMilestones?.poNumber} • {selectedOrderForMilestones?.buyerOrg?.name || selectedOrderForMilestones?.buyer?.name || "Buyer"}
                 </Text>
               </View>
               <TouchableOpacity
@@ -660,79 +740,72 @@ export default function SupplierOrdersScreen() {
             </View>
 
             <ScrollView style={{ marginTop: 16 }} showsVerticalScrollIndicator={false}>
-              {[
-                {
-                  step: 1,
-                  title: "Purchase Order & Escrow Deposit",
-                  desc: "50% Advance (₹2,49,500) held securely in STITCHGRID Escrow",
-                  date: "1 Nov 2026",
-                  completed: true,
-                },
-                {
-                  step: 2,
-                  title: "Pre-Production Sample Fit Pass",
-                  desc: "5 pcs Cargo Pants approved by brand Qspider with zero remarks",
-                  date: "6 Nov 2026",
-                  completed: true,
-                },
-                {
-                  step: 3,
-                  title: "Fabric Sourcing & Bulk Cutting",
-                  desc: "240 GSM 100% Cotton knit inspected and cut on factory line",
-                  date: "10 Nov 2026",
-                  completed: true,
-                },
-                {
-                  step: 4,
-                  title: "AQL 2.5 Quality Inspection Audit",
-                  desc: "Third-party digital QC passed with 99.8% compliance rating",
-                  date: "15 Nov 2026",
-                  completed: true,
-                },
-                {
-                  step: 5,
-                  title: "Goods Dispatched & Payment Released",
-                  desc: "Consignment delivered to Mumbai FC • 100% funds released to supplier",
-                  date: "18 Nov 2026",
-                  completed: selectedOrderForMilestones?.status === "COMPLETED",
-                },
-              ].map((m, idx) => (
-                <View key={idx} style={styles.timelineItem}>
-                  <View style={styles.timelineLeft}>
-                    <View
-                      style={[
-                        styles.timelineCircle,
-                        m.completed && styles.timelineCircleCompleted,
-                      ]}
-                    >
-                      <Ionicons
-                        name={m.completed ? "checkmark" : "time-outline"}
-                        size={14}
-                        color={m.completed ? "#FFFFFF" : "#64748B"}
-                      />
-                    </View>
-                    {idx < 4 && <View style={styles.timelineLine} />}
-                  </View>
-
-                  <View style={styles.timelineContent}>
-                    <View style={styles.timelineHeader}>
-                      <Text style={styles.timelineTitle}>{m.title}</Text>
-                      <Text style={styles.timelineDate}>{m.date}</Text>
-                    </View>
-                    <Text style={styles.timelineDesc}>{m.desc}</Text>
-                  </View>
-                </View>
-              ))}
-
+              {selectedOrderForMilestones?.milestones?.length ? (
+                selectedOrderForMilestones.milestones
+                  .slice()
+                  .sort((a, b) => a.orderIndex - b.orderIndex)
+                  .map((milestone, idx, allMilestones) => {
+                    const completed = milestone.status === "COMPLETED";
+                    const nextStatus = milestone.status === "PENDING" ? "IN_PROGRESS" : "COMPLETED";
+                    return (
+                      <View key={milestone.id} style={styles.timelineItem}>
+                        <View style={styles.timelineLeft}>
+                          <View style={[styles.timelineCircle, completed && styles.timelineCircleCompleted]}>
+                            <Ionicons
+                              name={completed ? "checkmark" : "time-outline"}
+                              size={14}
+                              color={completed ? "#FFFFFF" : "#64748B"}
+                            />
+                          </View>
+                          {idx < allMilestones.length - 1 && <View style={styles.timelineLine} />}
+                        </View>
+                        <View style={styles.timelineContent}>
+                          <View style={styles.timelineHeader}>
+                            <Text style={styles.timelineTitle}>{milestone.title}</Text>
+                            <Text style={styles.timelineDate}>
+                              {milestone.targetDate ? new Date(milestone.targetDate).toLocaleDateString("en-IN") : milestone.status.replace("_", " ")}
+                            </Text>
+                          </View>
+                          {!!milestone.notes && <Text style={styles.timelineDesc}>{milestone.notes}</Text>}
+                          {!completed && (
+                            <TouchableOpacity
+                              style={[styles.modalPrimaryActionBtn, { marginTop: 8 }]}
+                              disabled={updatingOrderId === selectedOrderForMilestones!.id}
+                              onPress={async () => {
+                                try {
+                                  setUpdatingOrderId(selectedOrderForMilestones!.id);
+                                  await marketplaceService.updateMilestone(milestone.id, nextStatus);
+                                  await loadOrders();
+                                  const refreshed = await marketplaceService.getOrderDetails(selectedOrderForMilestones!.id);
+                                  setSelectedOrderForMilestones(refreshed);
+                                } catch (error: any) {
+                                  Alert.alert("Milestone Update Failed", error?.message || "Please try again.");
+                                } finally {
+                                  setUpdatingOrderId(null);
+                                }
+                              }}
+                            >
+                              <Text style={styles.modalPrimaryActionText}>
+                                {updatingOrderId === selectedOrderForMilestones!.id
+                                  ? "Updating..."
+                                  : milestone.status === "PENDING" ? "Start Milestone" : "Mark Completed"}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </View>
+                    );
+                  })
+              ) : (
+                <EmptyState
+                  icon="time-outline"
+                  title="No milestones available"
+                  description="Milestones will appear here when they are created for this purchase order."
+                />
+              )}
               <TouchableOpacity
                 style={styles.modalPrimaryActionBtn}
-                onPress={() => {
-                  setSelectedOrderForMilestones(null);
-                  Alert.alert(
-                    "Milestones Verified",
-                    "All production checkpoints have been synced with the buyer's order tracker."
-                  );
-                }}
+                onPress={() => setSelectedOrderForMilestones(null)}
               >
                 <Text style={styles.modalPrimaryActionText}>Close Timeline</Text>
               </TouchableOpacity>
@@ -762,7 +835,7 @@ export default function SupplierOrdersScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.modalSheetTitle}>Pre-Production Samples</Text>
                 <Text style={styles.modalSheetSubtitle}>
-                  {selectedOrderForSamples?.poNumber} • Approved Sample
+                  {selectedOrderForSamples?.poNumber} • Sample overview
                 </Text>
               </View>
               <TouchableOpacity
@@ -774,37 +847,38 @@ export default function SupplierOrdersScreen() {
             </View>
 
             <View style={styles.sampleInfoCard}>
-              <View style={styles.sampleCardHeader}>
-                <View>
-                  <Text style={styles.sampleCode}>SMP-2026-0881</Text>
-                  <Text style={styles.sampleItemTitle}>1000 cargo black pants - Final Sample</Text>
-                </View>
-                <View style={styles.sampleApprovedBadge}>
-                  <Text style={styles.sampleApprovedText}>APPROVED</Text>
-                </View>
-              </View>
-
+              <Text style={styles.sampleItemTitle}>
+                {selectedOrderForSamples?.items?.[0]?.description || "Purchase order sample"}
+              </Text>
               <View style={styles.sampleDivider} />
-
               <View style={styles.sampleDetailGrid}>
                 <View style={styles.sampleDetailCol}>
-                  <Text style={styles.sampleDetailLabel}>Sample Quantity</Text>
-                  <Text style={styles.sampleDetailValue}>5 pcs</Text>
+                  <Text style={styles.sampleDetailLabel}>Order Quantity</Text>
+                  <Text style={styles.sampleDetailValue}>
+                    {selectedOrderForSamples?.items?.[0]?.quantity
+                      ? `${selectedOrderForSamples.items[0].quantity} pcs`
+                      : "Not specified"}
+                  </Text>
                 </View>
                 <View style={styles.sampleDetailCol}>
-                  <Text style={styles.sampleDetailLabel}>Fabric Spec</Text>
-                  <Text style={styles.sampleDetailValue}>240 GSM, 100% Cotton</Text>
+                  <Text style={styles.sampleDetailLabel}>Sample Records</Text>
+                  <Text style={styles.sampleDetailValue}>Open sample workflow to view</Text>
                 </View>
               </View>
-
               <View style={[styles.sampleDetailGrid, { marginTop: 12 }]}>
                 <View style={styles.sampleDetailCol}>
-                  <Text style={styles.sampleDetailLabel}>Courier Tracking</Text>
-                  <Text style={styles.sampleDetailValue}>BlueDart #BD88912</Text>
+                  <Text style={styles.sampleDetailLabel}>Buyer</Text>
+                  <Text style={styles.sampleDetailValue}>
+                    {selectedOrderForSamples?.buyerOrg?.name || selectedOrderForSamples?.buyer?.name || "—"}
+                  </Text>
                 </View>
                 <View style={styles.sampleDetailCol}>
-                  <Text style={styles.sampleDetailLabel}>Approval Date</Text>
-                  <Text style={styles.sampleDetailValue}>6 Nov 2026</Text>
+                  <Text style={styles.sampleDetailLabel}>Expected Delivery</Text>
+                  <Text style={styles.sampleDetailValue}>
+                    {selectedOrderForSamples?.expectedDate
+                      ? new Date(selectedOrderForSamples.expectedDate).toLocaleDateString("en-IN")
+                      : "Not specified"}
+                  </Text>
                 </View>
               </View>
             </View>

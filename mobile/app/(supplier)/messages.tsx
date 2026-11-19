@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  Linking,
   SafeAreaView,
   ActivityIndicator,
   Image,
@@ -60,8 +61,8 @@ function parseMessageBody(body?: string): ParsedMessage {
         return {
           type: "FILE",
           text: parsed.text || "",
-          fileName: parsed.filename || parsed.fileName || "TechPack_Specification.pdf",
-          fileSize: parsed.size || parsed.fileSize || "2.4 MB",
+          fileName: parsed.filename || parsed.fileName || "File",
+          fileSize: parsed.size || parsed.fileSize || "Size not available",
           fileUrl: parsed.url || parsed.fileUrl,
         };
       }
@@ -70,14 +71,14 @@ function parseMessageBody(body?: string): ParsedMessage {
           type: "ORDER",
           text: parsed.text || "",
           orderPo: parsed.orderPo || parsed.poNumber,
-          orderStatus: parsed.orderStatus || parsed.status || "IN_PRODUCTION",
+          orderStatus: parsed.orderStatus || parsed.status || "Not available",
         };
       }
       if (parsed.type === "SAMPLE") {
         return {
           type: "SAMPLE",
-          text: parsed.text || "Pre-production prototype sample submitted for approval.",
-          sampleType: parsed.sampleType || "Final Pre-Production Sample",
+          text: parsed.text || "Sample update",
+          sampleType: parsed.sampleType || "Sample",
         };
       }
     } catch {}
@@ -86,8 +87,9 @@ function parseMessageBody(body?: string): ParsedMessage {
 }
 
 function formatChatTime(dateString?: string): string {
-  if (!dateString) return "Live";
+  if (!dateString) return "—";
   const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "—";
   const now = new Date();
   const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 3600 * 24));
 
@@ -213,9 +215,7 @@ export default function SupplierMessagesScreen() {
     poNumber?: string;
   }>();
 
-  const [conversations, setConversations] = useState<(Conversation & { unreadCount?: number })[]>(
-    INITIAL_SUPPLIER_CONVERSATIONS
-  );
+  const [conversations, setConversations] = useState<(Conversation & { unreadCount?: number })[]>([]);
   const [selectedConv, setSelectedConv] = useState<(Conversation & { unreadCount?: number }) | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
@@ -240,7 +240,9 @@ export default function SupplierMessagesScreen() {
   const loadConversations = useCallback(async () => {
     try {
       const data = await marketplaceService.listConversations();
-      const list = Array.isArray(data) && data.length > 0 ? data : INITIAL_SUPPLIER_CONVERSATIONS;
+      const list = (Array.isArray(data) ? data : []).filter(
+        (conversation) => conversation.supplierOrgId === activeMembership?.organizationId
+      );
       setConversations(list as any);
 
       // Handle deep-link to a specific buyer or order
@@ -265,7 +267,7 @@ export default function SupplierMessagesScreen() {
       }
     } catch (e) {
       console.warn("Failed to load conversations:", e);
-      setConversations(INITIAL_SUPPLIER_CONVERSATIONS);
+      setConversations([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -276,21 +278,10 @@ export default function SupplierMessagesScreen() {
   const loadMessages = useCallback(async (convId: string) => {
     try {
       const msgs = await marketplaceService.getConversationMessages(convId);
-      if (Array.isArray(msgs) && msgs.length > 0) {
-        setMessages(msgs);
-      } else {
-        // Fallback initial messages for mock/seed conversations
-        const found = INITIAL_SUPPLIER_CONVERSATIONS.find((c) => c.id === convId);
-        if (found && found.messages && found.messages.length > 0) {
-          setMessages(found.messages);
-        } else {
-          setMessages([]);
-        }
-      }
+      setMessages(Array.isArray(msgs) ? msgs : []);
     } catch (e) {
       console.warn("Failed to load messages:", e);
-      const found = INITIAL_SUPPLIER_CONVERSATIONS.find((c) => c.id === convId);
-      setMessages(found?.messages || []);
+      setMessages([]);
     }
   }, []);
 
@@ -358,8 +349,14 @@ export default function SupplierMessagesScreen() {
       const sent = await marketplaceService.sendMessage(selectedConv.id, body);
       setMessages((prev) => prev.map((m) => (m.id === tempId ? sent : m)));
       loadConversations();
-    } catch (e) {
-      console.warn("Send message failed:", e);
+    } catch (e: any) {
+      setMessages((prev) => prev.filter((message) => message.id !== tempId));
+      setInputText(body);
+      loadConversations();
+      Alert.alert(
+        "Message Not Sent",
+        e?.response?.data?.message || e?.message || "Your message could not be sent. Please try again."
+      );
     } finally {
       setSending(false);
     }
@@ -390,24 +387,18 @@ export default function SupplierMessagesScreen() {
         const asset = res.assets[0];
         setUploadingImage(true);
 
-        const base64Uri = asset.base64
-          ? `data:image/jpeg;base64,${asset.base64}`
-          : asset.uri;
-
-        let uploadedUrl = asset.uri;
-        try {
-          const uploaded = await marketplaceService.uploadFile({
-            filename: `sample_proof_${Date.now()}.jpg`,
-            data: base64Uri,
-            label: "Production Proof Photo",
-          });
-          if (uploaded?.url) {
-            uploadedUrl = uploaded.url;
-          }
-        } catch {
-          // If offline upload fails, fallback to local uri for instant demo
-          uploadedUrl = asset.uri;
+        if (!asset.base64) {
+          throw new Error("The selected image could not be prepared for upload. Please select it again.");
         }
+        const mimeType = asset.mimeType || "image/jpeg";
+        const extension = mimeType.split("/")[1] || "jpg";
+        const base64Uri = `data:${mimeType};base64,${asset.base64}`;
+        const uploaded = await marketplaceService.uploadFile({
+          filename: asset.fileName || `sample_proof_${Date.now()}.${extension}`,
+          data: base64Uri,
+          label: "Production Proof Photo",
+        });
+        const uploadedUrl = uploaded.url;
 
         const imagePayload = JSON.stringify({
           type: "IMAGE",
@@ -431,8 +422,14 @@ export default function SupplierMessagesScreen() {
         try {
           const sent = await marketplaceService.sendMessage(selectedConv.id, imagePayload);
           setMessages((prev) => prev.map((m) => (m.id === tempId ? sent : m)));
-        } catch {}
-        loadConversations();
+          loadConversations();
+        } catch (sendError: any) {
+          setMessages((prev) => prev.filter((message) => message.id !== tempId));
+          Alert.alert(
+            "Message Not Sent",
+            sendError?.response?.data?.message || sendError?.message || "The image could not be sent. Please try again."
+          );
+        }
       }
     } catch (err: any) {
       Alert.alert("Upload Failed", err.message || "Failed to pick image.");
@@ -441,41 +438,10 @@ export default function SupplierMessagesScreen() {
     }
   };
 
-  // 6. Send Tech Pack / PDF Attachment
-  const handleSendTechpack = async () => {
-    if (!selectedConv) return;
+  // The Web App currently exposes a Tech Pack action without a connected file-upload flow.
+  const handleSendTechpack = () => {
     setIsAttachmentSheetOpen(false);
-
-    const techPackPayload = JSON.stringify({
-      type: "FILE",
-      filename: "TechPack_Garment_Specs_v2.pdf",
-      size: "2.8 MB",
-      url: "https://stitchgrid.app/docs/techpack_spec.pdf",
-      text: "Attached is the factory cutting & grading measurement tolerance sheet.",
-    });
-
-    const tempId = `temp_file_${Date.now()}`;
-    const optimisticMsg: Message = {
-      id: tempId,
-      conversationId: selectedConv.id,
-      senderUserId: user?.id || "me",
-      body: techPackPayload,
-      createdAt: new Date().toISOString(),
-      sender: { id: user?.id || "me", fullName: user?.fullName || "You" },
-    };
-    setMessages((prev) => [...prev, optimisticMsg]);
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
-
-    try {
-      setSending(true);
-      const sent = await marketplaceService.sendMessage(selectedConv.id, techPackPayload);
-      setMessages((prev) => prev.map((m) => (m.id === tempId ? sent : m)));
-      loadConversations();
-    } catch (err) {
-      console.warn("Failed to send Techpack:", err);
-    } finally {
-      setSending(false);
-    }
+    Alert.alert("Document Sharing", "Document upload is not connected to the Web App messaging workflow yet.");
   };
 
   // 7. Send Purchase Order Milestone Reference
@@ -483,8 +449,13 @@ export default function SupplierMessagesScreen() {
     if (!selectedConv) return;
     setIsAttachmentSheetOpen(false);
 
-    const poNumberStr = selectedConv.linkedOrder?.poNumber || "SG-PO-2026-2589";
-    const status = selectedConv.linkedOrder?.status || "IN_PRODUCTION";
+    const linkedOrder = selectedConv.linkedOrder;
+    if (!linkedOrder?.poNumber) {
+      Alert.alert("No Linked Order", "This conversation does not have a purchase order to share.");
+      return;
+    }
+    const poNumberStr = linkedOrder.poNumber;
+    const status = linkedOrder.status || "Not available";
 
     const orderPayload = JSON.stringify({
       type: "ORDER",
@@ -510,64 +481,24 @@ export default function SupplierMessagesScreen() {
       const sent = await marketplaceService.sendMessage(selectedConv.id, orderPayload);
       setMessages((prev) => prev.map((m) => (m.id === tempId ? sent : m)));
       loadConversations();
-    } catch (err) {
-      console.warn("Failed to send Order Reference:", err);
+    } catch (err: any) {
+      setMessages((prev) => prev.filter((message) => message.id !== tempId));
+      Alert.alert(
+        "Message Not Sent",
+        err?.response?.data?.message || err?.message || "The order reference could not be sent. Please try again."
+      );
     } finally {
       setSending(false);
     }
   };
 
-  // 8. Send Sample Submission Proof
-  const handleSendSampleProof = async () => {
-    if (!selectedConv) return;
+  // Sample photos and approval status must be submitted from the Samples workflow.
+  const handleSendSampleProof = () => {
     setIsAttachmentSheetOpen(false);
-
-    const samplePayload = JSON.stringify({
-      type: "SAMPLE",
-      sampleType: "Pre-Production Proto Fit Sample",
-      text: "Pre-production fit sample has been prepared and dispatched for your review and approval.",
-    });
-
-    const tempId = `temp_sample_${Date.now()}`;
-    const optimisticMsg: Message = {
-      id: tempId,
-      conversationId: selectedConv.id,
-      senderUserId: user?.id || "me",
-      body: samplePayload,
-      createdAt: new Date().toISOString(),
-      sender: { id: user?.id || "me", fullName: user?.fullName || "You" },
-    };
-    setMessages((prev) => [...prev, optimisticMsg]);
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
-
-    try {
-      setSending(true);
-      const sent = await marketplaceService.sendMessage(selectedConv.id, samplePayload);
-      setMessages((prev) => prev.map((m) => (m.id === tempId ? sent : m)));
-      loadConversations();
-    } catch (err) {
-      console.warn("Failed to send Sample Proof:", err);
-    } finally {
-      setSending(false);
-    }
+    router.push("/(supplier)/samples");
   };
 
-  // 9. Audio Call / Video Call Simulators
-  const handleAudioCall = () => {
-    Alert.alert(
-      "StitchGrid Encrypted Voice Call",
-      `Connecting secure VoIP line to ${activeBuyerName}...\n\nAll calls are recorded for milestone protection.`,
-      [{ text: "End Call", style: "cancel" }]
-    );
-  };
-
-  const handleVideoCall = () => {
-    Alert.alert(
-      "StitchGrid HD Video Conference",
-      `Starting secure factory audit video room with ${activeBuyerName}...\n\nCamera & mic permissions granted.`,
-      [{ text: "Leave Meeting", style: "cancel" }]
-    );
-  };
+  // Calling is not part of the current Web App messaging workflow.
 
   // Filtered Conversations List
   const filteredConversations = useMemo(() => {
@@ -604,7 +535,7 @@ export default function SupplierMessagesScreen() {
     selectedConv?.buyer?.name ||
     selectedConv?.otherPartyName ||
     orgName ||
-    "Garment Buyer / Brand";
+    "Buyer not available";
 
   const activeBuyerCity = selectedConv?.buyer?.city || "India";
 
@@ -713,7 +644,7 @@ export default function SupplierMessagesScreen() {
             )
           }
           renderItem={({ item }) => {
-            const buyerName = item.buyer?.name || item.otherPartyName || "Brand Buyer";
+            const buyerName = item.buyer?.name || item.otherPartyName || "Buyer not available";
             const initial = buyerName[0]?.toUpperCase() || "B";
             const lastMsg = item.messages?.[0];
             const parsed = parseMessageBody(lastMsg?.body);
@@ -845,19 +776,12 @@ export default function SupplierMessagesScreen() {
               };
               setConversations((prev) => [enriched, ...prev]);
               setSelectedConv(enriched);
-            } catch (err) {
+            } catch (err: any) {
               console.warn("Failed to create conversation:", err);
-              // Fallback to local conversation
-              const localConv: Conversation & { unreadCount?: number } = {
-                id: `conv_local_${Date.now()}`,
-                buyerOrgId: buyer.id,
-                supplierOrgId: activeMembership.organizationId,
-                buyer: { id: buyer.id, name: buyer.name, city: buyer.city },
-                messages: [],
-                unreadCount: 0,
-              };
-              setConversations((prev) => [localConv, ...prev]);
-              setSelectedConv(localConv);
+              Alert.alert(
+                "Unable to Start Conversation",
+                err?.response?.data?.message || err?.message || "The conversation could not be created. Please try again."
+              );
             }
           }}
         />
@@ -883,7 +807,7 @@ export default function SupplierMessagesScreen() {
         {/* Avatar */}
         <View style={styles.navAvatar}>
           <Text style={styles.navAvatarText}>{activeBuyerName[0]?.toUpperCase() || "B"}</Text>
-          <View style={styles.navOnlineDot} />
+
         </View>
 
         {/* Buyer Title & Online Status */}
@@ -894,27 +818,8 @@ export default function SupplierMessagesScreen() {
             </Text>
             <Ionicons name="shield-checkmark" size={13} color="#15803D" />
           </View>
-          <Text style={styles.navBuyerStatus}>
-            ● Active Now • {activeBuyerCity}, India
-          </Text>
+          <Text style={styles.navBuyerStatus}>STITCHGRID Conversation</Text>
         </View>
-
-        {/* Action Buttons: Phone & Video Call */}
-        <TouchableOpacity
-          style={styles.navActionIconBtn}
-          onPress={handleAudioCall}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="call-outline" size={20} color="#5B13EC" />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.navActionIconBtn}
-          onPress={handleVideoCall}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="videocam-outline" size={22} color="#5B13EC" />
-        </TouchableOpacity>
 
         {/* Linked PO Pill Shortcut */}
         {selectedConv.linkedOrder && (
@@ -953,7 +858,7 @@ export default function SupplierMessagesScreen() {
         <FlatList
           ref={flatListRef}
           data={messages}
-          keyExtractor={(item) => item.id || String(Math.random())}
+          keyExtractor={(item) => item.id || `${item.conversationId || "message"}-${item.createdAt || "unknown"}`}
           contentContainerStyle={styles.messagesContainer}
           showsVerticalScrollIndicator={false}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
@@ -962,7 +867,7 @@ export default function SupplierMessagesScreen() {
               <View style={styles.dateSeparatorPill}>
                 <Ionicons name="shield-checkmark" size={12} color="#15803D" />
                 <Text style={styles.dateSeparatorText}>
-                  Messages are end-to-end encrypted with Milestone Escrow Protection.
+                  Keep RFQ, sample and order updates together in one conversation.
                 </Text>
               </View>
             </View>
@@ -1026,7 +931,15 @@ export default function SupplierMessagesScreen() {
                         <Text style={styles.fileSizeText}>{parsed.fileSize}</Text>
                       </View>
                       <TouchableOpacity
-                        onPress={() => Alert.alert("Download", `Downloading ${parsed.fileName}...`)}
+                        onPress={() => {
+                          if (!parsed.fileUrl) {
+                            Alert.alert("File Unavailable", "This message does not contain a valid file link.");
+                            return;
+                          }
+                          Linking.openURL(parsed.fileUrl).catch(() =>
+                            Alert.alert("Unable to Open File", "The file link could not be opened. Please try again later.")
+                          );
+                        }}
                         style={styles.fileDownloadBtn}
                       >
                         <Ionicons name="download-outline" size={16} color="#5B13EC" />

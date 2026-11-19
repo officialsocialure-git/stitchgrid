@@ -17,11 +17,13 @@ import { Header } from "../../src/components/common/Header";
 import { Button } from "../../src/components/common/Button";
 import { EmptyState } from "../../src/components/common/EmptyState";
 import { marketplaceService } from "../../src/services/marketplace.service";
+import { useAuth } from "../../src/hooks/useAuth";
 import { useRealtimeSync } from "../../src/hooks/useRealtimeSync";
 import { PurchaseOrder } from "../../src/types";
 
 export default function SupplierProductionScreen() {
   const router = useRouter();
+  const { activeMembership } = useAuth();
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,17 +33,21 @@ export default function SupplierProductionScreen() {
   const loadData = useCallback(async () => {
     try {
       const data = await marketplaceService.listOrders();
-      setOrders(data || []);
-      if (data && data.length > 0 && !selectedOrderId) {
-        setSelectedOrderId(data[0].id);
-      }
+      const supplierOrganizationId = activeMembership?.organizationId;
+      const supplierOrders = (Array.isArray(data) ? data : []).filter(
+        (order) => Boolean(supplierOrganizationId) && order.supplierOrgId === supplierOrganizationId
+      );
+      setOrders(supplierOrders);
+      setSelectedOrderId((current) =>
+        supplierOrders.some((order) => order.id === current) ? current : supplierOrders[0]?.id || null
+      );
     } catch (e) {
       console.warn("Failed to load factory floor orders:", e);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedOrderId]);
+  }, [activeMembership?.organizationId]);
 
   useEffect(() => {
     loadData();
@@ -71,19 +77,11 @@ export default function SupplierProductionScreen() {
     }
   };
 
-  const milestonesList = selectedOrder?.milestones?.length
-    ? selectedOrder.milestones
-    : [
-        { id: "m1", title: "Fabric Procurement & Dyeing", status: "COMPLETED", orderIndex: 1 },
-        { id: "m2", title: "PP Sample Submission", status: "COMPLETED", orderIndex: 2 },
-        { id: "m3", title: "Bulk Cutting (Spreading & Cut)", status: "IN_PROGRESS", orderIndex: 3 },
-        { id: "m4", title: "Sewing & Assembly Operations", status: "PENDING", orderIndex: 4 },
-        { id: "m5", title: "Ironing & In-Line QC", status: "PENDING", orderIndex: 5 },
-        { id: "m6", title: "Final Dispatch & Logistics", status: "PENDING", orderIndex: 6 },
-      ];
-
+  const milestonesList = selectedOrder?.milestones || [];
   const completedCount = milestonesList.filter((m: any) => m.status === "COMPLETED").length;
-  const progressPercent = Math.round((completedCount / milestonesList.length) * 100);
+  const progressPercent = milestonesList.length
+    ? Math.round((completedCount / milestonesList.length) * 100)
+    : 0;
 
   return (
     <View style={styles.safeArea}>
@@ -123,7 +121,7 @@ export default function SupplierProductionScreen() {
             >
               {orders.map((order, idx) => {
                 const isSelected = (selectedOrderId || orders[0]?.id) === order.id;
-                const poNumber = order.poNumber || `PO-2026-${(1000 + idx).toString()}`;
+                const poNumber = order.poNumber || "PO number unavailable";
                 return (
                   <TouchableOpacity
                     key={order.id}
@@ -144,9 +142,9 @@ export default function SupplierProductionScreen() {
             <View style={styles.overviewCard}>
               <View style={styles.overviewTop}>
                 <View>
-                  <Text style={styles.overviewPo}>{selectedOrder?.poNumber || "PO-2026-ACTIVE"}</Text>
+                  <Text style={styles.overviewPo}>{selectedOrder?.poNumber || "PO number unavailable"}</Text>
                   <Text style={styles.overviewBuyer}>
-                    Buyer: {selectedOrder?.buyerOrg?.name || "Apparel Retail Partner"}
+                    Buyer: {selectedOrder?.buyerOrg?.name || selectedOrder?.buyer?.name || "Buyer not available"}
                   </Text>
                 </View>
                 <View style={styles.percentBadge}>
@@ -168,7 +166,7 @@ export default function SupplierProductionScreen() {
                 <View style={{ alignItems: "flex-end" }}>
                   <Text style={styles.statLabel}>Order Status</Text>
                   <Text style={[styles.statVal, { color: Colors.primary }]}>
-                    {selectedOrder?.status?.replace("_", " ") || "IN PRODUCTION"}
+                    {selectedOrder?.status?.replace(/_/g, " ") || "Not available"}
                   </Text>
                 </View>
               </View>
@@ -178,7 +176,14 @@ export default function SupplierProductionScreen() {
             <Text style={styles.timelineHeading}>Production Line Stages</Text>
 
             <View style={styles.timelineList}>
-              {milestonesList.map((m: any, idx: number) => {
+              {milestonesList.length === 0 ? (
+                <View style={styles.milestoneCard}>
+                  <Text style={styles.milestoneTitle}>No production milestones available</Text>
+                  <Text style={{ color: Colors.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 6 }}>
+                    This purchase order has no milestones configured yet. The timeline will appear when the order workflow creates them.
+                  </Text>
+                </View>
+              ) : milestonesList.map((m: any, idx: number) => {
                 const isCompleted = m.status === "COMPLETED";
                 const isInProgress = m.status === "IN_PROGRESS";
                 const isLast = idx === milestonesList.length - 1;

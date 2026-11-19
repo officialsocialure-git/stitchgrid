@@ -21,12 +21,14 @@ import { Header } from "../../src/components/common/Header";
 import { Button } from "../../src/components/common/Button";
 import { EmptyState } from "../../src/components/common/EmptyState";
 import { marketplaceService } from "../../src/services/marketplace.service";
+import { useAuth } from "../../src/hooks/useAuth";
 import { useRealtimeSync } from "../../src/hooks/useRealtimeSync";
 import { PurchaseOrder } from "../../src/types";
 import { OrderDetailsModal } from "../../src/components/orders/OrderDetailsModal";
 
 export default function BuyerOrdersScreen() {
   const router = useRouter();
+  const { activeMembership } = useAuth();
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -105,7 +107,12 @@ export default function BuyerOrdersScreen() {
     try {
       setLoading(true);
       const data = await marketplaceService.listOrders();
-      setOrders(Array.isArray(data) ? data : []);
+      const buyerOrganizationId = activeMembership?.organizationId;
+      setOrders(
+        (Array.isArray(data) ? data : []).filter(
+          (order) => Boolean(buyerOrganizationId) && order.buyerOrgId === buyerOrganizationId
+        )
+      );
     } catch (e) {
       console.warn("Failed to load orders:", e);
       setOrders([]);
@@ -113,7 +120,7 @@ export default function BuyerOrdersScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [activeMembership?.organizationId]);
 
   useEffect(() => {
     loadOrders();
@@ -818,17 +825,26 @@ export default function BuyerOrdersScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                disabled={submittingReview}
+                disabled={submittingReview || !reviewingOrder}
                 onPress={async () => {
+                  if (!reviewingOrder) return;
                   try {
                     setSubmittingReview(true);
-                    // Submit review simulation or API
-                    Alert.alert(
-                      "⭐ Review Submitted!",
-                      `Thank you! Your verified ${reviewRating}-star rating for ${reviewingOrder?.supplierOrg?.name || reviewingOrder?.supplier?.name || "the supplier"} has been recorded.`
+                    await marketplaceService.createReview(
+                      reviewingOrder.id,
+                      reviewingOrder.buyerOrgId,
+                      reviewRating,
+                      reviewComment.trim() || undefined
                     );
                     setIsReviewModalOpen(false);
                     setReviewComment("");
+                    Alert.alert("Review Submitted", "Your supplier review has been saved successfully.");
+                    await loadOrders();
+                  } catch (error: any) {
+                    Alert.alert(
+                      "Unable to Submit Review",
+                      error?.response?.data?.message || error?.message || "Your review could not be saved. Please try again."
+                    );
                   } finally {
                     setSubmittingReview(false);
                   }

@@ -62,12 +62,12 @@ export default function BuyerProfileScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <Text style={styles.userName}>{user?.fullName || "Brand Buyer"}</Text>
+                <Text style={styles.userName}>{user?.fullName || "Name not provided"}</Text>
                 <View style={styles.verifiedBadge}>
                   <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
                 </View>
               </View>
-              <Text style={styles.userEmail}>{user?.email || "buyer@stitchgrid.com"}</Text>
+              <Text style={styles.userEmail}>{user?.email || "Email not provided"}</Text>
               <View style={styles.roleTag}>
                 <Text style={styles.roleTagText}>BUYER / BRAND</Text>
               </View>
@@ -80,28 +80,32 @@ export default function BuyerProfileScreen() {
         <View style={styles.infoCard}>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Brand / Company</Text>
-            <Text style={styles.infoValue}>{org?.name || "Apparel Brand"}</Text>
+            <Text style={styles.infoValue}>{org?.name || "Organization not added"}</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Location / Hub</Text>
-            <Text style={styles.infoValue}>{org?.city || "New Delhi, India"}</Text>
+            <Text style={styles.infoValue}>{org?.city || "Location not provided"}</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Account Type</Text>
-            <Text style={styles.infoValue}>Direct Retail Brand</Text>
+            <Text style={styles.infoValue}>{org?.businessType || "Not specified"}</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>GSTIN / Business ID</Text>
-            <Text style={styles.infoValue}>{org?.taxId || "07AAAAA0000A1Z5"}</Text>
+            <Text style={styles.infoValue}>{org?.taxId || "Not provided"}</Text>
           </View>
           <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
             <Text style={styles.infoLabel}>Verification Status</Text>
-            <View style={styles.verifiedPill}>
-              <Ionicons name="checkmark" size={12} color={Colors.successText} />
-              <Text style={styles.verifiedText}>Verified Buyer</Text>
-            </View>
+            <Text style={styles.infoValue}>{org?.verificationStatus || "PENDING"}</Text>
           </View>
         </View>
+
+        <Button
+          title="Edit Organization Settings"
+          variant="outline"
+          onPress={() => router.push("/(buyer)/settings")}
+          style={{ marginTop: 14 }}
+        />
 
         {/* Sourcing Shortcuts */}
         <Text style={styles.sectionHeading}>Sourcing Shortcuts</Text>

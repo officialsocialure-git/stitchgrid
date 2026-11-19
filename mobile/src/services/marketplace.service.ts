@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { API_BASE_URL } from "../constants/config";
 import { SupplierProfile, Rfq, Quotation, PurchaseOrder, Sample, Message, Conversation, Notification } from "../types";
 
 export const marketplaceService = {
@@ -75,6 +76,19 @@ export const marketplaceService = {
     return res.data?.data || res.data;
   },
 
+  async createCatalogItem(data: {
+    organizationId: string;
+    name: string;
+    itemType: string;
+    description?: string;
+    moq?: number;
+    unitPrice?: number;
+    currency?: string;
+  }): Promise<any> {
+    const res = await api.post("/catalog-items", data);
+    return res.data?.data || res.data;
+  },
+
   // 4. Purchase Orders
   async listOrders(): Promise<PurchaseOrder[]> {
     const res = await api.get("/purchase-orders");
@@ -131,12 +145,15 @@ export const marketplaceService = {
     return res.data?.data || res.data;
   },
 
+  async createReview(orderId: string, reviewerOrgId: string, rating: number, comment?: string): Promise<any> {
+    const res = await api.post(`/orders/${orderId}/reviews`, { reviewerOrgId, rating, comment });
+    return res.data?.data || res.data;
+  },
+
   // 7. Profile & Settings
   async updateOrganizationProfile(data: {
     organizationId: string;
     name?: string;
-    legalName?: string;
-    businessType?: string;
     taxId?: string;
     city?: string;
     address?: string;
@@ -173,7 +190,13 @@ export const marketplaceService = {
 
   async uploadFile(data: { filename: string; data: string; label?: string }): Promise<{ url: string; label: string }> {
     const res = await api.post("/upload", data);
-    return res.data?.data || res.data;
+    const uploaded = res.data?.data || res.data;
+    if (!uploaded?.url) throw new Error("The server did not return a file URL.");
+    const apiOrigin = API_BASE_URL.replace(/\/api\/?$/i, "");
+    const url = /^https?:\/\//i.test(uploaded.url)
+      ? uploaded.url
+      : `${apiOrigin}${uploaded.url.startsWith("/") ? uploaded.url : `/${uploaded.url}`}`;
+    return { ...uploaded, url };
   },
 
   // 9. Notifications

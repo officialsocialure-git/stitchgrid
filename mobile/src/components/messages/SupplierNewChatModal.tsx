@@ -13,6 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../constants/colors";
 import { marketplaceService } from "../../services/marketplace.service";
+import { useAuth } from "../../hooks/useAuth";
 
 interface BuyerContact {
   id: string;
@@ -28,48 +29,13 @@ interface SupplierNewChatModalProps {
   onSelectBuyer: (buyer: { id: string; name: string; city?: string }) => void;
 }
 
-const DEFAULT_BUYERS: BuyerContact[] = [
-  {
-    id: "org-buyer-qspider",
-    name: "Qspider",
-    city: "Bihar",
-    poNumber: "SG-PO-2026-2589",
-    category: "1000 cargo black pants",
-  },
-  {
-    id: "org-buyer-trendsetter",
-    name: "TrendSetter Apparel Co.",
-    city: "Birgunj, UP",
-    poNumber: "RFQ-2026-1197",
-    category: "5,000 tees - 240 GSM Cotton",
-  },
-  {
-    id: "org-buyer-dominos",
-    name: "Dominos Retail & Uniforms",
-    city: "Noida, UP",
-    poNumber: "PO-2026-0891",
-    category: "Corporate Polo Shirts",
-  },
-  {
-    id: "org-buyer-zara",
-    name: "Zara Sourcing India",
-    city: "Gurugram, HR",
-    category: "Fast Fashion & Denim",
-  },
-  {
-    id: "org-buyer-raymond",
-    name: "Raymonds Garment Network",
-    city: "Mumbai, MH",
-    category: "Formal Trousers & Suiting",
-  },
-];
-
 export const SupplierNewChatModal: React.FC<SupplierNewChatModalProps> = ({
   visible,
   onClose,
   onSelectBuyer,
 }) => {
-  const [buyers, setBuyers] = useState<BuyerContact[]>(DEFAULT_BUYERS);
+  const { activeMembership } = useAuth();
+  const [buyers, setBuyers] = useState<BuyerContact[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -77,14 +43,24 @@ export const SupplierNewChatModal: React.FC<SupplierNewChatModalProps> = ({
     if (visible) {
       loadBuyers();
     }
-  }, [visible]);
+  }, [visible, activeMembership?.organizationId]);
 
   const loadBuyers = async () => {
     try {
       setLoading(true);
-      // Fetch buyers from active purchase orders
-      const orders = await marketplaceService.listOrders().catch(() => []);
-      const rfqs = await marketplaceService.listMyRfqs().catch(() => []);
+      // Fetch only buyers connected to the active supplier organization.
+      const supplierOrganizationId = activeMembership?.organizationId;
+      if (!supplierOrganizationId) {
+        setBuyers([]);
+        return;
+      }
+      const [allOrders, rfqs] = await Promise.all([
+        marketplaceService.listOrders(),
+        marketplaceService.listMyRfqs(supplierOrganizationId),
+      ]);
+      const orders = (Array.isArray(allOrders) ? allOrders : []).filter(
+        (order) => order.supplierOrgId === supplierOrganizationId
+      );
 
       const list: BuyerContact[] = [];
       const seenIds = new Set<string>();
@@ -97,8 +73,8 @@ export const SupplierNewChatModal: React.FC<SupplierNewChatModalProps> = ({
             seenIds.add(buyer.id);
             list.push({
               id: buyer.id,
-              name: buyer.name || "Brand Buyer",
-              city: buyer.city || "India",
+              name: buyer.name || "Buyer not available",
+              city: buyer.city || "Location not provided",
               poNumber: order.poNumber,
               category: order.items?.[0]?.description || (order as any).styleName || "Garment Order",
             });
@@ -114,8 +90,8 @@ export const SupplierNewChatModal: React.FC<SupplierNewChatModalProps> = ({
             seenIds.add(buyer.id);
             list.push({
               id: buyer.id,
-              name: buyer.name || "RFQ Buyer",
-              city: buyer.city || "India",
+              name: buyer.name || "Buyer not available",
+              city: buyer.city || "Location not provided",
               poNumber: rfq.id,
               category: rfq.title || rfq.garmentType || "Garment Requirement",
             });
@@ -123,17 +99,10 @@ export const SupplierNewChatModal: React.FC<SupplierNewChatModalProps> = ({
         }
       }
 
-      // Merge defaults if not in list
-      for (const def of DEFAULT_BUYERS) {
-        if (!seenIds.has(def.id)) {
-          list.push(def);
-        }
-      }
-
-      setBuyers(list.length > 0 ? list : DEFAULT_BUYERS);
+      setBuyers(list);
     } catch (err) {
       console.warn("Failed to load buyers:", err);
-      setBuyers(DEFAULT_BUYERS);
+      setBuyers([]);
     } finally {
       setLoading(false);
     }

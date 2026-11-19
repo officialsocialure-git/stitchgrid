@@ -38,88 +38,14 @@ const CATEGORIES = [
   "Woven Fabric",
 ];
 
-// Fallback verified suppliers matching web
-const FALLBACK_SUPPLIERS: any[] = [
-  {
-    id: "sup-tirupur-01",
-    organizationId: "org-tirupur-01",
-    name: "Tirupur Knits & Export Mills",
-    businessType: "Garments & Textiles",
-    city: "Tirupur, Tamil Nadu",
-    address: "SIDCO Industrial Estate, Tirupur",
-    verificationStatus: "APPROVED",
-    moq: "250 pcs",
-    capacity: "50,000 pcs / mo",
-    tags: "Knits · Cotton Hosiery · Bio-Washed",
-    description: "Leading OEKO-TEX certified garment export house specializing in premium single jersey, piqué and terry fabrics.",
-    yearsInBusiness: 14,
-    catalog: [
-      { name: "Premium Combed Cotton T-Shirt", price: "₹185", moq: 250 },
-      { name: "French Terry Oversized Hoodie", price: "₹480", moq: 200 },
-    ],
-  },
-  {
-    id: "sup-surat-02",
-    organizationId: "org-surat-02",
-    name: "Surat Tex Fab Weaving Mills",
-    businessType: "Fabric Mill",
-    city: "Surat, Gujarat",
-    address: "Ring Road Textile Hub, Surat",
-    verificationStatus: "APPROVED",
-    moq: "500 meters",
-    capacity: "120,000 m / mo",
-    tags: "Viscose · Polyester Silk · Georgette",
-    description: "State-of-the-art waterjet looms mill producing dyed & printed synthetic, rayon and blended apparel fabrics.",
-    yearsInBusiness: 18,
-    catalog: [
-      { name: "Micro Polyester Crepe", price: "₹95/m", moq: 500 },
-      { name: "Viscose Rayon 140 GSM", price: "₹110/m", moq: 500 },
-    ],
-  },
-  {
-    id: "sup-ludhiana-03",
-    organizationId: "org-ludhiana-03",
-    name: "Ludhiana Wool & Winter Mills",
-    businessType: "Garments & Textiles",
-    city: "Ludhiana, Punjab",
-    address: "Focal Point Phase V, Ludhiana",
-    verificationStatus: "APPROVED",
-    moq: "300 pcs",
-    capacity: "45,000 pcs / mo",
-    tags: "Knitwear · Winter Jacketing · Sweaters",
-    description: "Specialized winterwear facility with computerised flat-knitting machines for jacquard, intarsia and cable knits.",
-    yearsInBusiness: 22,
-    catalog: [
-      { name: "Men's Lambswool Pullover", price: "₹650", moq: 300 },
-      { name: "Fleece Lined Winter Jacket", price: "₹890", moq: 200 },
-    ],
-  },
-  {
-    id: "sup-noida-04",
-    organizationId: "org-noida-04",
-    name: "Apex Apparel Global Exports",
-    businessType: "Garments & Textiles",
-    city: "Noida, UP",
-    address: "Sector 63 Hosiery Complex, Noida",
-    verificationStatus: "APPROVED",
-    moq: "500 pcs",
-    capacity: "80,000 pcs / mo",
-    tags: "Woven Shirts · Uniforms · Formal Wear",
-    description: "SEDEX audit approved high-capacity woven garment maker catering to domestic retail chains and export buyers.",
-    yearsInBusiness: 12,
-    catalog: [
-      { name: "100% Cotton Oxford Shirt", price: "₹340", moq: 500 },
-      { name: "Chino Workwear Trousers", price: "₹420", moq: 400 },
-    ],
-  },
-];
+
 
 export default function BuyerDashboardScreen() {
   const router = useRouter();
   const { user, activeMembership } = useAuth();
 
-  const [suppliers, setSuppliers] = useState<any[]>(FALLBACK_SUPPLIERS);
-  const [loading, setLoading] = useState(false);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
@@ -134,7 +60,6 @@ export default function BuyerDashboardScreen() {
   const [rfqTitle, setRfqTitle] = useState("");
   const [rfqCategory, setRfqCategory] = useState("T-Shirts");
   const [rfqQuantity, setRfqQuantity] = useState("1000");
-  const [rfqTargetPrice, setRfqTargetPrice] = useState("");
   const [rfqTargetDate, setRfqTargetDate] = useState("");
   const [rfqDescription, setRfqDescription] = useState("");
   const [rfqSubmitting, setRfqSubmitting] = useState(false);
@@ -150,48 +75,38 @@ export default function BuyerDashboardScreen() {
         q: searchQuery.trim() || undefined,
       });
 
-      if (Array.isArray(res) && res.length > 0) {
-        const mapped = res.map((s: any) => ({
+      const rows = Array.isArray(res) ? res : [];
+      const mapped = rows.map((s: any) => {
+        const catalogItems = Array.isArray(s.catalogItems) ? s.catalogItems : [];
+        const minOrderItem = catalogItems.find((item: any) => item.minOrderQty != null || item.moq != null);
+        const minOrderQty = Number(minOrderItem?.minOrderQty ?? minOrderItem?.moq);
+        return {
           id: s.id || s.organizationId,
           organizationId: s.organizationId,
-          name: s.organization?.name || s.name || "Apparel Manufacturer",
-          businessType: s.organization?.businessType || s.businessType || "Garments & Textiles",
-          city: s.organization?.city || s.city || "India",
-          verificationStatus: s.organization?.verificationStatus || "APPROVED",
-          moq: s.moq || `${s.productionCapacity ? Math.round(s.productionCapacity * 0.01) : 250} pcs`,
-          capacity: s.capacity || `${(s.productionCapacity || 50000).toLocaleString()} pcs / mo`,
-          tags: s.categories?.map((c: any) => c.category).join(" · ") || s.tags || "Garments · Knits",
-          description: s.description || "Verified garment manufacturing facility.",
-          yearsInBusiness: s.yearsInBusiness || 10,
-          catalog: s.catalog || [
-            { name: "Apparel Standard Sample", price: "₹250", moq: 200 },
-          ],
-        }));
-        setSuppliers(mapped);
-      } else {
-        // Filter fallback if search/category matches
-        let filtered = FALLBACK_SUPPLIERS;
-        if (selectedCategory !== "All") {
-          filtered = filtered.filter(
-            (s) =>
-              s.tags.toLowerCase().includes(selectedCategory.toLowerCase()) ||
-              s.businessType.toLowerCase().includes(selectedCategory.toLowerCase())
-          );
-        }
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
-          filtered = filtered.filter(
-            (s) =>
-              s.name.toLowerCase().includes(q) ||
-              s.city.toLowerCase().includes(q) ||
-              s.tags.toLowerCase().includes(q)
-          );
-        }
-        setSuppliers(filtered);
-      }
+          name: s.organization?.name || s.name || "Unnamed supplier",
+          businessType: s.organization?.businessType || s.businessType || "Not specified",
+          city: s.organization?.city || s.city || "Location not provided",
+          address: s.organization?.address || s.address || "",
+          verificationStatus: s.organization?.verificationStatus || s.verificationStatus || "PENDING",
+          moq: Number.isFinite(minOrderQty) && minOrderQty > 0 ? `${minOrderQty} pcs` : "Not specified",
+          capacity: s.productionCapacity != null
+            ? `${Number(s.productionCapacity).toLocaleString("en-IN")} pcs / month`
+            : "Not provided",
+          tags: s.categories?.map((c: any) => c.category).filter(Boolean).join(" · ") || s.organization?.businessType || "",
+          description: s.description || "No company description provided.",
+          yearsInBusiness: s.yearsInBusiness ?? null,
+          catalog: catalogItems.map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            price: item.unitPrice != null ? `₹${Number(item.unitPrice).toLocaleString("en-IN")}` : "Price on request",
+            moq: item.minOrderQty ?? item.moq ?? null,
+          })),
+        };
+      });
+      setSuppliers(mapped);
     } catch (e) {
       console.warn("Supplier load warning:", e);
-      setSuppliers(FALLBACK_SUPPLIERS);
+      setSuppliers([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -228,20 +143,29 @@ export default function BuyerDashboardScreen() {
   };
 
   const handleSubmitRfq = async () => {
-    if (!rfqTitle.trim() || !rfqQuantity.trim()) {
-      setRfqErrorMsg("Please enter RFQ title and target quantity.");
+    const buyerOrganizationId = activeMembership?.organizationId;
+    const quantity = Number(rfqQuantity);
+
+    if (!buyerOrganizationId || activeMembership?.role !== "BUYER") {
+      setRfqErrorMsg("Your active Buyer organization could not be identified. Please switch to the Buyer workspace and try again.");
       return;
     }
-
+    if (!rfqTitle.trim()) {
+      setRfqErrorMsg("Please enter an RFQ title.");
+      return;
+    }
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      setRfqErrorMsg("Enter a valid target quantity greater than zero.");
+      return;
+    }
     try {
       setRfqSubmitting(true);
       setRfqErrorMsg(null);
       await marketplaceService.createRfq({
-        buyerOrgId: activeMembership?.organizationId || "org-buyer-default",
+        buyerOrgId: buyerOrganizationId,
         title: rfqTitle.trim(),
         garmentType: rfqCategory,
-        targetQuantity: parseInt(rfqQuantity, 10) || 1000,
-        targetPrice: rfqTargetPrice ? parseFloat(rfqTargetPrice) : undefined,
+        targetQuantity: quantity,
         targetDate: rfqTargetDate || undefined,
         description: rfqDescription.trim() || undefined,
         status: "OPEN",
@@ -249,7 +173,7 @@ export default function BuyerDashboardScreen() {
         items: [
           {
             name: rfqTitle.trim(),
-            quantity: parseInt(rfqQuantity, 10) || 1000,
+            quantity,
             unit: "pcs",
             description: rfqDescription.trim() || undefined,
           },

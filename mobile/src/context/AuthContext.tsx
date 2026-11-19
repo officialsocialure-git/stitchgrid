@@ -49,9 +49,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           fullName: me.fullName,
           email: me.email,
           phone: me.phone,
-          isActive: true,
-          emailVerified: true,
-          phoneVerified: true,
+          isActive: me.isActive !== false,
+          emailVerified: Boolean(me.emailVerified),
+          phoneVerified: Boolean(me.phoneVerified),
         });
         setActiveMembership(me.activeMembership);
         setMemberships(me.memberships || []);
@@ -136,9 +136,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           fullName: me.fullName,
           email: me.email,
           phone: me.phone,
-          isActive: true,
-          emailVerified: true,
-          phoneVerified: true,
+          isActive: me.isActive !== false,
+          emailVerified: Boolean(me.emailVerified),
+          phoneVerified: Boolean(me.phoneVerified),
         });
         setActiveMembership(me.activeMembership);
         setMemberships(me.memberships || []);

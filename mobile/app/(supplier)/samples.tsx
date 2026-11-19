@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Header } from "../../src/components/common/Header";
 import { EmptyState } from "../../src/components/common/EmptyState";
 import { marketplaceService } from "../../src/services/marketplace.service";
+import { useAuth } from "../../src/hooks/useAuth";
 import { useRealtimeSync } from "../../src/hooks/useRealtimeSync";
 
 export interface SampleItem {
@@ -141,11 +142,12 @@ type DetailTab = "PHOTOS" | "DETAILS" | "BUYER_NOTE" | "FILES" | "HISTORY";
 export default function SupplierSamplesScreen() {
   const router = useRouter();
   const navigation = useNavigation<any>();
+  const { activeMembership } = useAuth();
   const insets = useSafeAreaInsets();
   const topInset = Math.max(insets.top, Platform.OS === "android" ? (RNStatusBar.currentHeight || 24) : 0);
   const bottomInset = Math.max(insets.bottom, Platform.OS === "ios" ? 24 : 12);
 
-  const [samples, setSamples] = useState<SampleItem[]>(DEFAULT_SUPPLIER_SAMPLES);
+  const [samples, setSamples] = useState<SampleItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -161,64 +163,71 @@ export default function SupplierSamplesScreen() {
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [submittingPhotos, setSubmittingPhotos] = useState(false);
 
-  // Uploaded photo state inside detail view
-  const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([
-    "https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?w=600&auto=format&fit=crop&q=80",
-  ]);
+  // Photos are uploaded to the backend before they are attached to a sample.
+  const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
 
-  // Load samples from backend and merge with reference samples
   const loadSamples = useCallback(async () => {
     try {
       const data = await marketplaceService.listSamples();
-      if (Array.isArray(data) && data.length > 0) {
-        // Map backend samples into SampleItem
-        const mapped: SampleItem[] = data.map((s, idx) => ({
-          id: s.id,
-          sampleCode: `SMP-2026-${(s.id || "100").slice(-4).replace(/\D/g, "").padStart(4, "0") || (100 + idx).toString()}`,
-          orderId: s.order?.poNumber || (s as any).orderId || "PO-2026-2589",
-          title: s.order?.items?.[0]?.description || s.sampleType || "Apparel Sample",
-          buyerName: s.order?.buyerOrg?.name || (s as any).buyer?.name || "Enterprise Brand",
-          quantity: `${(s as any).quantity || 5} pcs`,
-          sampleType: s.sampleType || "Final Sample",
-          dueDate: "12 Nov 2026",
-          status: s.status === "APPROVED" ? "APPROVED" : s.status === "REVISION_REQUIRED" ? "REVISION_REQUIRED" : "PENDING",
-          fabric: "Cotton Linen",
-          color: "Beige",
-          sizes: "S, M, L, XL",
-          finish: "Bio-wash & Compacted",
-          photos: [
-            "https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?w=600&auto=format&fit=crop&q=80",
-          ],
-          buyerNote: s.notes || "Please ensure strict adherence to tech pack measurements.",
-          files: [{ name: "Sample_Specification.pdf", size: "2.1 MB" }],
-          history: [
-            {
-              title: "Sample Request Created",
-              date: "1 Nov 2026",
-              desc: "Buyer submitted sample request.",
-              done: true,
-            },
-          ],
-        }));
-
-        // Merge standard reference samples so user's reference sample is always present
-        for (const def of DEFAULT_SUPPLIER_SAMPLES) {
-          if (!mapped.some((m) => m.id === def.id || m.orderId === def.orderId)) {
-            mapped.push(def);
+      const supplierOrganizationId = activeMembership?.organizationId;
+      const supplierSamples = (Array.isArray(data) ? data : []).filter((sample: any) =>
+        Boolean(supplierOrganizationId) &&
+        (sample.supplierOrgId === supplierOrganizationId || sample.purchaseOrder?.supplierOrgId === supplierOrganizationId)
+      );
+      const mapped: SampleItem[] = supplierSamples.map((s, idx) => {
+        let metadata: any = (s as any).parsedMeta || (s as any).parsedNotes || {};
+        if (!Object.keys(metadata).length && s.notes) {
+          try {
+            metadata = JSON.parse(s.notes);
+          } catch {
+            metadata = { description: s.notes };
           }
         }
-        setSamples(mapped);
-      } else {
-        setSamples(DEFAULT_SUPPLIER_SAMPLES);
-      }
+
+        const order = s.order || (s as any).purchaseOrder;
+        const samplePhotos = Array.isArray((s as any).photos)
+          ? (s as any).photos
+          : Array.isArray(metadata.photos)
+            ? metadata.photos
+            : [];
+        const notesText = String(metadata.description || s.notes || "");
+        const requestedQuantity = notesText.match(/\((\d+)\s*(?:pcs?|pieces?)\)/i)?.[1];
+
+        return {
+          id: s.id,
+          sampleCode: s.sampleNumber || `SMP-${s.id.slice(-8).toUpperCase()}`,
+          orderId: order?.poNumber || (s as any).orderId || "—",
+          title: order?.items?.[0]?.name || order?.items?.[0]?.description || "Sample details not provided",
+          buyerName: order?.buyerOrg?.name || order?.buyer?.name || "Buyer not available",
+          quantity: requestedQuantity ? `${requestedQuantity} pcs` : "Not specified",
+          sampleType: metadata.sampleType || s.sampleType || "Not specified",
+          dueDate: order?.expectedDate ? new Date(order.expectedDate).toLocaleDateString("en-IN") : "—",
+          status: s.status === "APPROVED"
+            ? "APPROVED"
+            : s.status === "REVISION_REQUIRED" || s.status === "REJECTED"
+              ? "REVISION_REQUIRED"
+              : s.status === "DISPATCHED" || s.status === "DELIVERED"
+                ? "DISPATCHED"
+                : "PENDING",
+          fabric: metadata.fabric || "—",
+          color: metadata.color || "—",
+          sizes: metadata.sizes || "—",
+          finish: metadata.finish || "—",
+          photos: samplePhotos.map((photo: any) => typeof photo === "string" ? photo : photo.url).filter(Boolean),
+          buyerNote: metadata.buyerFeedback || metadata.description || "",
+          files: Array.isArray(metadata.files) ? metadata.files : [],
+          history: Array.isArray(metadata.history) ? metadata.history : [],
+        };
+      });
+      setSamples(mapped);
     } catch (e) {
-      console.warn("Failed to load supplier samples, using reference data:", e);
-      setSamples(DEFAULT_SUPPLIER_SAMPLES);
+      console.warn("Failed to load supplier samples:", e);
+      setSamples([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [activeMembership?.organizationId]);
 
   useEffect(() => {
     loadSamples();
@@ -249,59 +258,141 @@ export default function SupplierSamplesScreen() {
     });
   }, [samples, selectedFilter, searchQuery]);
 
-  // Pick or take photo using Expo Image Picker
+  // Select photos and upload them to the same storage endpoint used by the web app.
   const handlePickPhoto = async () => {
     try {
+      if (!selectedSample) {
+        Alert.alert("Select a Sample", "Open a sample before uploading its photos.");
+        return;
+      }
+      if (uploadedPhotos.length >= 10) {
+        Alert.alert("Photo Limit", "You can attach up to 10 photos to one sample.");
+        return;
+      }
+
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permissionResult.granted) {
-        Alert.alert(
-          "Permission Required",
-          "Camera roll permission is required to select sample photos."
-        );
+        Alert.alert("Permission Required", "Allow photo library access to upload sample photos.");
         return;
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
-        allowsEditing: true,
+        allowsMultipleSelection: true,
+        selectionLimit: 10 - uploadedPhotos.length,
+        base64: true,
         quality: 0.8,
       });
 
-      if (!result.canceled && result.assets?.[0]?.uri) {
-        setUploadedPhotos((prev) => [...prev, result.assets[0].uri]);
-        Alert.alert("Photo Added", "Sample photo has been attached to the upload queue.");
+      if (result.canceled || !result.assets?.length) return;
+
+      setSubmittingPhotos(true);
+      const labels = ["Front View", "Back View", "Fabric Texture", "Close-up", "Stitching Detail", "Label / Wash Care"];
+      let uploadedCount = 0;
+
+      for (const [index, asset] of result.assets.entries()) {
+        if (asset.fileSize && asset.fileSize > 10 * 1024 * 1024) {
+          throw new Error("Each sample photo must be 10 MB or smaller.");
+        }
+        if (!asset.base64) {
+          throw new Error("Could not read one of the selected photos. Please select it again.");
+        }
+        const mimeType = asset.mimeType || "image/jpeg";
+        const extension = mimeType.split("/")[1] || "jpg";
+        const response = await marketplaceService.uploadFile({
+          filename: asset.fileName || `sample_${Date.now()}_${index}.${extension}`,
+          data: `data:${mimeType};base64,${asset.base64}`,
+          label: labels[(uploadedPhotos.length + index) % labels.length],
+        });
+        if (!response?.url) throw new Error("The server did not return an uploaded photo URL.");
+        setUploadedPhotos((prev) => [...prev, response.url]);
+        uploadedCount += 1;
       }
-    } catch (e) {
-      console.warn("Image picker error:", e);
-      Alert.alert("Picker Error", "Could not open gallery.");
+
+      Alert.alert("Photos Uploaded", `${uploadedCount} photo(s) uploaded successfully.`);
+    } catch (e: any) {
+      console.warn("Sample photo upload failed:", e);
+      Alert.alert("Upload Failed", e?.message || "Could not upload sample photos.");
+    } finally {
+      setSubmittingPhotos(false);
     }
   };
 
-  // Submit photos to buyer
-  const handleSubmitToBuyer = async () => {
+  const persistSamplePhotos = async (submitToBuyer: boolean) => {
+    if (!selectedSample) return;
     if (uploadedPhotos.length === 0) {
-      Alert.alert("No Photos", "Please choose at least one photo of the sample.");
+      Alert.alert("No Photos", "Please upload at least one sample photo.");
       return;
     }
 
     setSubmittingPhotos(true);
     try {
-      // Simulate submission or call API
-      setTimeout(() => {
-        setSubmittingPhotos(false);
-        Alert.alert(
-          "Sample Submitted!",
-          "Sample photos and technical inspection sheet have been successfully submitted to the buyer for approval."
-        );
-      }, 1000);
-    } catch (e) {
+      const photos = uploadedPhotos.map((url, index) => ({
+        url,
+        label: ["Front View", "Back View", "Fabric Texture", "Close-up", "Stitching Detail", "Label / Wash Care"][index % 6],
+      }));
+      const updated = await marketplaceService.updateSample(
+        selectedSample.id,
+        submitToBuyer ? "DISPATCHED" : undefined,
+        {
+          photos,
+          notes: submitToBuyer
+            ? `Sample prototype (${photos.length} photos) submitted to buyer for approval.`
+            : `Sample draft photos (${photos.length} views) saved.`,
+        }
+      );
+      setSelectedSample((current) => current ? {
+        ...current,
+        status: submitToBuyer ? "DISPATCHED" : current.status,
+        photos: uploadedPhotos,
+      } : current);
+      await loadSamples();
+      Alert.alert(
+        submitToBuyer ? "Sample Submitted" : "Draft Saved",
+        submitToBuyer
+          ? "Sample photos have been submitted to the buyer for approval."
+          : "Sample photos have been saved successfully."
+      );
+      return updated;
+    } catch (e: any) {
+      console.warn("Sample photo update failed:", e);
+      Alert.alert("Submission Failed", e?.message || "Could not save sample photos.");
+    } finally {
       setSubmittingPhotos(false);
-      Alert.alert("Submission Failed", "Could not submit sample photos.");
     }
   };
 
-  const handleSaveDraft = () => {
-    Alert.alert("Draft Saved", "Sample photos saved as draft. You can continue editing anytime.");
+  const handleSubmitToBuyer = () => persistSamplePhotos(true);
+  const handleSaveDraft = () => persistSamplePhotos(false);
+
+  const handleMarkReady = (sample: SampleItem) => {
+    Alert.alert(
+      "Mark Sample as Ready",
+      "Confirm that this sample is ready and has been dispatched to the buyer.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Confirm",
+          onPress: async () => {
+            try {
+              setSubmittingPhotos(true);
+              await marketplaceService.updateSample(sample.id, "DISPATCHED", {
+                notes: "Sample marked as ready and dispatched to buyer.",
+              });
+              await loadSamples();
+              Alert.alert("Sample Updated", "The sample has been marked as dispatched to the buyer.");
+            } catch (error: any) {
+              Alert.alert(
+                "Unable to Update Sample",
+                error?.response?.data?.message || error?.message || "Please try again."
+              );
+            } finally {
+              setSubmittingPhotos(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   // -----------------------------------------------------------------
@@ -321,9 +412,28 @@ export default function SupplierSamplesScreen() {
             <Text style={styles.detailsHeaderTitle}>Sample Details</Text>
           </TouchableOpacity>
 
-          <View style={styles.approvedPillHeader}>
-            <Ionicons name="checkmark" size={16} color="#059669" style={{ marginRight: 4 }} />
-            <Text style={styles.approvedPillText}>Approved</Text>
+          <View style={[
+            styles.approvedPillHeader,
+            selectedSample.status === "APPROVED"
+              ? { backgroundColor: "#D1FAE5" }
+              : selectedSample.status === "REVISION_REQUIRED"
+                ? { backgroundColor: "#FEF3C7" }
+                : { backgroundColor: "#DBEAFE" },
+          ]}>
+            <Ionicons
+              name={selectedSample.status === "APPROVED" ? "checkmark-circle" : "time-outline"}
+              size={16}
+              color={selectedSample.status === "APPROVED" ? "#059669" : "#2563EB"}
+              style={{ marginRight: 4 }}
+            />
+            <Text style={[
+              styles.approvedPillText,
+              selectedSample.status === "APPROVED"
+                ? { color: "#059669" }
+                : { color: selectedSample.status === "REVISION_REQUIRED" ? "#92400E" : "#1D4ED8" },
+            ]}>
+              {selectedSample.status.replace("_", " ")}
+            </Text>
           </View>
         </View>
 
@@ -334,20 +444,24 @@ export default function SupplierSamplesScreen() {
         >
           {/* Top Card: Photo Preview + Title + Specs (Reference Photos 2 & 3) */}
           <View style={styles.detailsTopCard}>
-            {/* Image Preview Container with pill "Front View (1/1)" */}
             <View style={styles.imagePreviewWrap}>
-              <Image
-                source={{
-                  uri:
-                    uploadedPhotos[0] ||
-                    "https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?w=600&auto=format&fit=crop&q=80",
-                }}
-                style={styles.samplePreviewImage}
-                resizeMode="cover"
-              />
-              <View style={styles.imageCountPill}>
-                <Text style={styles.imageCountPillText}>Front View (1/1)</Text>
-              </View>
+              {uploadedPhotos[0] ? (
+                <Image
+                  source={{ uri: uploadedPhotos[0] }}
+                  style={styles.samplePreviewImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 8 }}>
+                  <Ionicons name="images-outline" size={38} color="#94A3B8" />
+                  <Text style={{ color: "#64748B", fontSize: 13 }}>No sample photos uploaded</Text>
+                </View>
+              )}
+              {uploadedPhotos.length > 0 && (
+                <View style={styles.imageCountPill}>
+                  <Text style={styles.imageCountPillText}>Photo 1/{uploadedPhotos.length}</Text>
+                </View>
+              )}
             </View>
 
             {/* Product Title */}
@@ -404,7 +518,7 @@ export default function SupplierSamplesScreen() {
                 { key: "PHOTOS", label: "Sample Photos" },
                 { key: "DETAILS", label: "Details" },
                 { key: "BUYER_NOTE", label: "Buyer Note" },
-                { key: "FILES", label: "Files (1)" },
+                { key: "FILES", label: `Files (${selectedSample.files.length})` },
                 { key: "HISTORY", label: "History" },
               ].map((tab) => {
                 const isActive = activeTab === tab.key;
@@ -453,19 +567,16 @@ export default function SupplierSamplesScreen() {
                   </View>
                 </TouchableOpacity>
 
-                {/* Uploaded Thumbnail Preview Card (Reference Photo 5) */}
-                <View style={styles.uploadedThumbnailCard}>
-                  <Image
-                    source={{
-                      uri:
-                        uploadedPhotos[0] ||
-                        "https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?w=600&auto=format&fit=crop&q=80",
-                    }}
-                    style={styles.uploadedThumbnailImg}
-                    resizeMode="cover"
-                  />
-                  <Text style={styles.uploadedThumbnailLabel}>Front View</Text>
-                </View>
+                {uploadedPhotos.length > 0 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+                    {uploadedPhotos.map((photo, index) => (
+                      <View key={photo} style={styles.uploadedThumbnailCard}>
+                        <Image source={{ uri: photo }} style={styles.uploadedThumbnailImg} resizeMode="cover" />
+                        <Text style={styles.uploadedThumbnailLabel}>Photo {index + 1}</Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                )}
 
                 {/* Action Buttons: Save as Draft & Submit to Buyer (Reference Photo 5) */}
                 <View style={styles.photoActionsRow}>
@@ -571,28 +682,20 @@ export default function SupplierSamplesScreen() {
                 <Text style={styles.sampleInfoTableTitle}>Technical Construction Specs</Text>
                 <View style={styles.tableDivider} />
 
-                <View style={styles.tableRow}>
-                  <Text style={styles.tableRowLabel}>Fabric Weight</Text>
-                  <Text style={styles.tableRowValue}>240 GSM (± 5% tolerance)</Text>
-                </View>
-                <View style={styles.tableDivider} />
-
-                <View style={styles.tableRow}>
-                  <Text style={styles.tableRowLabel}>Pocket Style</Text>
-                  <Text style={styles.tableRowValue}>6-Pocket Accordion Bellows</Text>
-                </View>
-                <View style={styles.tableDivider} />
-
-                <View style={styles.tableRow}>
-                  <Text style={styles.tableRowLabel}>Stitching Spec</Text>
-                  <Text style={styles.tableRowValue}>Double Needle Heavy Duty 12 SPI</Text>
-                </View>
-                <View style={styles.tableDivider} />
-
-                <View style={styles.tableRow}>
-                  <Text style={styles.tableRowLabel}>Zippers & Trims</Text>
-                  <Text style={styles.tableRowValue}>YKK Metal Brass Antique #5</Text>
-                </View>
+                {[
+                  { label: "Fabric", value: selectedSample.fabric },
+                  { label: "Color", value: selectedSample.color },
+                  { label: "Sizes", value: selectedSample.sizes },
+                  { label: "Finish", value: selectedSample.finish },
+                ].map((spec, index) => (
+                  <React.Fragment key={spec.label}>
+                    <View style={styles.tableRow}>
+                      <Text style={styles.tableRowLabel}>{spec.label}</Text>
+                      <Text style={styles.tableRowValue}>{spec.value}</Text>
+                    </View>
+                    {index < 3 && <View style={styles.tableDivider} />}
+                  </React.Fragment>
+                ))}
               </View>
             </View>
           )}
@@ -604,10 +707,14 @@ export default function SupplierSamplesScreen() {
                 <Text style={styles.sampleInfoTableTitle}>Buyer QA Remarks</Text>
                 <View style={styles.tableDivider} />
 
-                <View style={styles.buyerNoteCallout}>
-                  <Ionicons name="chatbubble-ellipses-outline" size={20} color="#5B13EC" style={{ marginRight: 10 }} />
-                  <Text style={styles.buyerNoteText}>{selectedSample.buyerNote}</Text>
-                </View>
+                {selectedSample.buyerNote ? (
+                  <View style={styles.buyerNoteCallout}>
+                    <Ionicons name="chatbubble-ellipses-outline" size={20} color="#5B13EC" style={{ marginRight: 10 }} />
+                    <Text style={styles.buyerNoteText}>{selectedSample.buyerNote}</Text>
+                  </View>
+                ) : (
+                  <Text style={{ color: "#64748B", fontSize: 13 }}>No buyer note has been added to this sample.</Text>
+                )}
               </View>
             </View>
           )}
@@ -619,21 +726,17 @@ export default function SupplierSamplesScreen() {
                 <Text style={styles.sampleInfoTableTitle}>Attached Tech Pack & Patterns</Text>
                 <View style={styles.tableDivider} />
 
-                {selectedSample.files.map((f, i) => (
+                {selectedSample.files.length > 0 ? selectedSample.files.map((f, i) => (
                   <View key={i} style={styles.fileItemRow}>
                     <Ionicons name="document-text" size={28} color="#5B13EC" style={{ marginRight: 12 }} />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.fileNameText}>{f.name}</Text>
-                      <Text style={styles.fileSizeText}>{f.size} • PDF Document</Text>
+                      <Text style={styles.fileSizeText}>{f.size || "File"} • Attachment</Text>
                     </View>
-                    <TouchableOpacity
-                      style={styles.fileDownloadBtn}
-                      onPress={() => Alert.alert("Tech Pack Download", `Downloading ${f.name}...`)}
-                    >
-                      <Ionicons name="download-outline" size={18} color="#5B13EC" />
-                    </TouchableOpacity>
                   </View>
-                ))}
+                )) : (
+                  <Text style={{ color: "#64748B", fontSize: 13 }}>No files are attached to this sample.</Text>
+                )}
               </View>
             </View>
           )}
@@ -645,7 +748,7 @@ export default function SupplierSamplesScreen() {
                 <Text style={styles.sampleInfoTableTitle}>Sample Audit Trail</Text>
                 <View style={styles.tableDivider} />
 
-                {selectedSample.history.map((h, i) => (
+                {selectedSample.history.length > 0 ? selectedSample.history.map((h, i) => (
                   <View key={i} style={styles.historyItemRow}>
                     <View style={styles.historyLeft}>
                       <View style={[styles.historyDot, h.done && styles.historyDotDone]}>
@@ -661,7 +764,9 @@ export default function SupplierSamplesScreen() {
                       <Text style={styles.historyDescText}>{h.desc}</Text>
                     </View>
                   </View>
-                ))}
+                )) : (
+                  <Text style={{ color: "#64748B", fontSize: 13 }}>No additional sample history is available yet.</Text>
+                )}
               </View>
             </View>
           )}
@@ -846,25 +951,52 @@ export default function SupplierSamplesScreen() {
 
                 {/* Status Pill Badge: Approved (Mint Green Pill) */}
                 <View style={styles.statusPillRow}>
-                  <View style={styles.approvedBadgePill}>
-                    <Ionicons name="checkmark" size={16} color="#059669" style={{ marginRight: 4 }} />
-                    <Text style={styles.approvedBadgeText}>
-                      {isApproved ? "Approved" : sample.status.replace("_", " ")}
+                  <View style={[
+                    styles.approvedBadgePill,
+                    sample.status === "APPROVED"
+                      ? { backgroundColor: "#D1FAE5" }
+                      : sample.status === "REVISION_REQUIRED"
+                        ? { backgroundColor: "#FEF3C7" }
+                        : { backgroundColor: "#DBEAFE" },
+                  ]}>
+                    <Ionicons
+                      name={isApproved ? "checkmark-circle" : "time-outline"}
+                      size={16}
+                      color={isApproved ? "#059669" : sample.status === "REVISION_REQUIRED" ? "#B45309" : "#1D4ED8"}
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text style={[
+                      styles.approvedBadgeText,
+                      { color: isApproved ? "#059669" : sample.status === "REVISION_REQUIRED" ? "#B45309" : "#1D4ED8" },
+                    ]}>
+                      {sample.status.replace("_", " ")}
                     </Text>
                   </View>
                 </View>
 
-                {/* Outlined Action Button: "View Details" (Exact match to Photo 1) */}
-                <TouchableOpacity
-                  style={styles.viewDetailsBtn}
-                  onPress={() => {
-                    setSelectedSample(sample);
-                    setActiveTab("PHOTOS");
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.viewDetailsBtnText}>View Details</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  <TouchableOpacity
+                    style={[styles.viewDetailsBtn, { flex: 1 }]}
+                    onPress={() => {
+                      setSelectedSample(sample);
+                      setUploadedPhotos(sample.photos || []);
+                      setActiveTab("PHOTOS");
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.viewDetailsBtnText}>View Details</Text>
+                  </TouchableOpacity>
+                  {["REQUESTED", "IN_PROGRESS"].includes(sample.status) && (
+                    <TouchableOpacity
+                      style={[styles.submitBuyerBtn, { flex: 1, marginTop: 0, justifyContent: "center" }]}
+                      onPress={() => handleMarkReady(sample)}
+                      disabled={submittingPhotos}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.submitBuyerBtnText}>{submittingPhotos ? "Updating..." : "Mark Ready"}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
             );
           })

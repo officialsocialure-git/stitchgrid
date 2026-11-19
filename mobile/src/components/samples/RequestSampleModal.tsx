@@ -13,6 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../../constants/colors";
 import { marketplaceService } from "../../services/marketplace.service";
+import { useAuth } from "../../hooks/useAuth";
 import { PurchaseOrder } from "../../types";
 
 interface RequestSampleModalProps {
@@ -26,6 +27,7 @@ export const RequestSampleModal: React.FC<RequestSampleModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const { activeMembership } = useAuth();
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState("");
@@ -40,13 +42,16 @@ export const RequestSampleModal: React.FC<RequestSampleModalProps> = ({
     if (visible) {
       loadOrders();
     }
-  }, [visible]);
+  }, [visible, activeMembership?.organizationId]);
 
   const loadOrders = async () => {
     try {
       setLoadingOrders(true);
       const data = await marketplaceService.listOrders();
-      const validOrders = Array.isArray(data) ? data : [];
+      const buyerOrganizationId = activeMembership?.organizationId;
+      const validOrders = (Array.isArray(data) ? data : []).filter(
+        (order) => Boolean(buyerOrganizationId) && order.buyerOrgId === buyerOrganizationId
+      );
       setOrders(validOrders);
       if (validOrders.length > 0) {
         setSelectedOrderId(validOrders[0].id);

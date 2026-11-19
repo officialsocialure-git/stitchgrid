@@ -20,6 +20,7 @@ import { Colors } from "../../src/constants/colors";
 import { Header } from "../../src/components/common/Header";
 import { EmptyState } from "../../src/components/common/EmptyState";
 import { marketplaceService } from "../../src/services/marketplace.service";
+import { useAuth } from "../../src/hooks/useAuth";
 import { useRealtimeSync } from "../../src/hooks/useRealtimeSync";
 import { Quotation, Rfq } from "../../src/types";
 import { QuoteDetailsModal } from "../../src/components/offers/QuoteDetailsModal";
@@ -28,6 +29,7 @@ import { ConfirmQuoteAcceptanceModal } from "../../src/components/offers/Confirm
 export default function BuyerOffersScreen() {
   const router = useRouter();
   const { rfqId } = useLocalSearchParams<{ rfqId?: string }>();
+  const { activeMembership } = useAuth();
 
   // State
   const [quotes, setQuotes] = useState<Quotation[]>([]);
@@ -53,7 +55,7 @@ export default function BuyerOffersScreen() {
   const loadOffers = useCallback(async () => {
     try {
       setLoading(true);
-      const rfqs = await marketplaceService.listMyRfqs();
+      const rfqs = await marketplaceService.listMyRfqs(activeMembership?.organizationId);
       const validRfqs = Array.isArray(rfqs) ? rfqs : [];
       setAllRfqs(validRfqs);
 
@@ -82,7 +84,7 @@ export default function BuyerOffersScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [rfqId]);
+  }, [rfqId, activeMembership?.organizationId]);
 
   useEffect(() => {
     loadOffers();
@@ -138,20 +140,16 @@ export default function BuyerOffersScreen() {
     [quotes, selectedQuoteId]
   );
 
-  // Helper date formatter: e.g. "30 Nov 2026"
+  // Show only the delivery date returned by the buyer's RFQ.
   const formatDeliveryDate = (dateStr?: string | null) => {
-    if (!dateStr) return "30 Nov 2026";
-    try {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return "30 Nov 2026";
-      return d.toLocaleDateString("en-GB", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      });
-    } catch {
-      return "30 Nov 2026";
-    }
+    if (!dateStr) return "Not specified";
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "Not specified";
+    return d.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
   };
 
   // Helper total amount formatter: e.g. "₹4.99L Total"
@@ -244,9 +242,11 @@ export default function BuyerOffersScreen() {
     });
   };
 
-  const rfqShortId = currentRfq?.id
-    ? currentRfq.id.slice(0, 14)
-    : "cmw4yap0u00059";
+  const rfqShortId = currentRfq?.id ? currentRfq.id.slice(0, 14) : "—";
+  const deliveryLocation =
+    (currentRfq as any)?.deliveryLocation ||
+    currentRfq?.description?.match(/Delivery Location:\s*([^|]+)/i)?.[1]?.trim() ||
+    "Not specified";
 
   return (
     <View style={styles.safeArea}>
@@ -300,12 +300,11 @@ export default function BuyerOffersScreen() {
 
               {/* Large Bold RFQ Title */}
               <Text style={styles.rfqMainTitle}>
-                {currentRfq?.title || "1000 cargo black pants"}
+                {currentRfq?.title || "Request details unavailable"}
               </Text>
 
-              {/* Subtitle with Delivery, Destination, Standard */}
               <Text style={styles.rfqSubtitle}>
-                Target Delivery: {formatDeliveryDate(currentRfq?.targetDate)} • Destination: {(currentRfq as any)?.deliveryLocation || "Mumbai Central Fulfillment Center"} • AQL 2.5 Standard
+                Target Delivery: {formatDeliveryDate(currentRfq?.targetDate)} • Destination: {deliveryLocation}
               </Text>
 
               {/* Action Buttons Row */}
@@ -384,20 +383,13 @@ export default function BuyerOffersScreen() {
           const isSelected = selectedQuoteId === item.id;
           const isAccepted = item.status === "ACCEPTED";
           const isRejected = item.status === "REJECTED";
-          const targetQty = currentRfq?.targetQuantity || 1000;
-          const unitPrice =
-            item.items?.[0]?.unitPrice ||
-            Math.round(Number(item.totalAmount) / targetQty) ||
-            499;
+          const targetQty = currentRfq?.targetQuantity || currentRfq?.items?.[0]?.quantity || 0;
+          const unitPrice = item.items?.[0]?.unitPrice ?? (targetQty > 0 ? Number(item.totalAmount) / targetQty : null);
           const totalAmountFormatted = formatTotalLakhs(item.totalAmount);
-          const supplierName =
-            item.supplierOrg?.name || item.supplier?.name || "meldima comfort";
-          const supplierCity =
-            item.supplierOrg?.city || item.supplier?.city || "Noida, UP";
-          const fabricSpec =
-            (item as any).fabricSpec || currentRfq?.fabricSpec || "240 GSM, 100% Cotton";
-          const paymentTerms =
-            item.terms || "50% Advance, 50% on Q...";
+          const supplierName = item.supplierOrg?.name || item.supplier?.name || "Supplier not available";
+          const supplierCity = item.supplierOrg?.city || item.supplier?.city || "Location not provided";
+          const fabricSpec = (item as any).fabricSpec || currentRfq?.fabricSpec || "Not specified";
+          const paymentTerms = item.terms || "Not provided";
 
           return (
             <TouchableOpacity
@@ -440,14 +432,14 @@ export default function BuyerOffersScreen() {
 
               {/* Location */}
               <Text style={styles.supplierLocation}>
-                {supplierCity.includes("India") ? supplierCity : `${supplierCity}, India`}
+                {supplierCity === "Location not provided" || supplierCity.includes("India") ? supplierCity : `${supplierCity}, India`}
               </Text>
 
               {/* Light Ice-Blue Price Box */}
               <View style={styles.priceBand}>
                 <View style={styles.priceBandLeft}>
                   <Text style={styles.priceCurrency}>₹</Text>
-                  <Text style={styles.priceUnitValue}>{unitPrice}</Text>
+                  <Text style={styles.priceUnitValue}>{unitPrice != null && Number.isFinite(Number(unitPrice)) ? Number(unitPrice).toLocaleString("en-IN", { maximumFractionDigits: 2 }) : "—"}</Text>
                   <Text style={styles.priceUnitLabel}> / piece</Text>
                 </View>
                 <Text style={styles.priceTotalValue}>{totalAmountFormatted}</Text>
@@ -457,12 +449,12 @@ export default function BuyerOffersScreen() {
               <View style={styles.specsList}>
                 <View style={styles.specRow}>
                   <Text style={styles.specLabel}>Bulk Production</Text>
-                  <Text style={styles.specValue}>{item.leadTimeDays || 21} Days</Text>
+                  <Text style={styles.specValue}>{item.leadTimeDays != null ? `${item.leadTimeDays} Days` : "Not provided"}</Text>
                 </View>
 
                 <View style={styles.specRow}>
                   <Text style={styles.specLabel}>Pre-Prod Sample</Text>
-                  <Text style={styles.specValue}>{item.sampleLeadDays || 7} Days</Text>
+                  <Text style={styles.specValue}>{item.sampleLeadDays != null ? `${item.sampleLeadDays} Days` : "Not provided"}</Text>
                 </View>
 
                 <View style={styles.specRow}>

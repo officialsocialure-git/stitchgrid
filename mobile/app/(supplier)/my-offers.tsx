@@ -164,9 +164,9 @@ export default function SupplierMyOffersScreen() {
   const { rfqId } = useLocalSearchParams<{ rfqId?: string }>();
   const { activeMembership } = useAuth();
 
-  const [rfqs, setRfqs] = useState<Rfq[]>(DEFAULT_SUPPLIER_RFQS);
-  const [currentRfqId, setCurrentRfqId] = useState<string>("cmw616ddo0001d");
-  const [selectedQuoteId, setSelectedQuoteId] = useState<string>("quote-pappu");
+  const [rfqs, setRfqs] = useState<Rfq[]>([]);
+  const [currentRfqId, setCurrentRfqId] = useState<string>("");
+  const [selectedQuoteId, setSelectedQuoteId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -175,48 +175,35 @@ export default function SupplierMyOffersScreen() {
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
 
   // Quote form state
-  const [quoteUnitPrice, setQuoteUnitPrice] = useState("400");
+  const [quoteUnitPrice, setQuoteUnitPrice] = useState("");
   const [quoteLeadDays, setQuoteLeadDays] = useState("21");
   const [quoteSampleDays, setQuoteSampleDays] = useState("7");
-  const [quoteFabricSpec, setQuoteFabricSpec] = useState("240 GSM, 100% Cotton");
-  const [quoteTerms, setQuoteTerms] = useState("50% Advance, 50% on QC Pass");
+  const [quoteFabricSpec, setQuoteFabricSpec] = useState("");
+  const [quoteTerms, setQuoteTerms] = useState("");
   const [quoteNotes, setQuoteNotes] = useState("");
   const [submittingQuote, setSubmittingQuote] = useState(false);
 
-  // Load RFQs & Quotes from backend
+  // Load only RFQs and quotations available to the authenticated supplier organization.
   const loadOffers = useCallback(async () => {
     try {
-      const data = await marketplaceService.listMyRfqs();
-      if (Array.isArray(data) && data.length > 0) {
-        // Merge backend RFQs with DEFAULT_SUPPLIER_RFQS so standard reference RFQ remains available
-        const merged = [...data];
-        for (const def of DEFAULT_SUPPLIER_RFQS) {
-          if (!merged.some((m) => m.id === def.id || m.title === def.title)) {
-            merged.push(def);
-          }
-        }
-        setRfqs(merged);
+      const data = await marketplaceService.listMyRfqs(activeMembership?.organizationId);
+      const availableRfqs = Array.isArray(data) ? data : [];
+      setRfqs(availableRfqs);
 
-        // Set active RFQ
-        if (rfqId && merged.some((r) => r.id === rfqId)) {
-          setCurrentRfqId(rfqId);
-        } else if (!merged.some((r) => r.id === currentRfqId)) {
-          setCurrentRfqId(merged[0]?.id || "cmw616ddo0001d");
-        }
-      } else {
-        setRfqs(DEFAULT_SUPPLIER_RFQS);
-        if (rfqId && DEFAULT_SUPPLIER_RFQS.some((r) => r.id === rfqId)) {
-          setCurrentRfqId(rfqId);
-        }
+      if (rfqId && availableRfqs.some((rfq) => rfq.id === rfqId)) {
+        setCurrentRfqId(rfqId);
+      } else if (!availableRfqs.some((rfq) => rfq.id === currentRfqId)) {
+        setCurrentRfqId(availableRfqs[0]?.id || "");
       }
     } catch (e) {
-      console.warn("Failed to load supplier offers, using default data:", e);
-      setRfqs(DEFAULT_SUPPLIER_RFQS);
+      console.warn("Failed to load supplier offers:", e);
+      setRfqs([]);
+      setCurrentRfqId("");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [rfqId, currentRfqId]);
+  }, [rfqId, currentRfqId, activeMembership?.organizationId]);
 
   useEffect(() => {
     loadOffers();
@@ -229,91 +216,41 @@ export default function SupplierMyOffersScreen() {
   });
 
   // Current RFQ object
-  const currentRfq = useMemo(() => {
-    return (
-      rfqs.find((r) => r.id === currentRfqId) ||
-      rfqs.find((r) => r.id === "cmw616ddo0001d") ||
-      rfqs[0] ||
-      DEFAULT_SUPPLIER_RFQS[0]
-    );
-  }, [rfqs, currentRfqId]);
+  const currentRfq = useMemo(
+    () => rfqs.find((rfq) => rfq.id === currentRfqId) || rfqs[0],
+    [rfqs, currentRfqId]
+  );
 
   // Map quotes for the active RFQ into OfferCardItem
   const activeQuotes: OfferCardItem[] = useMemo(() => {
     if (!currentRfq) return [];
 
-    const defaultCargoQuotes: OfferCardItem[] = [
-      {
-        id: "quote-pappu",
+    return (currentRfq.quotations || []).map((q: any) => {
+      const total = Number(q.totalAmount || 0);
+      const quantity = Number(currentRfq.targetQuantity || 0);
+      const unitPrice = q.items?.[0]?.unitPrice
+        ? Number(q.items[0].unitPrice)
+        : quantity > 0 ? total / quantity : 0;
+      const isMyQuote = Boolean(activeMembership?.organizationId) &&
+        q.supplierOrgId === activeMembership.organizationId;
+
+      return {
+        id: q.id,
         rfqId: currentRfq.id,
-        supplierOrgId: "org-pappu",
-        supplierName: "Pappu Manufactures",
-        location: "Noida , UP, India",
-        unitPrice: 399,
-        totalAmount: 399000,
-        bulkDays: 21,
-        sampleDays: 7,
-        fabricSpec: "240 GSM, 100% Cotton",
-        paymentTerms: "50% Advance, 50% on QC Pass",
-        badgeType: "BEST_VALUE",
-        isMyQuote: false,
-        status: "SUBMITTED",
-      },
-      {
-        id: "quote-meldima",
-        rfqId: currentRfq.id,
-        supplierOrgId: activeMembership?.organizationId || "current-supplier",
-        supplierName: activeMembership?.organization?.name || "meldima comfort",
-        location: activeMembership?.organization?.city
-          ? `${activeMembership.organization.city}, UP, India`
-          : "Noida, UP, India",
-        unitPrice: 400,
-        totalAmount: 400000,
-        bulkDays: 21,
-        sampleDays: 7,
-        fabricSpec: "240 GSM, 100% Cotton",
-        paymentTerms: "50% Advance, 50% on QC Pass",
-        badgeType: "FASTEST_LEAD",
-        isMyQuote: true,
-        status: "SUBMITTED",
-      },
-    ];
-
-    if (currentRfq.id === "cmw616ddo0001d") {
-      return defaultCargoQuotes;
-    }
-
-    if (currentRfq.quotations && currentRfq.quotations.length > 0) {
-      return currentRfq.quotations.map((q: any, idx: number) => {
-        const total = Number(q.totalAmount);
-        const qty = currentRfq.targetQuantity || 1000;
-        const unit = q.items?.[0]?.unitPrice ? Number(q.items[0].unitPrice) : Math.round(total / qty);
-        const isMy =
-          Boolean(activeMembership?.organizationId) &&
-          (q.supplierOrgId === activeMembership?.organizationId ||
-            q.supplier?.id === activeMembership?.organizationId ||
-            q.supplierOrgId === "current-supplier");
-
-        return {
-          id: q.id || `quote-${idx}`,
-          rfqId: currentRfq.id,
-          supplierOrgId: q.supplierOrgId || "",
-          supplierName: q.supplier?.name || (isMy ? (activeMembership?.organization?.name || "meldima comfort") : "Verified Mill"),
-          location: q.supplier?.city ? `${q.supplier.city}, India` : "Noida, UP, India",
-          unitPrice: unit || 400,
-          totalAmount: total || 400000,
-          bulkDays: q.leadTimeDays || 21,
-          sampleDays: q.sampleLeadDays || 7,
-          fabricSpec: currentRfq.fabricSpec || "240 GSM, 100% Cotton",
-          paymentTerms: q.terms || "50% Advance, 50% on QC Pass",
-          badgeType: idx === 0 ? "BEST_VALUE" : idx === 1 ? "FASTEST_LEAD" : null,
-          isMyQuote: isMy,
-          status: q.status || "SUBMITTED",
-        };
-      });
-    }
-
-    return defaultCargoQuotes;
+        supplierOrgId: q.supplierOrgId || "",
+        supplierName: q.supplierOrg?.name || q.supplier?.name || "Supplier",
+        location: q.supplierOrg?.city || q.supplier?.city || "Location not provided",
+        unitPrice,
+        totalAmount: total,
+        bulkDays: q.leadTimeDays || 0,
+        sampleDays: q.sampleLeadDays || 0,
+        fabricSpec: currentRfq.fabricSpec || "Not specified",
+        paymentTerms: q.terms || "Not specified",
+        badgeType: null,
+        isMyQuote,
+        status: q.status || "SUBMITTED",
+      };
+    });
   }, [currentRfq, activeMembership]);
 
   // Set default selection
@@ -322,6 +259,8 @@ export default function SupplierMyOffersScreen() {
       if (!activeQuotes.some((q) => q.id === selectedQuoteId)) {
         setSelectedQuoteId(activeQuotes[0].id);
       }
+    } else if (selectedQuoteId) {
+      setSelectedQuoteId("");
     }
   }, [activeQuotes, selectedQuoteId]);
 
@@ -335,7 +274,7 @@ export default function SupplierMyOffersScreen() {
   };
 
   // Live calculator for quote modal
-  const targetQty = currentRfq?.targetQuantity || 1000;
+  const targetQty = currentRfq?.targetQuantity || 0;
   const quoteCalculatedTotal = useMemo(() => {
     const p = parseFloat(quoteUnitPrice) || 0;
     const total = p * targetQty;
@@ -355,7 +294,14 @@ export default function SupplierMyOffersScreen() {
     const totalAmount = priceNum * targetQty;
 
     try {
-      const supplierOrgId = activeMembership?.organizationId || "current-supplier";
+      const supplierOrgId = activeMembership?.organizationId;
+      if (!supplierOrgId) {
+        throw new Error("Select your supplier organization before submitting a quotation.");
+      }
+      if (targetQty <= 0) {
+        throw new Error("This buyer request does not contain a valid target quantity.");
+      }
+
       await marketplaceService.submitQuote({
         rfqId: currentRfq.id,
         supplierOrgId,
@@ -368,7 +314,9 @@ export default function SupplierMyOffersScreen() {
         terms: quoteTerms.trim(),
         items: [
           {
-            description: `${currentRfq.title} - Supplier Quote`,
+            description: quoteFabricSpec.trim()
+              ? `${currentRfq.title} | Fabric: ${quoteFabricSpec.trim()}`
+              : currentRfq.title,
             quantity: targetQty,
             unitPrice: priceNum,
             rfqItemId: currentRfq.items?.[0]?.id,
@@ -376,59 +324,61 @@ export default function SupplierMyOffersScreen() {
         ],
       });
 
-      // Update local state immediately
-      setRfqs((prev) =>
-        prev.map((r) => {
-          if (r.id === currentRfq.id) {
-            const existing = r.quotations || [];
-            return {
-              ...r,
-              quotations: [
-                ...existing,
-                {
-                  id: `quote-${Date.now()}`,
-                  rfqId: r.id,
-                  supplierOrgId,
-                  supplier: {
-                    id: supplierOrgId,
-                    name: activeMembership?.organization?.name || "meldima comfort",
-                    city: activeMembership?.organization?.city || "Noida",
-                    country: "UP, India",
-                  } as any,
-                  totalAmount,
-                  leadTimeDays: parseInt(quoteLeadDays, 10) || 21,
-                  status: "SUBMITTED",
-                } as any,
-              ],
-            };
-          }
-          return r;
-        })
-      );
-
+      await loadOffers();
       setIsSubmitModalOpen(false);
       Alert.alert(
-        "Quote Submitted!",
-        `Your commercial quotation of ₹${priceNum}/pc (${formatLakhTotal(totalAmount)}) has been successfully submitted to the buyer.`
+        "Quote Submitted",
+        `Your quotation of ₹${priceNum}/pc (${formatLakhTotal(totalAmount)}) has been submitted to the buyer.`
       );
-      loadOffers();
     } catch (err: any) {
-      console.warn("Quote submit fallback:", err);
-      setIsSubmitModalOpen(false);
+      console.warn("Quote submission failed:", err);
       Alert.alert(
-        "Quote Submitted!",
-        `Your quotation has been recorded and submitted to the buyer.`
+        "Quote Not Submitted",
+        err.response?.data?.message || err.message || "Could not submit your quotation. Please try again."
       );
     } finally {
       setSubmittingQuote(false);
     }
   };
 
-  const rfqCode = currentRfq ? `#${currentRfq.id.slice(0, 14)}` : "#cmw616ddo0001d";
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <Header />
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12 }}>
+          <ActivityIndicator size="large" color="#5B13EC" />
+          <Text style={{ color: "#64748B" }}>Loading your offers...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!currentRfq) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <Header />
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <Ionicons name="document-text-outline" size={42} color="#94A3B8" />
+          <Text style={{ color: "#0F172A", fontSize: 18, fontWeight: "800", marginTop: 12 }}>
+            No Buyer Requests Yet
+          </Text>
+          <Text style={{ color: "#64748B", textAlign: "center", marginTop: 6 }}>
+            Buyer requests and your submitted quotations will appear here when available.
+          </Text>
+          <TouchableOpacity
+            style={[styles.modalPrimaryActionBtn, { marginTop: 18, paddingHorizontal: 20 }]}
+            onPress={() => router.push("/(supplier)/buyer-requests")}
+          >
+            <Text style={styles.modalPrimaryActionText}>View Buyer Requests</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const rfqCode = `#${currentRfq.id.slice(0, 14)}`;
   const quotesCountDisplay = `${activeQuotes.length} QUOTES SUBMITTED`;
-  const rfqDropdownLabel = currentRfq
-    ? `${currentRfq.targetQuantity || 1000} (${activeQuotes.length} ${activeQuotes.length === 1 ? "quote" : "quotes"})`
-    : "1000 (2 quotes)";
+  const rfqDropdownLabel = `${currentRfq.targetQuantity} (${activeQuotes.length} ${activeQuotes.length === 1 ? "quote" : "quotes"})`;
 
   return (
     <View style={styles.safeArea}>
@@ -480,12 +430,13 @@ export default function SupplierMyOffersScreen() {
 
           {/* RFQ Big Headline */}
           <Text style={styles.rfqHeadline} numberOfLines={1}>
-            {currentRfq?.targetQuantity ? String(currentRfq.targetQuantity) : "1000"}
+            {currentRfq.targetQuantity.toLocaleString("en-IN")}
           </Text>
 
-          {/* Subtitle / Details Line */}
           <Text style={styles.rfqDetailsText}>
-            Target Delivery: 30 Nov 2026 • Destination: Mumbai Central Fulfillment Center • AQL 2.5 Standard
+            Target Delivery: {currentRfq.targetDate
+              ? new Date(currentRfq.targetDate).toLocaleDateString("en-IN")
+              : "Not specified"} • {currentRfq.fabricSpec || "Fabric specification not provided"}
           </Text>
 
           {/* Action Buttons Row */}
@@ -512,7 +463,8 @@ export default function SupplierMyOffersScreen() {
             <TouchableOpacity
               style={styles.submitSupplierQuoteBtn}
               onPress={() => {
-                setQuoteUnitPrice(currentRfq?.targetPrice ? String(currentRfq.targetPrice) : "400");
+                setQuoteUnitPrice(currentRfq.targetPrice ? String(currentRfq.targetPrice) : "");
+                setQuoteFabricSpec(currentRfq.fabricSpec || "");
                 setIsSubmitModalOpen(true);
               }}
               activeOpacity={0.8}
@@ -527,7 +479,17 @@ export default function SupplierMyOffersScreen() {
         {/* 2. QUOTATION COMPARISON CARDS (Reference Photos 2, 3, 4)      */}
         {/* ------------------------------------------------------------- */}
         <View style={styles.cardsContainer}>
-          {activeQuotes.map((quote) => {
+          {activeQuotes.length === 0 ? (
+            <View style={{ padding: 24, alignItems: "center" }}>
+              <Ionicons name="chatbubbles-outline" size={34} color="#94A3B8" />
+              <Text style={{ color: "#0F172A", fontWeight: "700", marginTop: 10 }}>
+                No quotations received yet
+              </Text>
+              <Text style={{ color: "#64748B", textAlign: "center", marginTop: 4 }}>
+                Submitted supplier quotations will appear here for this buyer request.
+              </Text>
+            </View>
+          ) : activeQuotes.map((quote) => {
             const isSelected = selectedQuoteId === quote.id;
 
             return (
@@ -624,7 +586,7 @@ export default function SupplierMyOffersScreen() {
                   </View>
                 ) : (
                   <View style={styles.verifiedMillPillButton}>
-                    <Text style={styles.verifiedMillPillText}>Verified Mill Quotation</Text>
+                    <Text style={styles.verifiedMillPillText}>Supplier Quotation</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -664,7 +626,7 @@ export default function SupplierMyOffersScreen() {
             <ScrollView style={{ marginTop: 12 }} showsVerticalScrollIndicator={false}>
               {rfqs.map((rfq) => {
                 const isSelected = rfq.id === currentRfqId;
-                const quotesCount = rfq.quotations?.length || (rfq.id === "cmw616ddo0001d" ? 2 : 1);
+                const quotesCount = rfq.quotations?.length || 0;
 
                 return (
                   <TouchableOpacity

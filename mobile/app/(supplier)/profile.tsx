@@ -63,12 +63,12 @@ export default function SupplierProfileScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <Text style={styles.userName}>{user?.fullName || "Factory Manager"}</Text>
+                <Text style={styles.userName}>{user?.fullName || "Name not provided"}</Text>
                 <View style={styles.verifiedBadge}>
                   <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
                 </View>
               </View>
-              <Text style={styles.userEmail}>{user?.email || "supplier@stitchgrid.com"}</Text>
+              <Text style={styles.userEmail}>{user?.email || "Email not provided"}</Text>
               <View style={styles.roleTag}>
                 <Text style={styles.roleTagText}>SUPPLIER / MANUFACTURER</Text>
               </View>
@@ -81,28 +81,32 @@ export default function SupplierProfileScreen() {
         <View style={styles.infoCard}>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Mill Name</Text>
-            <Text style={styles.infoValue}>{org?.name || "Tirupur Knits Mill"}</Text>
+            <Text style={styles.infoValue}>{org?.name || "Organization not added"}</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Manufacturing Hub</Text>
-            <Text style={styles.infoValue}>{org?.city || "Tirupur, Tamil Nadu"}</Text>
+            <Text style={styles.infoValue}>{org?.city || "Location not provided"}</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Business Type</Text>
-            <Text style={styles.infoValue}>{org?.businessType || "Garments & Textiles"}</Text>
+            <Text style={styles.infoValue}>{org?.businessType || "Not specified"}</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>GSTIN / Tax ID</Text>
-            <Text style={styles.infoValue}>{org?.taxId || "33AAAAA0000A1Z5"}</Text>
+            <Text style={styles.infoValue}>{org?.taxId || "Not provided"}</Text>
           </View>
           <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
             <Text style={styles.infoLabel}>Verification Status</Text>
-            <View style={styles.verifiedPill}>
-              <Ionicons name="checkmark" size={12} color={Colors.successText} />
-              <Text style={styles.verifiedText}>Verified Factory</Text>
-            </View>
+            <Text style={styles.infoValue}>{org?.verificationStatus || "PENDING"}</Text>
           </View>
         </View>
+
+        <Button
+          title="Edit Company Settings"
+          variant="outline"
+          onPress={() => router.push("/(supplier)/settings")}
+          style={{ marginTop: 14 }}
+        />
 
         {/* Role Switcher if multi-tenant */}
         {hasBuyerRole && (

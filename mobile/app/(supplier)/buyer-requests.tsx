@@ -140,7 +140,7 @@ const DEFAULT_RFQS: Rfq[] = [
 
 export default function SupplierBuyerRequestsScreen() {
   const { activeMembership } = useAuth();
-  const [rfqs, setRfqs] = useState<Rfq[]>(DEFAULT_RFQS);
+  const [rfqs, setRfqs] = useState<Rfq[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -163,12 +163,9 @@ export default function SupplierBuyerRequestsScreen() {
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
   const [quoteTargetRfq, setQuoteTargetRfq] = useState<Rfq | null>(null);
   const [unitPrice, setUnitPrice] = useState("180");
-  const [leadTimeDays, setLeadTimeDays] = useState("21");
-  const [sampleDays, setSampleDays] = useState("7");
-  const [moq, setMoq] = useState("500");
+  const [leadTimeDays, setLeadTimeDays] = useState("21 Days");
   const [sampleCost, setSampleCost] = useState("0");
   const [terms, setTerms] = useState("50% Advance, 50% on QC Pass");
-  const [commercialNote, setCommercialNote] = useState("");
   const [submittingQuote, setSubmittingQuote] = useState(false);
 
   // Initialize viewed IDs from storage
@@ -196,27 +193,16 @@ export default function SupplierBuyerRequestsScreen() {
 
   const loadRequests = useCallback(async () => {
     try {
-      const data = await marketplaceService.listMyRfqs();
-      if (data && data.length > 0) {
-        // Merge backend RFQs with DEFAULT_RFQS so standard reference RFQ-2026-1197 remains available
-        const merged = [...data];
-        for (const def of DEFAULT_RFQS) {
-          if (!merged.some((m) => m.id === def.id || m.title === def.title)) {
-            merged.push(def);
-          }
-        }
-        setRfqs(merged);
-      } else {
-        setRfqs(DEFAULT_RFQS);
-      }
+      const data = await marketplaceService.listMyRfqs(activeMembership?.organizationId);
+      setRfqs(Array.isArray(data) ? data : []);
     } catch (e) {
-      console.warn("Failed to load requests from backend, keeping defaults:", e);
-      setRfqs(DEFAULT_RFQS);
+      console.warn("Failed to load supplier requests:", e);
+      setRfqs([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [activeMembership?.organizationId]);
 
   useEffect(() => {
     loadRequests();
@@ -229,24 +215,16 @@ export default function SupplierBuyerRequestsScreen() {
   });
 
   // Helpers
-  const formatRfqNumber = (id: string, index = 0) => {
-    if (!id) return `RFQ-2026-${1197 + index}`;
-    if (id.startsWith("RFQ-2026-")) return id;
-    if (id.includes("1197")) return "RFQ-2026-1197";
-    if (id.includes("1042")) return "RFQ-2026-1042";
-    if (id.includes("2589")) return "RFQ-2026-2589";
-    let sum = 0;
-    for (let i = 0; i < id.length; i++) {
-      sum = (sum * 31 + id.charCodeAt(i)) % 9000;
-    }
-    const num = 1000 + Math.abs(sum);
-    return `RFQ-2026-${num}`;
+  const formatRfqNumber = (id: string) => {
+    if (!id) return "RFQ";
+    if (id.startsWith("RFQ-")) return id;
+    return `RFQ-${id.slice(0, 8).toUpperCase()}`;
   };
 
   const formatDeliveryDate = (dateVal?: string | Date) => {
-    if (!dateVal) return "12 May 2026";
+    if (!dateVal) return "Not specified";
     const d = new Date(dateVal);
-    if (isNaN(d.getTime())) return "12 May 2026";
+    if (isNaN(d.getTime())) return "Not specified";
     return d.toLocaleDateString("en-IN", {
       day: "numeric",
       month: "short",
@@ -254,25 +232,14 @@ export default function SupplierBuyerRequestsScreen() {
     });
   };
 
-  const getFabricSpec = (rfq: Rfq) => {
-    if (rfq.fabricSpec) return rfq.fabricSpec;
-    const t = (rfq.title || "").toLowerCase();
-    if (t.includes("5,000 tees") || t.includes("tee")) return "240 GSM, 100% Cotton Single Jersey";
-    if (t.includes("hoodie")) return "320 GSM Brushed Cotton Fleece";
-    if (t.includes("cargo") || t.includes("pant")) return "240 GSM, 100% Cotton";
-    if (t.includes("t-shirt")) return "180 GSM, 100% Bio-Wash Cotton";
-    return "240 GSM, 100% Cotton Single Jersey";
-  };
+  const getFabricSpec = (rfq: Rfq) => rfq.fabricSpec || "Not specified";
 
   const getLocation = (rfq: Rfq) => {
     if (rfq.buyer?.city) {
-      return `${rfq.buyer.city}, ${rfq.buyer.country === "IN" || !rfq.buyer.country ? "UP" : rfq.buyer.country}`;
+      return [rfq.buyer.city, rfq.buyer.country].filter(Boolean).join(", ");
     }
-    const t = (rfq.title || "").toLowerCase();
-    if (t.includes("5,000 tees") || t.includes("tee")) return "Birgunj, UP";
-    if (t.includes("cargo") || t.includes("pant")) return "Mumbai, MH";
-    if (t.includes("hoodie")) return "Noida, UP";
-    return "Birgunj, UP";
+    if (rfq.buyerOrg?.city) return rfq.buyerOrg.city;
+    return "Location not specified";
   };
 
   const getGarmentType = (rfq: Rfq) => {
@@ -405,12 +372,14 @@ export default function SupplierBuyerRequestsScreen() {
     markAsViewed(rfq.id);
     const initialPrice = rfq.targetPrice ? String(rfq.targetPrice) : "180";
     setUnitPrice(initialPrice);
-    setMoq(String(Math.min(500, rfq.targetQuantity || 500)));
+    setLeadTimeDays("21 Days");
+    setSampleCost("0");
+    setTerms("50% Advance, 50% on QC Pass");
     setQuoteModalOpen(true);
   };
 
   // Total price calculation for quote modal
-  const targetQuantity = quoteTargetRfq?.targetQuantity || quoteTargetRfq?.items?.[0]?.quantity || 1000;
+  const targetQuantity = quoteTargetRfq?.targetQuantity || quoteTargetRfq?.items?.[0]?.quantity || 0;
   const quoteTotalAmount = useMemo(() => {
     const p = parseFloat(unitPrice) || 0;
     const total = p * targetQuantity;
@@ -420,9 +389,23 @@ export default function SupplierBuyerRequestsScreen() {
   // Submit quote action
   const handleSubmitQuotation = async () => {
     if (!quoteTargetRfq) return;
-    const priceNum = parseFloat(unitPrice);
-    if (isNaN(priceNum) || priceNum <= 0) {
+    const priceNum = Number(unitPrice);
+    const leadDays = Number.parseInt(leadTimeDays, 10);
+    const sampleAmount = Number(sampleCost || 0);
+    if (!Number.isFinite(priceNum) || priceNum <= 0) {
       Alert.alert("Invalid Price", "Please enter a valid price per piece.");
+      return;
+    }
+    if (!Number.isInteger(targetQuantity) || targetQuantity <= 0) {
+      Alert.alert("Invalid RFQ Quantity", "This request does not contain a valid target quantity. Refresh the request and try again.");
+      return;
+    }
+    if (![15, 21, 30, 45].includes(leadDays)) {
+      Alert.alert("Invalid Delivery Time", "Select a bulk production lead time of 15, 21, 30 or 45 days.");
+      return;
+    }
+    if (!Number.isFinite(sampleAmount) || sampleAmount < 0) {
+      Alert.alert("Invalid Sample Cost", "Enter a valid sample cost of zero or more.");
       return;
     }
 
@@ -430,16 +413,20 @@ export default function SupplierBuyerRequestsScreen() {
     const totalAmount = priceNum * targetQuantity;
 
     try {
-      const supplierOrgId = activeMembership?.organizationId || "current-supplier";
+      const supplierOrgId = activeMembership?.organizationId;
+      if (!supplierOrgId) {
+        throw new Error("Your supplier organization is not selected. Please sign in again or switch to your supplier account.");
+      }
+
       await marketplaceService.submitQuote({
         rfqId: quoteTargetRfq.id,
         supplierOrgId,
         totalAmount,
         currency: "INR",
-        leadTimeDays: parseInt(leadTimeDays, 10) || 21,
-        moq: parseInt(moq, 10) || 500,
-        sampleCost: parseFloat(sampleCost) || 0,
-        sampleLeadDays: parseInt(sampleDays, 10) || 7,
+        leadTimeDays: leadDays,
+        moq: targetQuantity,
+        sampleCost: sampleAmount,
+        sampleLeadDays: 7,
         terms: terms.trim(),
         items: [
           {
@@ -451,65 +438,17 @@ export default function SupplierBuyerRequestsScreen() {
         ],
       });
 
-      // Update state immediately
-      setRfqs((prev) =>
-        prev.map((r) => {
-          if (r.id === quoteTargetRfq.id) {
-            const existing = r.quotations || [];
-            return {
-              ...r,
-              quotations: [
-                ...existing,
-                {
-                  id: `quote-${Date.now()}`,
-                  rfqId: r.id,
-                  supplierOrgId,
-                  totalAmount,
-                  leadTimeDays: parseInt(leadTimeDays, 10) || 21,
-                  status: "PENDING",
-                } as any,
-              ],
-            };
-          }
-          return r;
-        })
-      );
-
+      await loadRequests();
       setQuoteModalOpen(false);
       Alert.alert(
         "Quotation Submitted!",
-        `Your commercial quote of ₹${totalAmount.toLocaleString("en-IN")} (₹${priceNum}/pc) has been successfully delivered to the buyer.`
+        `Your commercial quote of ₹${totalAmount.toLocaleString("en-IN")} (₹${priceNum}/pc) has been submitted to the buyer.`
       );
-      loadRequests();
     } catch (err: any) {
-      console.warn("Quote submit error (saving locally):", err);
-      // Fallback local update
-      setRfqs((prev) =>
-        prev.map((r) => {
-          if (r.id === quoteTargetRfq.id) {
-            const existing = r.quotations || [];
-            return {
-              ...r,
-              quotations: [
-                ...existing,
-                {
-                  id: `quote-${Date.now()}`,
-                  rfqId: r.id,
-                  supplierOrgId: "current-supplier",
-                  totalAmount,
-                  leadTimeDays: parseInt(leadTimeDays, 10) || 21,
-                  status: "PENDING",
-                } as any,
-              ],
-            };
-          }
-          return r;
-        })
-      );
-      setQuoteModalOpen(false);
+      console.warn("Quote submission failed:", err);
       Alert.alert(
-        "Quotation Submitted!",
-        `Your commercial quote of ₹${totalAmount.toLocaleString("en-IN")} (₹${priceNum}/pc) has been submitted.`
+        "Quotation Not Submitted",
+        err.response?.data?.message || err.message || "Could not submit your quotation. Please try again."
       );
     } finally {
       setSubmittingQuote(false);
@@ -876,7 +815,7 @@ export default function SupplierBuyerRequestsScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.detailsSpecLabel}>Target Quantity</Text>
                       <Text style={styles.detailsSpecValue}>
-                        {(selectedRfq.targetQuantity || 1000).toLocaleString()} pcs
+                        {selectedRfq.targetQuantity != null ? Number(selectedRfq.targetQuantity).toLocaleString("en-IN") : "Not specified"} pcs
                       </Text>
                     </View>
                     <View style={{ flex: 1 }}>
@@ -1030,48 +969,23 @@ export default function SupplierBuyerRequestsScreen() {
               <View style={styles.inputGridRow}>
                 <View style={[styles.inputGroup, { flex: 1 }]}>
                   <Text style={styles.inputLabel}>Bulk Production (Days) *</Text>
-                  <View style={styles.inputFieldWrap}>
-                    <Ionicons name="calendar-outline" size={16} color="#64748B" style={{ marginRight: 6 }} />
-                    <TextInput
-                      style={styles.textInput}
-                      value={leadTimeDays}
-                      onChangeText={setLeadTimeDays}
-                      placeholder="e.g. 21"
-                      placeholderTextColor="#94A3B8"
-                      keyboardType="numeric"
-                    />
-                  </View>
-                </View>
-
-                <View style={[styles.inputGroup, { flex: 1 }]}>
-                  <Text style={styles.inputLabel}>Pre-Prod Sample (Days)</Text>
-                  <View style={styles.inputFieldWrap}>
-                    <Ionicons name="shirt-outline" size={16} color="#64748B" style={{ marginRight: 6 }} />
-                    <TextInput
-                      style={styles.textInput}
-                      value={sampleDays}
-                      onChangeText={setSampleDays}
-                      placeholder="e.g. 7"
-                      placeholderTextColor="#94A3B8"
-                      keyboardType="numeric"
-                    />
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.inputGridRow}>
-                <View style={[styles.inputGroup, { flex: 1 }]}>
-                  <Text style={styles.inputLabel}>Min Order Qty (MOQ)</Text>
-                  <View style={styles.inputFieldWrap}>
-                    <Ionicons name="cube-outline" size={16} color="#64748B" style={{ marginRight: 6 }} />
-                    <TextInput
-                      style={styles.textInput}
-                      value={moq}
-                      onChangeText={setMoq}
-                      placeholder="e.g. 500"
-                      placeholderTextColor="#94A3B8"
-                      keyboardType="numeric"
-                    />
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                    {["15 Days", "21 Days", "30 Days", "45 Days"].map((option) => (
+                      <TouchableOpacity
+                        key={option}
+                        onPress={() => setLeadTimeDays(option)}
+                        style={{
+                          paddingHorizontal: 10,
+                          paddingVertical: 9,
+                          borderRadius: 10,
+                          borderWidth: 1,
+                          borderColor: leadTimeDays === option ? Colors.primary : "#E2E8F0",
+                          backgroundColor: leadTimeDays === option ? Colors.primaryLight : "#FFFFFF",
+                        }}
+                      >
+                        <Text style={{ fontSize: 11, fontWeight: "700", color: leadTimeDays === option ? Colors.primary : "#475569" }}>{option}</Text>
+                      </TouchableOpacity>
+                    ))}
                   </View>
                 </View>
 
@@ -1093,29 +1007,32 @@ export default function SupplierBuyerRequestsScreen() {
 
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Payment & Settlement Terms</Text>
-                <View style={styles.inputFieldWrap}>
-                  <Ionicons name="card-outline" size={16} color="#64748B" style={{ marginRight: 6 }} />
-                  <TextInput
-                    style={styles.textInput}
-                    value={terms}
-                    onChangeText={setTerms}
-                    placeholder="e.g. 50% Advance, 50% on QC Pass"
-                    placeholderTextColor="#94A3B8"
-                  />
-                </View>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Additional Notes / Capabilities</Text>
-                <View style={[styles.inputFieldWrap, { height: 72, alignItems: "flex-start", paddingTop: 8 }]}>
-                  <TextInput
-                    style={[styles.textInput, { height: 56, textAlignVertical: "top" }]}
-                    value={commercialNote}
-                    onChangeText={setCommercialNote}
-                    placeholder="e.g. 100% combed cotton, reactive dye, custom woven labels included."
-                    placeholderTextColor="#94A3B8"
-                    multiline
-                  />
+                <View style={{ gap: 8 }}>
+                  {[
+                    "50% Advance, 50% on QC Pass",
+                    "30% Advance, 70% before Dispatch",
+                    "100% Secure Payment on PO",
+                    "Net 30 Days",
+                  ].map((option) => (
+                    <TouchableOpacity
+                      key={option}
+                      onPress={() => setTerms(option)}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 9,
+                        paddingHorizontal: 12,
+                        paddingVertical: 11,
+                        borderRadius: 11,
+                        borderWidth: 1,
+                        borderColor: terms === option ? Colors.primary : "#E2E8F0",
+                        backgroundColor: terms === option ? Colors.primaryLight : "#FFFFFF",
+                      }}
+                    >
+                      <Ionicons name={terms === option ? "radio-button-on" : "radio-button-off"} size={17} color={terms === option ? Colors.primary : "#94A3B8"} />
+                      <Text style={{ fontSize: 12, fontWeight: "600", color: terms === option ? Colors.primary : "#334155" }}>{option}</Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
               </View>
 

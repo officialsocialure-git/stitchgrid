@@ -358,7 +358,7 @@ export async function listSamples(req: Request, res: Response, next: NextFunctio
   try {
     const memberships = await prisma.organizationMember.findMany({ where: { userId: req.auth!.userId, isActive: true } });
     const orgIds = memberships.map(m => m.organizationId);
-    let samples = await prisma.sample.findMany({
+    const samples = await prisma.sample.findMany({
       where: {
         purchaseOrder: {
           OR: [
@@ -378,60 +378,6 @@ export async function listSamples(req: Request, res: Response, next: NextFunctio
       },
       orderBy: { createdAt: "desc" }
     });
-
-    // Auto-create sample records for purchase orders if none exist yet
-    if (samples.length === 0) {
-      const orders = await prisma.purchaseOrder.findMany({
-        where: {
-          OR: [
-            { buyerOrgId: { in: orgIds } },
-            { supplierOrgId: { in: orgIds } }
-          ]
-        },
-        include: { items: true, buyer: true, supplier: true }
-      });
-
-      if (orders.length > 0) {
-        const statuses: ("REQUESTED" | "IN_PROGRESS" | "DISPATCHED" | "APPROVED")[] = [
-          "REQUESTED",
-          "IN_PROGRESS",
-          "DISPATCHED",
-          "APPROVED"
-        ];
-        for (let i = 0; i < orders.length; i++) {
-          const po = orders[i];
-          const sampleStatus = statuses[i % statuses.length];
-          await prisma.sample.create({
-            data: {
-              purchaseOrderId: po.id,
-              status: sampleStatus,
-              notes: `Pre-Production Sample lot for ${po.items?.[0]?.name || "Garment Order"} (${po.poNumber || "PO"})`
-            }
-          }).catch(() => {});
-        }
-
-        samples = await prisma.sample.findMany({
-          where: {
-            purchaseOrder: {
-              OR: [
-                { buyerOrgId: { in: orgIds } },
-                { supplierOrgId: { in: orgIds } }
-              ]
-            }
-          },
-          include: {
-            purchaseOrder: {
-              include: {
-                buyer: { select: { id: true, name: true } },
-                supplier: { select: { id: true, name: true, city: true } },
-                items: true
-              }
-            }
-          },
-          orderBy: { createdAt: "desc" }
-        });
-      }
-    }
 
     const mappedSamples = samples.map(s => {
       let parsedMeta: any = null;
@@ -553,7 +499,9 @@ export async function createReview(req: Request, res: Response, next: NextFuncti
   try {
     const input = z.object({ reviewerOrgId: z.string(), rating: z.number().int().min(1).max(5), comment: z.string().max(2000).optional() }).parse(req.body);
     const order = await prisma.purchaseOrder.findUnique({ where: { id: req.params.orderId as string } });
-    if (!order || order.status !== "DELIVERED") throw new AppError(400, "Review requires a delivered order");
+    if (!order || !["DELIVERED", "COMPLETED"].includes(order.status)) {
+      throw new AppError(400, "Review requires a delivered or completed order");
+    }
     const isBuyer = order.buyerOrgId === input.reviewerOrgId;
     const isSupplier = order.supplierOrgId === input.reviewerOrgId;
     if (!isBuyer && !isSupplier) throw new AppError(400, "Reviewer organization is not part of order");
