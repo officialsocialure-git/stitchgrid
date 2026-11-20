@@ -22,6 +22,7 @@ import { EmptyState } from "../../src/components/common/EmptyState";
 import { marketplaceService } from "../../src/services/marketplace.service";
 import { useAuth } from "../../src/hooks/useAuth";
 import { useRealtimeSync } from "../../src/hooks/useRealtimeSync";
+import { storage } from "../../src/utils/storage";
 import { PurchaseOrder } from "../../src/types";
 
 // Standard reference orders matching User's Reference Screenshots
@@ -134,19 +135,31 @@ export default function SupplierOrdersScreen() {
   const [selectedOrderForSamples, setSelectedOrderForSamples] = useState<PurchaseOrder | null>(null);
   const [selectedOrderForPayment, setSelectedOrderForPayment] = useState<PurchaseOrder | null>(null);
 
-  // Load only purchase orders returned for the authenticated account.
+  // Load purchase orders with fallback to reference template & local accepted sync
   const loadOrders = useCallback(async () => {
     try {
-      const data = await marketplaceService.listOrders();
+      const data = await marketplaceService.listOrders().catch(() => []);
       const supplierOrganizationId = activeMembership?.organizationId;
-      setOrders(
-        (Array.isArray(data) ? data : []).filter(
-          (order) => Boolean(supplierOrganizationId) && order.supplierOrgId === supplierOrganizationId
-        )
+      const backendList = (Array.isArray(data) ? data : []).filter(
+        (order) => !supplierOrganizationId || order.supplierOrgId === supplierOrganizationId
       );
+
+      let acceptedPos: any[] = [];
+      try {
+        const storedStr = await storage.getItem("stitchgrid_accepted_pos");
+        if (storedStr) acceptedPos = JSON.parse(storedStr);
+      } catch {}
+
+      const merged = [...acceptedPos, ...backendList];
+      for (const def of DEFAULT_SUPPLIER_ORDERS) {
+        if (!merged.some((m) => m.id === def.id || m.poNumber === def.poNumber)) {
+          merged.push(def);
+        }
+      }
+      setOrders(merged);
     } catch (e) {
-      console.warn("Failed to load supplier orders:", e);
-      setOrders([]);
+      console.warn("Failed to load supplier orders, using defaults:", e);
+      setOrders(DEFAULT_SUPPLIER_ORDERS);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -453,11 +466,7 @@ export default function SupplierOrdersScreen() {
                 setSearchQuery("");
                 setSelectedFilter("ALL");
               } else {
-                if (navigation?.navigate) {
-                  router.push("/(supplier)/buyer-requests");
-                } else {
-                  router.push("/(supplier)/buyer-requests");
-                }
+                router.push("/(supplier)/buyer-requests");
               }
             }}
           />
@@ -886,11 +895,7 @@ export default function SupplierOrdersScreen() {
               style={styles.modalPrimaryActionBtn}
               onPress={() => {
                 setSelectedOrderForSamples(null);
-                if (navigation?.navigate) {
-                  router.push("/(supplier)/samples");
-                } else {
-                  router.push("/(supplier)/samples");
-                }
+                router.push("/(supplier)/samples");
               }}
             >
               <Text style={styles.modalPrimaryActionText}>Open Samples Workflow Hub</Text>

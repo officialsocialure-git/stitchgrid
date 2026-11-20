@@ -22,6 +22,7 @@ import { Button } from "../../src/components/common/Button";
 import { useAuth } from "../../src/hooks/useAuth";
 import { marketplaceService } from "../../src/services/marketplace.service";
 import { useRealtimeSync } from "../../src/hooks/useRealtimeSync";
+import { storage } from "../../src/utils/storage";
 import { Rfq, PurchaseOrder, Sample } from "../../src/types";
 
 export default function SupplierDashboardScreen() {
@@ -193,6 +194,29 @@ export default function SupplierDashboardScreen() {
           },
         ],
       });
+
+      // Persist quote to storage for instant offline & cross-screen sync with Buyer Offers
+      try {
+        const storedQuotes = await storage.getItem("stitchgrid_submitted_quotes");
+        const list = storedQuotes ? JSON.parse(storedQuotes) : [];
+        list.unshift({
+          id: `quote-${Date.now()}`,
+          rfqId: selectedRfqForQuote.id,
+          supplierOrgId,
+          totalAmount: price * quantity,
+          leadTimeDays: parseInt(quoteLeadDays, 10) || 21,
+          status: "SUBMITTED",
+          terms: quoteTerms.trim(),
+          items: [{ unitPrice: price, quantity, description: selectedRfqForQuote.title }],
+          supplier: {
+            id: supplierOrgId,
+            name: activeMembership?.organization?.name || "Meldima Comfort",
+            city: activeMembership?.organization?.city || "Noida, UP",
+          },
+        });
+        await storage.setItem("stitchgrid_submitted_quotes", JSON.stringify(list));
+      } catch {}
+
       await loadDashboardData();
       setSelectedRfqForQuote(null);
       setQuoteSuccessMsg("Quote submitted successfully to buyer!");
@@ -322,15 +346,7 @@ export default function SupplierDashboardScreen() {
             {/* Card 1: New RFQs (Purple #f8f5fe) */}
             <TouchableOpacity
               style={[styles.metricCard, { backgroundColor: "#f8f5fe", borderColor: "#ede5fc" }]}
-              onPress={() => {
-                if (navigation?.navigate) {
-                  router.push("/(supplier)/buyer-requests");
-                } else if ((router as any).navigate) {
-                  (router as any).navigate("/(supplier)/buyer-requests");
-                } else {
-                  router.push("/(supplier)/buyer-requests");
-                }
-              }}
+              onPress={() => router.push("/(supplier)/buyer-requests")}
               activeOpacity={0.8}
             >
               <View style={[styles.metricIconWrap, { backgroundColor: "#ede5fc" }]}>
@@ -343,15 +359,7 @@ export default function SupplierDashboardScreen() {
             {/* Card 2: Quotes Pending (Amber #fffbf0) */}
             <TouchableOpacity
               style={[styles.metricCard, { backgroundColor: "#fffbf0", borderColor: "#fde68a" }]}
-              onPress={() => {
-                if (navigation?.navigate) {
-                  router.push("/(supplier)/my-offers");
-                } else if ((router as any).navigate) {
-                  (router as any).navigate("/(supplier)/my-offers");
-                } else {
-                  router.push("/(supplier)/my-offers");
-                }
-              }}
+              onPress={() => router.push("/(supplier)/my-offers")}
               activeOpacity={0.8}
             >
               <View style={[styles.metricIconWrap, { backgroundColor: "#fef3c7" }]}>
@@ -364,15 +372,7 @@ export default function SupplierDashboardScreen() {
             {/* Card 3: Active Orders (Emerald #f0fbf4) */}
             <TouchableOpacity
               style={[styles.metricCard, { backgroundColor: "#f0fbf4", borderColor: "#a7f3d0" }]}
-              onPress={() => {
-                if (navigation?.navigate) {
-                  router.push("/(supplier)/orders");
-                } else if ((router as any).navigate) {
-                  (router as any).navigate("/(supplier)/orders");
-                } else {
-                  router.push("/(supplier)/orders");
-                }
-              }}
+              onPress={() => router.push("/(supplier)/orders")}
               activeOpacity={0.8}
             >
               <View style={[styles.metricIconWrap, { backgroundColor: "#d1fae5" }]}>
@@ -385,15 +385,7 @@ export default function SupplierDashboardScreen() {
             {/* Card 4: Samples Pending (Blue #f0f7ff) */}
             <TouchableOpacity
               style={[styles.metricCard, { backgroundColor: "#f0f7ff", borderColor: "#bfdbfe" }]}
-              onPress={() => {
-                if (navigation?.navigate) {
-                  router.push("/(supplier)/samples");
-                } else if ((router as any).navigate) {
-                  (router as any).navigate("/(supplier)/samples");
-                } else {
-                  router.push("/(supplier)/samples");
-                }
-              }}
+              onPress={() => router.push("/(supplier)/samples")}
               activeOpacity={0.8}
             >
               <View style={[styles.metricIconWrap, { backgroundColor: "#dbeafe" }]}>

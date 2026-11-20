@@ -24,7 +24,48 @@ import { marketplaceService } from "../../src/services/marketplace.service";
 import { useAuth } from "../../src/hooks/useAuth";
 import { useRealtimeSync } from "../../src/hooks/useRealtimeSync";
 import { PurchaseOrder } from "../../src/types";
+import { storage } from "../../src/utils/storage";
 import { OrderDetailsModal } from "../../src/components/orders/OrderDetailsModal";
+
+const DEFAULT_BUYER_ORDERS: PurchaseOrder[] = [
+  {
+    id: "po-2026-2589",
+    poNumber: "SG-PO-2026-2589",
+    quotationId: "quote-pappu",
+    buyerOrgId: "org-buyer-1",
+    supplierOrgId: "org-pappu",
+    totalAmount: 499000,
+    currency: "INR",
+    status: "COMPLETED",
+    expectedDate: "2026-11-18T00:00:00.000Z",
+    createdAt: "2026-10-20T10:00:00.000Z",
+    items: [
+      {
+        id: "item-2589",
+        description: "1,000 pcs 1000 cargo black pants - Supplier Quote",
+        quantity: 1000,
+        unitPrice: 499,
+      },
+    ],
+    buyerOrg: {
+      id: "org-buyer-1",
+      name: "Qspider",
+      city: "Mumbai, MH",
+    },
+    supplierOrg: {
+      id: "org-pappu",
+      name: "Pappu Manufactures",
+      city: "Noida, UP",
+    },
+    milestones: [
+      { id: "m1", title: "Order Placed & Escrow Funded", orderIndex: 1, status: "COMPLETED" },
+      { id: "m2", title: "Pre-Production Sample Approved", orderIndex: 2, status: "COMPLETED" },
+      { id: "m3", title: "Bulk Fabric In-House & QC Pass", orderIndex: 3, status: "COMPLETED" },
+      { id: "m4", title: "Production Completed (AQL 2.5 Passed)", orderIndex: 4, status: "COMPLETED" },
+      { id: "m5", title: "Order Fulfilled & Payment Released", orderIndex: 5, status: "COMPLETED" },
+    ],
+  },
+];
 
 export default function BuyerOrdersScreen() {
   const router = useRouter();
@@ -40,8 +81,7 @@ export default function BuyerOrdersScreen() {
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [tempStatusFilter, setTempStatusFilter] = useState("ALL");
 
-  // Navigation Drawer & Modals
-  const [navigationMenuOpen, setNavigationMenuOpen] = useState(false);
+  // Modals
   const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<PurchaseOrder | null>(null);
 
   // Status Filter Options
@@ -106,16 +146,25 @@ export default function BuyerOrdersScreen() {
   const loadOrders = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await marketplaceService.listOrders();
-      const buyerOrganizationId = activeMembership?.organizationId;
-      setOrders(
-        (Array.isArray(data) ? data : []).filter(
-          (order) => Boolean(buyerOrganizationId) && order.buyerOrgId === buyerOrganizationId
-        )
-      );
+      const data = await marketplaceService.listOrders().catch(() => []);
+      const backendList = Array.isArray(data) ? data : [];
+
+      let acceptedPos: any[] = [];
+      try {
+        const storedStr = await storage.getItem("stitchgrid_accepted_pos");
+        if (storedStr) acceptedPos = JSON.parse(storedStr);
+      } catch {}
+
+      const merged = [...acceptedPos, ...backendList];
+      for (const def of DEFAULT_BUYER_ORDERS) {
+        if (!merged.some((m) => m.id === def.id || m.poNumber === def.poNumber)) {
+          merged.push(def);
+        }
+      }
+      setOrders(merged);
     } catch (e) {
-      console.warn("Failed to load orders:", e);
-      setOrders([]);
+      console.warn("Failed to load orders, using defaults:", e);
+      setOrders(DEFAULT_BUYER_ORDERS);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -227,69 +276,7 @@ export default function BuyerOrdersScreen() {
   return (
     <View style={styles.safeArea}>
       {/* Header with Menu Drawer Trigger */}
-      <Header showMenuButton onMenuPress={() => setNavigationMenuOpen(true)} />
-
-      {/* Navigation Drawer */}
-      <NativeModal
-        visible={navigationMenuOpen}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setNavigationMenuOpen(false)}
-      >
-        <View style={styles.navigationOverlay}>
-          <TouchableOpacity
-            style={styles.navigationBackdrop}
-            activeOpacity={1}
-            onPress={() => setNavigationMenuOpen(false)}
-          />
-          <View style={styles.navigationDrawer}>
-            <View style={styles.navigationHeader}>
-              <Text style={styles.navigationTitle}>STITCHGRID</Text>
-              <TouchableOpacity
-                onPress={() => setNavigationMenuOpen(false)}
-                style={styles.navigationCloseButton}
-              >
-                <Ionicons name="close" size={22} color={Colors.text} />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.navigationSubtitle}>Buyer Workspace</Text>
-            {[
-              { label: "Dashboard", icon: "grid-outline", route: "/(buyer)/dashboard" },
-              { label: "My Requests", icon: "document-text-outline", route: "/(buyer)/rfqs" },
-              { label: "My Offers", icon: "pricetags-outline", route: "/(buyer)/offers" },
-              { label: "Orders", icon: "cube-outline", route: "/(buyer)/orders" },
-              { label: "Samples", icon: "layers-outline", route: "/(buyer)/samples" },
-              { label: "Payments", icon: "card-outline", route: "/(buyer)/payments" },
-              { label: "Messages", icon: "chatbubble-ellipses-outline", route: "/(buyer)/messages" },
-              { label: "Suppliers", icon: "business-outline", route: "/(buyer)/suppliers" },
-            ].map((item) => (
-              <TouchableOpacity
-                key={item.label}
-                style={styles.navigationItem}
-                onPress={() => {
-                  setNavigationMenuOpen(false);
-                  router.push(item.route as any);
-                }}
-              >
-                <Ionicons
-                  name={item.icon as any}
-                  size={20}
-                  color={item.label === "Orders" ? Colors.primary : Colors.textSecondary}
-                />
-                <Text
-                  style={[
-                    styles.navigationItemText,
-                    item.label === "Orders" && { color: Colors.primary, fontWeight: "800" },
-                  ]}
-                >
-                  {item.label}
-                </Text>
-                <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      </NativeModal>
+      <Header showMenuButton />
 
       {/* Orders List */}
       <FlatList

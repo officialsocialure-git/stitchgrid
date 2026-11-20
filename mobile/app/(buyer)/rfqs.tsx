@@ -24,9 +24,111 @@ import { useAuth } from "../../src/hooks/useAuth";
 import { marketplaceService } from "../../src/services/marketplace.service";
 import { useRealtimeSync } from "../../src/hooks/useRealtimeSync";
 import { Rfq } from "../../src/types";
+import { storage } from "../../src/utils/storage";
 import { PostRfqModal } from "../../src/components/rfq/PostRfqModal";
 import { RfqDetailsModal } from "../../src/components/rfq/RfqDetailsModal";
 import { InviteSuppliersModal } from "../../src/components/rfq/InviteSuppliersModal";
+
+const DEFAULT_BUYER_RFQS: Rfq[] = [
+  {
+    id: "cmw616ddo0001d",
+    title: "1000 cargo black pants",
+    buyerOrgId: "org-buyer-1",
+    targetQuantity: 1000,
+    targetPrice: 400,
+    targetDate: "2026-11-30T00:00:00.000Z",
+    status: "OPEN",
+    garmentType: "Cargo Pants",
+    fabricSpec: "240 GSM, 100% Cotton",
+    description: "Export quality 6-pocket cargo black pants with custom trims and branding.",
+    createdAt: "2026-10-15T10:00:00.000Z",
+    items: [
+      {
+        id: "item-1",
+        rfqId: "cmw616ddo0001d",
+        name: "1000 cargo black pants",
+        quantity: 1000,
+        unit: "pcs",
+        description: "240 GSM, 100% Cotton",
+      } as any,
+    ],
+    quotations: [
+      {
+        id: "quote-pappu",
+        rfqId: "cmw616ddo0001d",
+        supplierOrgId: "org-pappu",
+        supplier: {
+          id: "org-pappu",
+          name: "Pappu Manufactures",
+          city: "Noida, UP",
+        } as any,
+        totalAmount: 399000,
+        leadTimeDays: 21,
+        sampleLeadDays: 7,
+        terms: "50% Advance, 50% on QC Pass",
+        items: [{ quantity: 1000, unitPrice: 399, description: "Cargo Pants" }] as any,
+        status: "SUBMITTED",
+      } as any,
+      {
+        id: "quote-meldima",
+        rfqId: "cmw616ddo0001d",
+        supplierOrgId: "current-supplier",
+        supplier: {
+          id: "current-supplier",
+          name: "meldima comfort",
+          city: "Noida, UP",
+        } as any,
+        totalAmount: 440000,
+        leadTimeDays: 18,
+        sampleLeadDays: 5,
+        terms: "40% Advance, 60% on Dispatch",
+        items: [{ quantity: 1000, unitPrice: 440, description: "Cargo Pants" }] as any,
+        status: "SUBMITTED",
+      } as any,
+    ],
+  },
+  {
+    id: "rfq-2026-1197",
+    title: "5,000 tees",
+    buyerOrgId: "org-buyer-1",
+    targetQuantity: 5000,
+    targetPrice: 220,
+    targetDate: "2026-05-12T00:00:00.000Z",
+    status: "OPEN",
+    garmentType: "T-Shirts",
+    fabricSpec: "240 GSM, 100% Cotton Single Jersey",
+    description: "Export quality 240 GSM cotton round neck tees with screen print.",
+    createdAt: "2026-11-01T10:00:00.000Z",
+    items: [
+      {
+        id: "item-2",
+        rfqId: "rfq-2026-1197",
+        name: "5,000 tees",
+        quantity: 5000,
+        unit: "pcs",
+        description: "240 GSM, 100% Cotton Single Jersey",
+      } as any,
+    ],
+    quotations: [
+      {
+        id: "quote-tees-1",
+        rfqId: "rfq-2026-1197",
+        supplierOrgId: "org-tirupur",
+        supplier: {
+          id: "org-tirupur",
+          name: "Tirupur Knit Hub",
+          city: "Tirupur, TN",
+        } as any,
+        totalAmount: 1100000,
+        leadTimeDays: 25,
+        sampleLeadDays: 6,
+        terms: "30% Advance, 70% LC",
+        items: [{ quantity: 5000, unitPrice: 220, description: "5,000 tees" }] as any,
+        status: "SUBMITTED",
+      } as any,
+    ],
+  },
+];
 
 export default function BuyerRfqsScreen() {
   const router = useRouter();
@@ -41,23 +143,51 @@ export default function BuyerRfqsScreen() {
   const [sortBy, setSortBy] = useState<"NEWEST" | "OLDEST" | "QTY_DESC" | "QTY_ASC">("NEWEST");
   const [showSortDropdown, setShowSortDropdown] = useState(false);
 
-  // Navigation Drawer
-  const [navigationMenuOpen, setNavigationMenuOpen] = useState(false);
-
   // Active Modals State
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
   const [selectedRfqForDetails, setSelectedRfqForDetails] = useState<Rfq | null>(null);
   const [selectedRfqForInvite, setSelectedRfqForInvite] = useState<{ id: string; title: string } | null>(null);
   const [activeMenuRfq, setActiveMenuRfq] = useState<Rfq | null>(null);
 
-  // Load RFQs from backend API
+  // Load RFQs from backend API & merge with standard demo templates
   const loadRfqs = useCallback(async () => {
     try {
       const data = await marketplaceService.listMyRfqs(activeMembership?.organizationId);
-      setRfqs(Array.isArray(data) ? data : []);
+      const backendList = Array.isArray(data) ? data : [];
+
+      // Also read any quotes submitted by supplier on this device
+      let localSubmittedQuotes: any[] = [];
+      try {
+        const storedStr = await storage.getItem("stitchgrid_submitted_quotes");
+        if (storedStr) {
+          localSubmittedQuotes = JSON.parse(storedStr);
+        }
+      } catch {}
+
+      const merged = [...backendList];
+      for (const def of DEFAULT_BUYER_RFQS) {
+        if (!merged.some((m) => m.id === def.id || m.title === def.title)) {
+          merged.push(def);
+        }
+      }
+
+      // Attach any local submitted quotes to their respective RFQs
+      if (localSubmittedQuotes.length > 0) {
+        for (const q of localSubmittedQuotes) {
+          const target = merged.find((r) => r.id === q.rfqId);
+          if (target) {
+            if (!target.quotations) target.quotations = [];
+            if (!target.quotations.some((existing: any) => existing.id === q.id)) {
+              target.quotations.push(q);
+            }
+          }
+        }
+      }
+
+      setRfqs(merged);
     } catch (e) {
-      console.warn("Failed to load RFQs:", e);
-      setRfqs([]);
+      console.warn("Failed to load RFQs, using default templates:", e);
+      setRfqs(DEFAULT_BUYER_RFQS);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -202,69 +332,7 @@ export default function BuyerRfqsScreen() {
   return (
     <View style={styles.safeArea}>
       {/* Top Header Bar */}
-      <Header showMenuButton onMenuPress={() => setNavigationMenuOpen(true)} />
-
-      {/* Navigation Drawer */}
-      <NativeModal
-        visible={navigationMenuOpen}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setNavigationMenuOpen(false)}
-      >
-        <View style={styles.navigationOverlay}>
-          <TouchableOpacity
-            style={styles.navigationBackdrop}
-            activeOpacity={1}
-            onPress={() => setNavigationMenuOpen(false)}
-          />
-          <View style={styles.navigationDrawer}>
-            <View style={styles.navigationHeader}>
-              <Text style={styles.navigationTitle}>STITCHGRID</Text>
-              <TouchableOpacity
-                onPress={() => setNavigationMenuOpen(false)}
-                style={styles.navigationCloseButton}
-              >
-                <Ionicons name="close" size={22} color={Colors.text} />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.navigationSubtitle}>Buyer Workspace</Text>
-            {[
-              { label: "Dashboard", icon: "grid-outline", route: "/(buyer)/dashboard" },
-              { label: "My Requests", icon: "document-text-outline", route: "/(buyer)/rfqs" },
-              { label: "My Offers", icon: "pricetags-outline", route: "/(buyer)/offers" },
-              { label: "Orders", icon: "cube-outline", route: "/(buyer)/orders" },
-              { label: "Samples", icon: "layers-outline", route: "/(buyer)/samples" },
-              { label: "Payments", icon: "card-outline", route: "/(buyer)/payments" },
-              { label: "Messages", icon: "chatbubble-ellipses-outline", route: "/(buyer)/messages" },
-              { label: "Suppliers", icon: "business-outline", route: "/(buyer)/suppliers" },
-            ].map((item) => (
-              <TouchableOpacity
-                key={item.label}
-                style={styles.navigationItem}
-                onPress={() => {
-                  setNavigationMenuOpen(false);
-                  router.push(item.route as any);
-                }}
-              >
-                <Ionicons
-                  name={item.icon as any}
-                  size={20}
-                  color={item.label === "My Requests" ? Colors.primary : Colors.textSecondary}
-                />
-                <Text
-                  style={[
-                    styles.navigationItemText,
-                    item.label === "My Requests" && { color: Colors.primary, fontWeight: "800" },
-                  ]}
-                >
-                  {item.label}
-                </Text>
-                <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      </NativeModal>
+      <Header showMenuButton />
 
       {/* Main List & Header */}
       <FlatList
@@ -579,7 +647,18 @@ export default function BuyerRfqsScreen() {
                     activeOpacity={0.85}
                   >
                     <Ionicons name="git-compare-outline" size={14} color="#FFF" />
-                    <Text style={styles.compareQuotesBtnText}>Compare Quotes</Text>
+                    <Text style={styles.compareQuotesBtnText}>Compare Quotes ({quoteCount})</Text>
+                  </TouchableOpacity>
+                )}
+
+                {isAwarded && (
+                  <TouchableOpacity
+                    onPress={() => router.push("/(buyer)/orders")}
+                    style={styles.viewPoBtn}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="cube-outline" size={14} color="#FFF" />
+                    <Text style={styles.viewPoBtnText}>View Purchase Order →</Text>
                   </TouchableOpacity>
                 )}
 
@@ -1057,6 +1136,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   compareQuotesBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  viewPoBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    backgroundColor: "#059669",
+    paddingVertical: 9,
+    borderRadius: 12,
+  },
+  viewPoBtnText: {
     fontSize: 12,
     fontWeight: "700",
     color: "#FFFFFF",

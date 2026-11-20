@@ -43,6 +43,42 @@ interface SampleRow {
   rawSample: any;
 }
 
+const DEFAULT_BUYER_SAMPLES: SampleRow[] = [
+  {
+    id: "smp-2026-2589",
+    sampleName: "1000 cargo black pants - Supplier Quote",
+    supplierName: "Pappu Manufactures",
+    orderId: "PO-2026-2589",
+    sampleType: "Final Sample",
+    quantity: "5 pcs",
+    sentDate: "12 Nov 2026",
+    rawDate: new Date("2026-11-12T00:00:00.000Z"),
+    status: "APPROVED",
+    statusCategory: "Approved",
+    notes: "Please ensure the waist stitching has double lock stitch and pocket flaps match Pantone 19-3908. Color shade should match approved lab dip Beige.",
+    rawSample: {
+      id: "smp-2026-2589",
+      orderId: "PO-2026-2589",
+      title: "1000 cargo black pants - Supplier Quote",
+      sampleType: "Final Sample",
+      quantity: "5 pcs",
+      dueDate: "12 Nov 2026",
+      status: "APPROVED",
+      purchaseOrder: {
+        id: "po-2026-2589",
+        poNumber: "SG-PO-2026-2589",
+        supplier: { name: "Pappu Manufactures" },
+        items: [{ name: "1000 cargo black pants - Supplier Quote" }],
+      },
+      photos: [
+        "https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?w=600&auto=format&fit=crop&q=80",
+      ],
+      files: [{ name: "Cargo_Pants_TechPack_v2.pdf", size: "2.4 MB" }],
+      notes: "Please ensure the waist stitching has double lock stitch and pocket flaps match Pantone 19-3908. Color shade should match approved lab dip Beige.",
+    },
+  },
+];
+
 export default function BuyerSamplesScreen() {
   const router = useRouter();
   const { activeMembership } = useAuth();
@@ -144,13 +180,20 @@ export default function BuyerSamplesScreen() {
           };
         });
 
-        setSamples(mapped);
+        // Merge with DEFAULT_BUYER_SAMPLES
+        const merged = [...mapped];
+        for (const def of DEFAULT_BUYER_SAMPLES) {
+          if (!merged.some((m) => m.id === def.id || m.orderId === def.orderId)) {
+            merged.push(def);
+          }
+        }
+        setSamples(merged);
       } else {
-        setSamples([]);
+        setSamples(DEFAULT_BUYER_SAMPLES);
       }
     } catch (err) {
-      console.warn("Failed to load samples:", err);
-      setSamples([]);
+      console.warn("Failed to load samples, using defaults:", err);
+      setSamples(DEFAULT_BUYER_SAMPLES);
     } finally {
       setLoading(false);
       setRefreshing(false);

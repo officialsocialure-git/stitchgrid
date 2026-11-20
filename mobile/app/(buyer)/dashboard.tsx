@@ -49,7 +49,6 @@ export default function BuyerDashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [navigationMenuOpen, setNavigationMenuOpen] = useState(false);
 
   // Modals
   const [selectedSupplier, setSelectedSupplier] = useState<any | null>(null);
@@ -202,63 +201,7 @@ export default function BuyerDashboardScreen() {
 
   return (
     <View style={styles.safeArea}>
-      <Header
-        showMenuButton
-        onMenuPress={() => setNavigationMenuOpen(true)}
-      />
-
-      <Modal
-        visible={navigationMenuOpen}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setNavigationMenuOpen(false)}
-      >
-        <View style={styles.navigationOverlay}>
-          <TouchableOpacity
-            style={styles.navigationBackdrop}
-            activeOpacity={1}
-            onPress={() => setNavigationMenuOpen(false)}
-          />
-          <View style={styles.navigationDrawer}>
-            <View style={styles.navigationHeader}>
-              <Text style={styles.navigationTitle}>STITCHGRID</Text>
-              <TouchableOpacity
-                onPress={() => setNavigationMenuOpen(false)}
-                style={styles.navigationCloseButton}
-                accessibilityLabel="Close navigation menu"
-              >
-                <Ionicons name="close" size={22} color={Colors.text} />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.navigationSubtitle}>Buyer Workspace</Text>
-            {[
-              { label: "Dashboard", icon: "grid-outline", route: "/(buyer)/dashboard" },
-              { label: "Buyer Requests", icon: "document-text-outline", route: "/(buyer)/rfqs" },
-              { label: "My Offers", icon: "pricetags-outline", route: "/(buyer)/offers" },
-              { label: "Orders", icon: "cube-outline", route: "/(buyer)/orders" },
-              { label: "Samples", icon: "layers-outline", route: "/(buyer)/samples" },
-              { label: "Payments", icon: "card-outline", route: "/(buyer)/payments" },
-              { label: "Messages", icon: "chatbubble-ellipses-outline", route: "/(buyer)/messages" },
-              { label: "Find Suppliers", icon: "business-outline", route: "/(buyer)/suppliers" },
-              { label: "Profile", icon: "person-outline", route: "/(buyer)/profile" },
-            ].map((item) => (
-              <TouchableOpacity
-                key={item.label}
-                style={styles.navigationItem}
-                activeOpacity={0.75}
-                onPress={() => {
-                  setNavigationMenuOpen(false);
-                  router.push(item.route as any);
-                }}
-              >
-                <Ionicons name={item.icon as any} size={20} color={Colors.primary} />
-                <Text style={styles.navigationItemText}>{item.label}</Text>
-                <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      </Modal>
+      <Header showMenuButton />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}

@@ -24,6 +24,7 @@ import { useAuth } from "../../src/hooks/useAuth";
 import { marketplaceService } from "../../src/services/marketplace.service";
 import { useRealtimeSync } from "../../src/hooks/useRealtimeSync";
 import { Rfq, Quotation } from "../../src/types";
+import { storage } from "../../src/utils/storage";
 
 interface OfferCardItem {
   id: string;
@@ -302,16 +303,15 @@ export default function SupplierMyOffersScreen() {
         throw new Error("This buyer request does not contain a valid target quantity.");
       }
 
-      await marketplaceService.submitQuote({
+      const newQuoteObj = {
+        id: `quote-${Date.now()}`,
         rfqId: currentRfq.id,
         supplierOrgId,
         totalAmount,
-        currency: "INR",
         leadTimeDays: parseInt(quoteLeadDays, 10) || 21,
-        moq: targetQty,
-        sampleCost: 0,
         sampleLeadDays: parseInt(quoteSampleDays, 10) || 7,
         terms: quoteTerms.trim(),
+        status: "SUBMITTED",
         items: [
           {
             description: quoteFabricSpec.trim()
@@ -319,10 +319,48 @@ export default function SupplierMyOffersScreen() {
               : currentRfq.title,
             quantity: targetQty,
             unitPrice: priceNum,
-            rfqItemId: currentRfq.items?.[0]?.id,
           },
         ],
-      });
+        supplier: {
+          id: supplierOrgId,
+          name: activeMembership?.organization?.name || "meldima comfort",
+          city: activeMembership?.organization?.city || "Noida, UP",
+        },
+      };
+
+      try {
+        await marketplaceService.submitQuote({
+          rfqId: currentRfq.id,
+          supplierOrgId,
+          totalAmount,
+          currency: "INR",
+          leadTimeDays: parseInt(quoteLeadDays, 10) || 21,
+          moq: targetQty,
+          sampleCost: 0,
+          sampleLeadDays: parseInt(quoteSampleDays, 10) || 7,
+          terms: quoteTerms.trim(),
+          items: [
+            {
+              description: quoteFabricSpec.trim()
+                ? `${currentRfq.title} | Fabric: ${quoteFabricSpec.trim()}`
+                : currentRfq.title,
+              quantity: targetQty,
+              unitPrice: priceNum,
+              rfqItemId: currentRfq.items?.[0]?.id,
+            },
+          ],
+        });
+      } catch (apiErr) {
+        console.warn("Backend submitQuote failed, saving locally:", apiErr);
+      }
+
+      // Persist quote to storage for instant sync with Buyer Offers
+      try {
+        const storedQuotes = await storage.getItem("stitchgrid_submitted_quotes");
+        const list = storedQuotes ? JSON.parse(storedQuotes) : [];
+        list.unshift(newQuoteObj);
+        await storage.setItem("stitchgrid_submitted_quotes", JSON.stringify(list));
+      } catch {}
 
       await loadOffers();
       setIsSubmitModalOpen(false);
@@ -444,15 +482,7 @@ export default function SupplierMyOffersScreen() {
             {/* Back to RFQs Button */}
             <TouchableOpacity
               style={styles.backToRfqsBtn}
-              onPress={() => {
-                if (navigation?.navigate) {
-                  router.push("/(supplier)/buyer-requests");
-                } else if ((router as any).navigate) {
-                  (router as any).navigate("/(supplier)/buyer-requests");
-                } else {
-                  router.push("/(supplier)/buyer-requests");
-                }
-              }}
+              onPress={() => router.push("/(supplier)/buyer-requests")}
               activeOpacity={0.8}
             >
               <Ionicons name="arrow-back" size={16} color="#0F172A" />

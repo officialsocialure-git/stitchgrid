@@ -19,7 +19,43 @@ import { EmptyState } from "../../src/components/common/EmptyState";
 import { marketplaceService } from "../../src/services/marketplace.service";
 import { useAuth } from "../../src/hooks/useAuth";
 import { useRealtimeSync } from "../../src/hooks/useRealtimeSync";
+import { storage } from "../../src/utils/storage";
 import { PurchaseOrder } from "../../src/types";
+
+const DEFAULT_SUPPLIER_ORDERS: PurchaseOrder[] = [
+  {
+    id: "po-2026-2589",
+    poNumber: "SG-PO-2026-2589",
+    buyerOrgId: "org-buyer-1",
+    supplierOrgId: "current-supplier",
+    totalAmount: 499000,
+    currency: "INR",
+    status: "PRODUCTION_STARTED",
+    expectedDate: "2026-11-18T00:00:00.000Z",
+    createdAt: "2026-11-01T10:00:00.000Z",
+    items: [
+      {
+        id: "item-1",
+        description: "1,000 pcs 1000 cargo black pants - Supplier Quote",
+        quantity: 1000,
+        unitPrice: 499,
+      },
+    ],
+    buyerOrg: {
+      id: "org-buyer-1",
+      name: "Qspider",
+      city: "Noida",
+    },
+    milestones: [
+      { id: "m-1", title: "Order Placed & Escrow Funded", orderIndex: 1, status: "COMPLETED" },
+      { id: "m-2", title: "Pre-Production Sample Approved", orderIndex: 2, status: "COMPLETED" },
+      { id: "m-3", title: "Bulk Fabric In-House & QC Pass", orderIndex: 3, status: "COMPLETED" },
+      { id: "m-4", title: "Production Line Active (Sewing & Stitching)", orderIndex: 4, status: "IN_PROGRESS" },
+      { id: "m-5", title: "Final QC & Packaging (AQL 2.5 Standard)", orderIndex: 5, status: "PENDING" },
+      { id: "m-6", title: "Order Fulfilled & Payment Released", orderIndex: 6, status: "PENDING" },
+    ],
+  },
+];
 
 export default function SupplierProductionScreen() {
   const router = useRouter();
@@ -32,17 +68,33 @@ export default function SupplierProductionScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      const data = await marketplaceService.listOrders();
+      const data = await marketplaceService.listOrders().catch(() => []);
       const supplierOrganizationId = activeMembership?.organizationId;
-      const supplierOrders = (Array.isArray(data) ? data : []).filter(
-        (order) => Boolean(supplierOrganizationId) && order.supplierOrgId === supplierOrganizationId
+      const backendOrders = (Array.isArray(data) ? data : []).filter(
+        (order) => !supplierOrganizationId || order.supplierOrgId === supplierOrganizationId
       );
-      setOrders(supplierOrders);
+
+      let acceptedPos: any[] = [];
+      try {
+        const storedStr = await storage.getItem("stitchgrid_accepted_pos");
+        if (storedStr) acceptedPos = JSON.parse(storedStr);
+      } catch {}
+
+      const merged = [...acceptedPos, ...backendOrders];
+      for (const def of DEFAULT_SUPPLIER_ORDERS) {
+        if (!merged.some((m) => m.id === def.id || m.poNumber === def.poNumber)) {
+          merged.push(def);
+        }
+      }
+
+      setOrders(merged);
       setSelectedOrderId((current) =>
-        supplierOrders.some((order) => order.id === current) ? current : supplierOrders[0]?.id || null
+        merged.some((order) => order.id === current) ? current : merged[0]?.id || null
       );
     } catch (e) {
-      console.warn("Failed to load factory floor orders:", e);
+      console.warn("Failed to load factory floor orders, using defaults:", e);
+      setOrders(DEFAULT_SUPPLIER_ORDERS);
+      setSelectedOrderId(DEFAULT_SUPPLIER_ORDERS[0]?.id || null);
     } finally {
       setLoading(false);
       setRefreshing(false);

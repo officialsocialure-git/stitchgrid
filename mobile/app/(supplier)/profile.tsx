@@ -5,8 +5,11 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   Alert,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -14,15 +17,46 @@ import { Colors } from "../../src/constants/colors";
 import { Header } from "../../src/components/common/Header";
 import { Button } from "../../src/components/common/Button";
 import { useAuth } from "../../src/hooks/useAuth";
+import { authService } from "../../src/services/auth.service";
 
 export default function SupplierProfileScreen() {
   const router = useRouter();
-  const { user, activeMembership, memberships, switchRole, logout } = useAuth();
+  const { user, activeMembership, memberships, switchRole, logout, refreshUser } = useAuth();
   const [switching, setSwitching] = useState(false);
+
+  // Edit Profile Modal State
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editName, setEditName] = useState(user?.fullName || "");
+  const [editPhone, setEditPhone] = useState(user?.phone || "");
+  const [savingProfile, setSavingProfile] = useState(false);
 
   const org = activeMembership?.organization;
   const hasBuyerRole = memberships.some((m) => m.role === "BUYER");
   const initial = user?.fullName ? user.fullName[0].toUpperCase() : "S";
+
+  const handleOpenEdit = () => {
+    setEditName(user?.fullName || "");
+    setEditPhone(user?.phone || "");
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!editName.trim()) {
+      Alert.alert("Validation", "Please enter your full name.");
+      return;
+    }
+    try {
+      setSavingProfile(true);
+      await authService.updateProfile({ fullName: editName.trim(), phone: editPhone.trim() || undefined });
+      await refreshUser();
+      setIsEditModalOpen(false);
+      Alert.alert("Profile Updated", "Your profile details have been saved successfully.");
+    } catch (e: any) {
+      Alert.alert("Update Error", e.response?.data?.message || e.message || "Failed to update profile.");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   const handleSwitchToBuyer = async () => {
     try {
@@ -54,7 +88,7 @@ export default function SupplierProfileScreen() {
     <View style={styles.safeArea}>
       <Header title="Factory Profile" subtitle="Account & manufacturing mill settings" />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Factory Profile Header Card */}
         <View style={styles.profileCard}>
           <View style={styles.avatarRow}>
@@ -103,12 +137,47 @@ export default function SupplierProfileScreen() {
           </View>
         </View>
 
-        <Button
-          title="Edit Company Settings"
-          variant="outline"
-          onPress={() => router.push("/(supplier)/settings")}
-          style={{ marginTop: 14 }}
-        />
+        <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
+          <Button
+            title="Edit Contact"
+            variant="outline"
+            onPress={handleOpenEdit}
+            style={{ flex: 1 }}
+          />
+          <Button
+            title="Mill Settings"
+            variant="primary"
+            onPress={() => router.push("/(supplier)/settings")}
+            style={{ flex: 1 }}
+          />
+        </View>
+
+        {/* Manufacturing Shortcuts */}
+        <Text style={styles.sectionHeading}>Manufacturing Shortcuts</Text>
+        <View style={styles.menuCard}>
+          {[
+            { label: "Buyer Requests (RFQs)", icon: "document-text-outline" as const, route: "/(supplier)/buyer-requests" },
+            { label: "My Submitted Quotes", icon: "pricetag-outline" as const, route: "/(supplier)/my-offers" },
+            { label: "Purchase Orders (POs)", icon: "cube-outline" as const, route: "/(supplier)/orders" },
+            { label: "Production Milestones", icon: "construct-outline" as const, route: "/(supplier)/production" },
+            { label: "Sample Approvals", icon: "shirt-outline" as const, route: "/(supplier)/samples" },
+            { label: "Escrow & Payouts", icon: "card-outline" as const, route: "/(supplier)/payments" },
+          ].map((item, idx, arr) => (
+            <TouchableOpacity
+              key={item.label}
+              style={[
+                styles.menuItem,
+                idx === arr.length - 1 && { borderBottomWidth: 0 },
+              ]}
+              onPress={() => router.push(item.route as any)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name={item.icon} size={20} color="#5B13EC" style={{ marginRight: 12 }} />
+              <Text style={styles.menuItemText}>{item.label}</Text>
+              <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
+            </TouchableOpacity>
+          ))}
+        </View>
 
         {/* Role Switcher if multi-tenant */}
         {hasBuyerRole && (
@@ -143,6 +212,63 @@ export default function SupplierProfileScreen() {
           style={{ marginTop: 22, marginBottom: 20 }}
         />
       </ScrollView>
+
+      {/* Edit Profile Modal */}
+      <Modal
+        visible={isEditModalOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIsEditModalOpen(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Contact Information</Text>
+              <TouchableOpacity onPress={() => setIsEditModalOpen(false)}>
+                <Ionicons name="close" size={22} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.inputLabel}>Full Name</Text>
+            <TextInput
+              style={styles.textInput}
+              value={editName}
+              onChangeText={setEditName}
+              placeholder="Your full name"
+              placeholderTextColor={Colors.textMuted}
+            />
+
+            <Text style={styles.inputLabel}>Mobile Phone</Text>
+            <TextInput
+              style={styles.textInput}
+              value={editPhone}
+              onChangeText={setEditPhone}
+              placeholder="e.g. +91 98765 43210"
+              placeholderTextColor={Colors.textMuted}
+              keyboardType="phone-pad"
+            />
+
+            <View style={styles.modalActions}>
+              <Button
+                title="Cancel"
+                variant="outline"
+                onPress={() => setIsEditModalOpen(false)}
+                style={{ flex: 1 }}
+              />
+              <Button
+                title="Save Changes"
+                variant="primary"
+                loading={savingProfile}
+                onPress={handleSaveProfile}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -218,7 +344,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     color: Colors.textHeading,
-    marginTop: 10,
+    marginTop: 18,
     marginBottom: 8,
   },
   infoCard: {
@@ -246,21 +372,26 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Colors.textHeading,
   },
-  verifiedPill: {
+  menuCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: "hidden",
+  },
+  menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: Colors.successLight,
-    borderWidth: 1,
-    borderColor: Colors.successBorder,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
   },
-  verifiedText: {
-    fontSize: 11,
+  menuItemText: {
+    flex: 1,
+    fontSize: 13,
     fontWeight: "700",
-    color: Colors.successText,
+    color: Colors.textHeading,
   },
   switchCard: {
     backgroundColor: Colors.surface,
@@ -292,36 +423,49 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: 2,
   },
-  menuCard: {
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalCard: {
     backgroundColor: Colors.surface,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    paddingHorizontal: 8,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    paddingBottom: 36,
   },
-  menuItem: {
+  modalHeader: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    gap: 12,
+    marginBottom: 16,
   },
-  menuIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: Colors.surfaceSubtle,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  menuText: {
-    fontSize: 13,
-    fontWeight: "600",
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "800",
     color: Colors.textHeading,
   },
-  menuDivider: {
-    height: 1,
-    backgroundColor: Colors.borderLight,
-    marginHorizontal: 8,
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Colors.textSecondary,
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  textInput: {
+    backgroundColor: Colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: Colors.text,
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 20,
   },
 });
