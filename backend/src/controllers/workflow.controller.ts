@@ -1,11 +1,13 @@
 import { Request, Response, NextFunction } from "express";
+import { createHash } from "crypto";
 import fs from "fs";
 import path from "path";
 import { z } from "zod";
 import { prisma } from "../config/prisma";
+import { env } from "../config/env";
 import { AppError, sendOk } from "../utils/http";
 import { audit } from "../services/audit";
-import { emitToChannel, emitToOrg, emitToRole } from "../services/realtime";
+import { emitToChannel, emitToOrg, emitToRole, emitToUser } from "../services/realtime";
 
 async function orderAccess(orderId: string, userId: string) {
   const order = await prisma.purchaseOrder.findUnique({ where: { id: orderId } });
@@ -24,37 +26,81 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
     }).parse(req.body);
 
     let base64Data = input.data;
-    let extension = "jpg";
+    let mimeType = "image/jpeg";
+    let extension = path.extname(input.filename).replace(".", "").toLowerCase() || "jpg";
 
     if (input.data.startsWith("data:")) {
-      const match = input.data.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,/);
-      if (match) {
-        const mime = match[1];
-        if (mime.includes("png")) extension = "png";
-        else if (mime.includes("webp")) extension = "webp";
-        else if (mime.includes("pdf")) extension = "pdf";
-        else if (mime.includes("jpeg") || mime.includes("jpg")) extension = "jpg";
-        base64Data = input.data.substring(match[0].length);
-      }
+      const match = input.data.match(/^data:([a-zA-Z0-9.+-]+\/[a-zA-Z0-9.+-]+);base64,/);
+      if (!match) throw new AppError(400, "Invalid base64 data URL.");
+      mimeType = match[1].toLowerCase();
+      base64Data = input.data.substring(match[0].length);
+      if (mimeType === "image/png") extension = "png";
+      else if (mimeType === "image/webp") extension = "webp";
+      else if (mimeType === "application/pdf") extension = "pdf";
+      else if (mimeType === "image/jpeg") extension = "jpg";
+      else if (mimeType === "image/heic") extension = "heic";
+      else if (mimeType === "image/heif") extension = "heif";
+      else throw new AppError(415, "Only JPG, PNG, WEBP, HEIC, HEIF and PDF files are supported.");
     } else {
-      const ext = path.extname(input.filename).replace(".", "");
-      if (ext) extension = ext;
+      const extMime: Record<string, string> = {
+        jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+        webp: "image/webp", heic: "image/heic", heif: "image/heif", pdf: "application/pdf",
+      };
+      mimeType = extMime[extension] || "";
+      if (!mimeType) throw new AppError(415, "Only JPG, PNG, WEBP, HEIC, HEIF and PDF files are supported.");
     }
 
     const safeFilename = `sg-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}.${extension}`;
-    const uploadsDir = path.join(process.cwd(), "uploads");
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    }
-    const filePath = path.join(uploadsDir, safeFilename);
     const buffer = Buffer.from(base64Data, "base64");
-    fs.writeFileSync(filePath, buffer);
+    if (!buffer.length) throw new AppError(400, "Uploaded file is empty or invalid.");
+    if (buffer.length > 10 * 1024 * 1024) throw new AppError(413, "File size must be 10 MB or less.");
 
+    const cloudName = env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = env.CLOUDINARY_API_KEY;
+    const apiSecret = env.CLOUDINARY_API_SECRET;
+    if (cloudName && apiKey && apiSecret) {
+      const timestamp = Math.floor(Date.now() / 1000);
+      const folder = "stitchgrid/sample-attachments";
+      const signature = createHash("sha1")
+        .update(`folder=${folder}&timestamp=${timestamp}${apiSecret}`)
+        .digest("hex");
+      const form = new FormData();
+      form.append("file", new Blob([buffer as unknown as BlobPart], { type: mimeType }), safeFilename);
+      form.append("api_key", apiKey);
+      form.append("timestamp", String(timestamp));
+      form.append("folder", folder);
+      form.append("signature", signature);
+      const resourceType = mimeType === "application/pdf" ? "raw" : "image";
+      const cloudResponse = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`, {
+        method: "POST",
+        body: form,
+      });
+      const cloudPayload: any = await cloudResponse.json().catch(() => ({}));
+      if (!cloudResponse.ok || !cloudPayload.secure_url) {
+        throw new AppError(502, cloudPayload.error?.message || "Persistent file storage upload failed.");
+      }
+      return sendOk(res, {
+        url: cloudPayload.secure_url,
+        filename: cloudPayload.original_filename || safeFilename,
+        label: input.label || "Sample Attachment",
+        size: cloudPayload.bytes || buffer.length,
+        mimeType,
+      }, 201);
+    }
+
+    if (env.NODE_ENV === "production") {
+      throw new AppError(503, "Persistent file storage is not configured. Add CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET to the backend environment.");
+    }
+
+    const uploadsDir = path.join(process.cwd(), "uploads");
+    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+    fs.writeFileSync(path.join(uploadsDir, safeFilename), buffer);
     return sendOk(res, {
       url: `/uploads/${safeFilename}`,
       filename: safeFilename,
-      label: input.label || "Sample Photo",
-      size: buffer.length
+      label: input.label || "Sample Attachment",
+      size: buffer.length,
+      mimeType,
     }, 201);
   } catch (e) { next(e); }
 }
@@ -63,16 +109,25 @@ export async function createSample(req: Request, res: Response, next: NextFuncti
   try {
     const input = z.object({
       notes: z.string().max(20000).optional(),
-      sampleType: z.string().optional()
+      sampleType: z.string().trim().min(2).max(80).default("Final Sample"),
+      sampleName: z.string().trim().max(180).optional(),
+      quantity: z.string().trim().max(80).optional(),
     }).parse(req.body);
     const { order, memberships } = await orderAccess(req.params.orderId as string, req.auth!.userId);
     if (!memberships.some(m => m.role === "BUYER" && m.organizationId === order.buyerOrgId)) throw new AppError(403, "Buyer membership required");
 
+    const createdAt = new Date().toISOString();
     const initialMeta = {
       description: input.notes || `Pre-Production Sample lot for ${order.poNumber}`,
-      sampleType: input.sampleType || "Final Sample",
+      sampleType: input.sampleType,
+      sampleName: input.sampleName || order.poNumber,
+      quantity: input.quantity || "5 pcs",
       photos: [],
-      createdAt: new Date().toISOString()
+      files: [],
+      supplierNote: "",
+      buyerFeedback: null,
+      history: [{ action: "Sample requested by Buyer", status: "REQUESTED", note: input.notes || "Pre-production prototype", createdAt, actorUserId: req.auth!.userId, actorRole: "BUYER" }],
+      createdAt,
     };
 
     const sample = await prisma.sample.create({
@@ -87,27 +142,68 @@ export async function createSample(req: Request, res: Response, next: NextFuncti
       data: {
         purchaseOrderId: order.id,
         eventType: "SAMPLE_REQUESTED",
-        note: `Sample requested by buyer: ${input.notes || "Pre-production prototype"}`,
+        note: `Sample ${sample.id}: ${input.sampleType} • ${input.quantity || "5 pcs"} • ${input.sampleName || order.poNumber}`,
         actorUserId: req.auth!.userId
       }
     }).catch(() => {});
 
+    const supplierMembers = await prisma.organizationMember.findMany({
+      where: { organizationId: order.supplierOrgId, role: "SUPPLIER", isActive: true },
+      select: { userId: true },
+    });
+    const supplierUserIds = [...new Set(supplierMembers.map(member => member.userId))];
+    if (supplierUserIds.length) {
+      await prisma.notification.createMany({
+        data: supplierUserIds.map(userId => ({
+          userId,
+          title: "New sample request",
+          body: `Buyer requested a ${input.sampleType} (${input.quantity || "5 pcs"}) for order ${order.poNumber}.`,
+        })),
+      });
+      supplierUserIds.forEach(userId => emitToUser(userId, "notification:new", { title: "New sample request", orderId: order.id, sampleId: sample.id }));
+    }
+    const adminMembers = await prisma.organizationMember.findMany({
+      where: { role: "ADMIN", isActive: true },
+      select: { userId: true },
+    });
+    const adminUserIds = [...new Set(adminMembers.map(member => member.userId))];
+    if (adminUserIds.length) {
+      await prisma.notification.createMany({
+        data: adminUserIds.map(userId => ({
+          userId,
+          title: "New sample request",
+          body: `A buyer requested a ${input.sampleType} for purchase order ${order.poNumber}.`,
+        })),
+      });
+      adminUserIds.forEach(userId => emitToUser(userId, "notification:new", { title: "New sample request", orderId: order.id, sampleId: sample.id }));
+    }
+
     emitToOrg(order.buyerOrgId, "sample:created", { orderId: order.id, sampleId: sample.id });
     emitToOrg(order.supplierOrgId, "sample:created", { orderId: order.id, sampleId: sample.id });
+    emitToRole("ADMIN", "sample:created", { orderId: order.id, sampleId: sample.id });
 
-    return sendOk(res, sample, 201);
+    return sendOk(res, { ...sample, parsedMeta: initialMeta, photos: [], files: [] }, 201);
   } catch (e) { next(e); }
 }
 
 export async function updateSample(req: Request, res: Response, next: NextFunction) {
   try {
+    const fileSchema = z.object({
+      url: z.string().min(1).max(2000),
+      filename: z.string().max(255).optional(),
+      label: z.string().max(100).default("Sample File"),
+      size: z.number().nonnegative().optional(),
+      mimeType: z.string().max(120).optional(),
+    });
     const input = z.object({
       status: z.enum(["REQUESTED", "IN_PROGRESS", "DISPATCHED", "APPROVED", "REJECTED", "REVISION_REQUIRED"]).optional(),
       notes: z.string().max(20000).optional(),
       photos: z.array(z.object({
-        url: z.string(),
-        label: z.string().default("Sample Photo")
-      })).optional(),
+        url: z.string().min(1).max(2000),
+        label: z.string().max(100).default("Sample Photo")
+      })).max(30).optional(),
+      files: z.array(fileSchema).max(30).optional(),
+      supplierNote: z.string().max(5000).optional(),
       feedback: z.string().max(5000).optional()
     }).parse(req.body);
 
@@ -123,8 +219,8 @@ export async function updateSample(req: Request, res: Response, next: NextFuncti
         isActive: true
       }
     });
-    const supplier = memberships.some(m => m.role === "SUPPLIER" && m.organizationId === sample.purchaseOrder.supplierOrgId);
-    const buyer = memberships.some(m => m.role === "BUYER" && m.organizationId === sample.purchaseOrder.buyerOrgId);
+    const supplier = req.auth!.role === "SUPPLIER" && memberships.some(m => m.role === "SUPPLIER" && m.organizationId === sample.purchaseOrder.supplierOrgId);
+    const buyer = req.auth!.role === "BUYER" && memberships.some(m => m.role === "BUYER" && m.organizationId === sample.purchaseOrder.buyerOrgId);
     if (!supplier && !buyer) throw new AppError(403, "Sample access denied");
 
     if (input.status) {
@@ -135,8 +231,10 @@ export async function updateSample(req: Request, res: Response, next: NextFuncti
         throw new AppError(403, "Only buyer can approve, reject or request revisions on a sample");
       }
     }
+    if ((input.photos !== undefined || input.files !== undefined || input.supplierNote !== undefined) && !supplier) {
+      throw new AppError(403, "Only supplier can upload sample attachments or update the supplier note");
+    }
 
-    // Parse existing structured notes or fallback to plain text
     let existingMeta: any = {};
     if (sample.notes) {
       try {
@@ -146,69 +244,99 @@ export async function updateSample(req: Request, res: Response, next: NextFuncti
       }
     }
 
-    const updatedMeta = {
+    const now = new Date().toISOString();
+    const newStatus = input.status || sample.status;
+    const statusChanged = newStatus !== sample.status;
+    const updatedMeta: any = {
       ...existingMeta,
       description: input.notes !== undefined ? input.notes : existingMeta.description,
       photos: input.photos !== undefined ? input.photos : (existingMeta.photos || []),
+      files: input.files !== undefined ? input.files : (existingMeta.files || []),
+      supplierNote: input.supplierNote !== undefined ? input.supplierNote : (existingMeta.supplierNote || ""),
       buyerFeedback: input.feedback !== undefined ? input.feedback : existingMeta.buyerFeedback,
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
       lastUpdatedBy: req.auth!.userId,
+      history: [
+        ...(Array.isArray(existingMeta.history) ? existingMeta.history : []),
+        {
+          action: statusChanged ? `Sample status changed to ${newStatus}` : (input.feedback ? "Buyer feedback added" : input.supplierNote ? "Supplier note updated" : input.photos || input.files ? "Sample attachments updated" : "Sample details updated"),
+          status: newStatus,
+          note: input.feedback || input.supplierNote || input.notes || "",
+          createdAt: now,
+          actorUserId: req.auth!.userId,
+          actorRole: supplier ? "SUPPLIER" : "BUYER",
+        },
+      ],
     };
 
-    const newStatus = input.status || sample.status;
-    const updated = await prisma.sample.update({
-      where: { id: sample.id },
-      data: {
-        status: newStatus,
-        notes: JSON.stringify(updatedMeta)
-      }
-    });
-
-    // Notify every active buyer member once the supplier submits the sample to the buyer.
-    if (supplier && newStatus === "DISPATCHED" && (updatedMeta.photos || []).length > 0 && !existingMeta.sampleSubmittedAt) {
-      const buyerMembers = await prisma.organizationMember.findMany({
-        where: {
-          organizationId: sample.purchaseOrder.buyerOrgId,
-          role: "BUYER",
-          isActive: true,
-        },
-        select: { userId: true },
-      });
-      const buyerUserIds = [...new Set(buyerMembers.map((member) => member.userId))];
-      if (buyerUserIds.length > 0) {
-        await prisma.notification.createMany({
-          data: buyerUserIds.map((userId) => ({
-            userId,
-            title: "Sample received",
-            body: `Your supplier has submitted sample photos for order ${sample.purchaseOrder.poNumber}.`,
-          })),
-        });
-      }
-      updatedMeta.sampleSubmittedAt = new Date().toISOString();
-      await prisma.sample.update({
-        where: { id: sample.id },
-        data: { notes: JSON.stringify(updatedMeta) },
-      });
+    if (supplier && newStatus === "DISPATCHED" && (updatedMeta.photos || []).length === 0) {
+      throw new AppError(400, "Upload at least one sample photo before submitting the sample to the buyer.");
+    }
+    if (supplier && newStatus === "DISPATCHED" && !existingMeta.sampleSubmittedAt) {
+      updatedMeta.sampleSubmittedAt = now;
     }
 
-    // Record in order event timeline
+    const updated = await prisma.sample.update({
+      where: { id: sample.id },
+      data: { status: newStatus, notes: JSON.stringify(updatedMeta) }
+    });
+
     await prisma.orderEvent.create({
       data: {
         purchaseOrderId: sample.purchaseOrderId,
-        eventType: `SAMPLE_${newStatus}`,
-        note: input.feedback || input.notes || (newStatus === "APPROVED" ? "Sample approved by buyer" : "Sample updated"),
+        eventType: statusChanged ? `SAMPLE_${newStatus}` : "SAMPLE_UPDATED",
+        note: `Sample ${sample.id}: ${input.feedback || input.supplierNote || input.notes || (input.photos || input.files ? "Sample attachments updated" : newStatus === "APPROVED" ? "Sample approved by buyer" : "Sample updated")}`,
         actorUserId: req.auth!.userId
       }
     }).catch(() => {});
 
+    const shouldNotifyPartner = statusChanged || input.supplierNote !== undefined || input.photos !== undefined || input.files !== undefined;
+    if (shouldNotifyPartner) {
+      const recipientRole = supplier ? "BUYER" : "SUPPLIER";
+      const recipientOrgId = supplier ? sample.purchaseOrder.buyerOrgId : sample.purchaseOrder.supplierOrgId;
+      const recipients = await prisma.organizationMember.findMany({
+        where: { organizationId: recipientOrgId, role: recipientRole, isActive: true },
+        select: { userId: true },
+      });
+      const recipientIds = [...new Set(recipients.map(member => member.userId))];
+      const title = supplier
+        ? (newStatus === "DISPATCHED" ? "Sample received" : statusChanged ? "Sample updated by supplier" : "Supplier added sample update")
+        : (newStatus === "APPROVED" ? "Sample approved" : newStatus === "REVISION_REQUIRED" ? "Changes requested on sample" : "Sample rejected");
+      const body = supplier
+        ? (newStatus === "DISPATCHED"
+          ? `Your supplier has submitted sample ${sample.id} for order ${sample.purchaseOrder.poNumber}.`
+          : statusChanged
+            ? `Supplier updated the sample for order ${sample.purchaseOrder.poNumber}: ${newStatus.replaceAll("_", " ").toLowerCase()}.`
+            : `Supplier added sample photos or notes for order ${sample.purchaseOrder.poNumber}.`)
+        : `Buyer updated the sample for order ${sample.purchaseOrder.poNumber}: ${newStatus.replaceAll("_", " ").toLowerCase()}.`;
+      if (recipientIds.length) {
+        await prisma.notification.createMany({ data: recipientIds.map(userId => ({ userId, title, body })) });
+        recipientIds.forEach(userId => emitToUser(userId, "notification:new", { title, orderId: sample.purchaseOrderId, sampleId: sample.id }));
+      }
+      const adminMembers = await prisma.organizationMember.findMany({
+        where: { role: "ADMIN", isActive: true },
+        select: { userId: true },
+      });
+      const adminUserIds = [...new Set(adminMembers.map(member => member.userId))];
+      if (adminUserIds.length) {
+        const adminTitle = "Sample workflow updated";
+        const adminBody = `Sample ${sample.id} on PO ${sample.purchaseOrder.poNumber} changed to ${newStatus.replaceAll("_", " ")}.`;
+        await prisma.notification.createMany({ data: adminUserIds.map(userId => ({ userId, title: adminTitle, body: adminBody })) });
+        adminUserIds.forEach(userId => emitToUser(userId, "notification:new", { title: adminTitle, orderId: sample.purchaseOrderId, sampleId: sample.id }));
+      }
+    }
+
     await audit("SAMPLE_STATUS_UPDATED", "Sample", sample.id, req.auth!.userId);
-    emitToOrg(sample.purchaseOrder.buyerOrgId, "sample:updated", { orderId: sample.purchaseOrderId, sampleId: sample.id, status: newStatus });
-    emitToOrg(sample.purchaseOrder.supplierOrgId, "sample:updated", { orderId: sample.purchaseOrderId, sampleId: sample.id, status: newStatus });
+    const eventPayload = { orderId: sample.purchaseOrderId, sampleId: sample.id, status: newStatus };
+    emitToOrg(sample.purchaseOrder.buyerOrgId, "sample:updated", eventPayload);
+    emitToOrg(sample.purchaseOrder.supplierOrgId, "sample:updated", eventPayload);
+    emitToRole("ADMIN", "sample:updated", eventPayload);
     return sendOk(res, {
       ...updated,
       parsedNotes: updatedMeta,
       photos: updatedMeta.photos || [],
-      buyerFeedback: updatedMeta.buyerFeedback
+      files: updatedMeta.files || [],
+      buyerFeedback: updatedMeta.buyerFeedback,
     });
   } catch (e) { next(e); }
 }
@@ -333,6 +461,16 @@ export async function listConversations(req: Request, res: Response, next: NextF
 export async function getConversationMessages(req: Request, res: Response, next: NextFunction) {
   try {
     const convId = Array.isArray(req.params.conversationId) ? req.params.conversationId[0] : req.params.conversationId;
+    const conversation = await prisma.conversation.findUnique({ where: { id: convId } });
+    if (!conversation) throw new AppError(404, "Conversation not found");
+    const member = await prisma.organizationMember.findFirst({
+      where: {
+        userId: req.auth!.userId,
+        organizationId: { in: [conversation.buyerOrgId, conversation.supplierOrgId] },
+        isActive: true
+      }
+    });
+    if (!member) throw new AppError(403, "Conversation access denied");
     const messages = await prisma.message.findMany({
       where: { conversationId: convId },
       orderBy: { createdAt: "asc" }
@@ -356,17 +494,20 @@ export async function getConversationMessages(req: Request, res: Response, next:
 
 export async function listSamples(req: Request, res: Response, next: NextFunction) {
   try {
-    const memberships = await prisma.organizationMember.findMany({ where: { userId: req.auth!.userId, isActive: true } });
-    const orgIds = memberships.map(m => m.organizationId);
+    const activeRole = req.auth!.role;
+    if (activeRole !== "BUYER" && activeRole !== "SUPPLIER") return sendOk(res, []);
+    const memberships = await prisma.organizationMember.findMany({
+      where: { userId: req.auth!.userId, isActive: true, role: activeRole }
+    });
+    const buyerOrgIds = activeRole === "BUYER" ? [...new Set(memberships.map(m => m.organizationId))] : [];
+    const supplierOrgIds = activeRole === "SUPPLIER" ? [...new Set(memberships.map(m => m.organizationId))] : [];
+    const accessFilters: any[] = [];
+    if (buyerOrgIds.length) accessFilters.push({ buyerOrgId: { in: buyerOrgIds } });
+    if (supplierOrgIds.length) accessFilters.push({ supplierOrgId: { in: supplierOrgIds } });
+    if (!accessFilters.length) return sendOk(res, []);
+
     const samples = await prisma.sample.findMany({
-      where: {
-        purchaseOrder: {
-          OR: [
-            { buyerOrgId: { in: orgIds } },
-            { supplierOrgId: { in: orgIds } }
-          ]
-        }
-      },
+      where: { purchaseOrder: { OR: accessFilters } },
       include: {
         purchaseOrder: {
           include: {
@@ -381,29 +522,34 @@ export async function listSamples(req: Request, res: Response, next: NextFunctio
 
     const mappedSamples = samples.map(s => {
       let parsedMeta: any = null;
-      let photos: any[] = [];
-      let buyerFeedback: string | null = null;
       let description: string = s.notes || "";
-
       if (s.notes) {
         try {
           parsedMeta = JSON.parse(s.notes);
           if (parsedMeta && typeof parsedMeta === "object") {
-            photos = Array.isArray(parsedMeta.photos) ? parsedMeta.photos : [];
-            buyerFeedback = parsedMeta.buyerFeedback || null;
             description = parsedMeta.description || "";
           }
         } catch {
+          parsedMeta = { description: s.notes, photos: [], files: [], history: [] };
           description = s.notes;
         }
       }
-
+      parsedMeta = parsedMeta || {};
+      const photos = Array.isArray(parsedMeta.photos) ? parsedMeta.photos : [];
+      const files = Array.isArray(parsedMeta.files) ? parsedMeta.files : [];
       return {
         ...s,
         notes: description,
+        description,
+        sampleType: parsedMeta.sampleType || "Final Sample",
+        sampleName: parsedMeta.sampleName || s.purchaseOrder.items?.[0]?.name || "Apparel Sample",
+        quantity: parsedMeta.quantity || "5 pcs",
+        supplierNote: parsedMeta.supplierNote || "",
         photos,
-        buyerFeedback,
-        parsedMeta
+        files,
+        buyerFeedback: parsedMeta.buyerFeedback || null,
+        history: Array.isArray(parsedMeta.history) ? parsedMeta.history : [],
+        parsedMeta,
       };
     });
 

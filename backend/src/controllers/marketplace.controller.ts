@@ -333,6 +333,23 @@ export async function upsertSupplierProfile(req: Request, res: Response, next: N
   } catch (e) { next(e); }
 }
 
+export async function getOrganizationProfile(req: Request, res: Response, next: NextFunction) {
+  try {
+    const organizationId = String(req.query.organizationId || "");
+    if (!organizationId) throw new AppError(400, "Organization ID is required");
+    const membership = await prisma.organizationMember.findFirst({
+      where: { userId: req.auth!.userId, organizationId, isActive: true }
+    });
+    if (!membership) throw new AppError(403, "Membership in organization required");
+    const organization = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      include: { supplierProfile: { include: { categories: true } } }
+    });
+    if (!organization) throw new AppError(404, "Organization not found");
+    return sendOk(res, organization);
+  } catch (e) { next(e); }
+}
+
 export async function updateOrganizationProfile(req: Request, res: Response, next: NextFunction) {
   try {
     const input = z.object({
@@ -1063,6 +1080,7 @@ export async function listAdminOrganizations(_req: Request, res: Response, next:
             categories: true
           }
         },
+        supplierPaymentProfile: { select: { status: true, kycStatus: true, settlementStatus: true } },
         _count: {
           select: {
             buyerOrders: true,

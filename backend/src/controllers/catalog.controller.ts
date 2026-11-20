@@ -4,6 +4,23 @@ import { prisma } from "../config/prisma";
 import { AppError, sendOk } from "../utils/http";
 import { audit } from "../services/audit";
 
+export async function listMyCatalogItems(req: Request, res: Response, next: NextFunction) {
+  try {
+    const organizationId = String(req.query.organizationId || "");
+    if (!organizationId) throw new AppError(400, "Organization ID is required");
+    const membership = await prisma.organizationMember.findFirst({
+      where: { userId: req.auth!.userId, organizationId, role: "SUPPLIER", isActive: true },
+      select: { id: true }
+    });
+    if (!membership) throw new AppError(403, "Active supplier membership required");
+    const profile = await prisma.supplierProfile.findUnique({
+      where: { organizationId },
+      include: { catalogItems: { orderBy: { createdAt: "desc" } } }
+    });
+    return sendOk(res, profile?.catalogItems ?? []);
+  } catch (error) { next(error); }
+}
+
 export async function createCatalogItem(req: Request, res: Response, next: NextFunction) {
   try {
     const input = z.object({

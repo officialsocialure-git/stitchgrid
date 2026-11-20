@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { authenticate, optionalAuthenticate, requireRole } from "../middleware/auth";
-import { createCatalogItem } from "../controllers/catalog.controller";
+import { createCatalogItem, listMyCatalogItems } from "../controllers/catalog.controller";
 import {
   adminVerification, createPurchaseOrder, createRfq, deleteRfq, getPurchaseOrderDetails,
   getRfqDetails, inviteSupplier, listAdminOrganizations, listMyRfqs, listPurchaseOrders,
   submitQuote, supplierSearch, updateOrderStatus, upsertSupplierProfile,
-  updateOrganizationProfile, updateQuotationStatus
+  getOrganizationProfile, updateOrganizationProfile, updateQuotationStatus
 } from "../controllers/marketplace.controller";
 const router = Router();
 
@@ -15,7 +15,9 @@ router.get("/suppliers", optionalAuthenticate, supplierSearch);
 // Protected routes below
 router.use(authenticate);
 router.put("/supplier-profile", upsertSupplierProfile);
+router.get("/catalog-items", listMyCatalogItems);
 router.post("/catalog-items", createCatalogItem);
+router.get("/organization-profile", getOrganizationProfile);
 router.put("/organization-profile", updateOrganizationProfile);
 router.post("/rfqs", createRfq);
 router.get("/rfqs", listMyRfqs);

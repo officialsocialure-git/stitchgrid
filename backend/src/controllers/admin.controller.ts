@@ -38,6 +38,7 @@ export async function adminOrganizationDetails(req: Request, res: Response, next
       include: {
         members: { include: { user: { select: { id: true, fullName: true, email: true, phone: true, isActive: true } } } },
         supplierProfile: { include: { categories: true, catalogItems: true } },
+        supplierPaymentProfile: { select: { status: true, kycStatus: true, settlementStatus: true, accountHolderName: true, bankName: true, bankAccountLast4: true, ifscMasked: true, rejectionReason: true, submittedAt: true, verifiedAt: true } },
         _count: { select: { rfqs: true, buyerOrders: true, supplierOrders: true } }
       }
     });
@@ -208,7 +209,7 @@ export async function adminOrders(req: Request, res: Response, next: NextFunctio
       { supplier: { name: { contains: parsed.q } } }
     ];
     if (parsed.status && parsed.status !== "ALL") {
-      if (parsed.status === "SAMPLE") where.status = { in: ["SAMPLE_PENDING", "SAMPLE_APPROVED"] };
+      if (parsed.status === "SAMPLE") where.samples = { some: {} };
       else if (parsed.status === "PRODUCTION") where.status = { in: ["PRODUCTION_STARTED", "IN_PRODUCTION"] };
       else if (parsed.status === "QC") where.status = { in: ["QC_PENDING", "QC"] };
       else if (parsed.status === "PENDING") where.status = { in: ["PO_CREATED", "PENDING_ACCEPTANCE", "ACCEPTED"] };
@@ -238,7 +239,7 @@ export async function adminOrders(req: Request, res: Response, next: NextFunctio
       prisma.purchaseOrder.count({ where }),
       prisma.purchaseOrder.count(),
       prisma.purchaseOrder.count({ where: { status: { in: ["PO_CREATED", "PENDING_ACCEPTANCE", "ACCEPTED"] } } }),
-      prisma.purchaseOrder.count({ where: { status: { in: ["SAMPLE_PENDING", "SAMPLE_APPROVED"] } } }),
+      prisma.purchaseOrder.count({ where: { samples: { some: {} } } }),
       prisma.purchaseOrder.count({ where: { status: { in: ["PRODUCTION_STARTED", "IN_PRODUCTION"] } } }),
       prisma.purchaseOrder.count({ where: { status: { in: ["QC_PENDING", "QC"] } } }),
       prisma.purchaseOrder.count({ where: { status: "DISPATCHED" } }),

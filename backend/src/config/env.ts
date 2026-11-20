@@ -14,6 +14,9 @@ const schema = z.object({
   OTP_MAX_ATTEMPTS: z.coerce.number().default(5),
   CLIENT_ORIGIN: z.string().default("https://stitchgrid-three.vercel.app,http://localhost:3000"),
   REDIS_URL: z.string().optional(),
+  CLOUDINARY_CLOUD_NAME: z.string().optional(),
+  CLOUDINARY_API_KEY: z.string().optional(),
+  CLOUDINARY_API_SECRET: z.string().optional(),
   // Resend Email API (HTTPS)
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM: z.string().default("STITCHGRID <onboarding@resend.dev>"),
