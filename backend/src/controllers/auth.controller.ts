@@ -414,9 +414,11 @@ export async function googleLogin(req: Request, res: Response, next: NextFunctio
     };
     const validIssuer =
       profile.iss === "accounts.google.com" || profile.iss === "https://accounts.google.com";
+    // GOOGLE_CLIENT_ID accepts a comma-separated allowlist of Web, Android and iOS OAuth client IDs.
+    const allowedClientIds = env.GOOGLE_CLIENT_ID.split(",").map((id) => id.trim()).filter(Boolean);
     const expiresAt = Number(profile.exp || 0);
     if (
-      profile.aud !== env.GOOGLE_CLIENT_ID ||
+      !profile.aud || !allowedClientIds.includes(profile.aud) ||
       !validIssuer ||
       !profile.sub ||
       !profile.email ||
