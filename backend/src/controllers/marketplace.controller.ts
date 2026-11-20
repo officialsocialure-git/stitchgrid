@@ -863,6 +863,14 @@ export async function getPurchaseOrderDetails(req: Request, res: Response, next:
       }
     });
     if (!order) throw new AppError(404, "Order not found");
+    const membership = await prisma.organizationMember.findFirst({
+      where: {
+        userId: req.auth!.userId,
+        isActive: true,
+        organizationId: { in: [order.buyerOrgId, order.supplierOrgId] }
+      }
+    });
+    if (!membership && req.auth!.role !== "ADMIN") throw new AppError(403, "Order membership required");
     return sendOk(res, order);
   } catch (e) { next(e); }
 }
@@ -1058,7 +1066,14 @@ export async function updateOrderStatus(req: Request, res: Response, next: NextF
     });
     if (!supplier && !buyer) throw new AppError(403, "Order membership required");
 
-    // Strictly separate actions: Only Supplier can accept a PO_CREATED / PENDING_ACCEPTANCE order
+    const supplierStatuses = ["ACCEPTED", "SAMPLE_PENDING", "PRODUCTION_STARTED", "IN_PRODUCTION", "QC_PENDING", "QC", "READY_TO_DISPATCH", "DISPATCHED"];
+    const buyerStatuses = ["SAMPLE_APPROVED", "DELIVERED", "COMPLETED"];
+    if (supplier && !buyer && !supplierStatuses.includes(input.status) && input.status !== "CANCELLED") {
+      throw new AppError(403, "This order status can only be updated by the buyer");
+    }
+    if (buyer && !supplier && !buyerStatuses.includes(input.status) && input.status !== "CANCELLED") {
+      throw new AppError(403, "This order status can only be updated by the supplier");
+    }
     if (input.status === "ACCEPTED" && !supplier) {
       throw new AppError(403, "Only the supplier can accept the purchase order");
     }
@@ -1125,6 +1140,7 @@ export async function updateOrderStatus(req: Request, res: Response, next: NextF
     await audit("ORDER_STATUS_UPDATED", "PurchaseOrder", order.id, req.auth!.userId, supplier ? order.supplierOrgId : order.buyerOrgId);
     emitToOrg(order.buyerOrgId, "order:updated", { orderId: order.id, status: input.status });
     emitToOrg(order.supplierOrgId, "order:updated", { orderId: order.id, status: input.status });
+    emitToRole("ADMIN", "order:updated", { orderId: order.id, status: input.status });
     return sendOk(res, updated);
   } catch (e) { next(e); }
 }

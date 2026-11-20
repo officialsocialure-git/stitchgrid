@@ -352,6 +352,7 @@ export async function updateMilestone(req: Request, res: Response, next: NextFun
     await prisma.orderEvent.create({ data: { purchaseOrderId: milestone.purchaseOrderId, eventType: "MILESTONE_" + input.status, note: milestone.title, actorUserId: req.auth!.userId } });
     emitToOrg(milestone.purchaseOrder.buyerOrgId, "milestone:updated", { orderId: milestone.purchaseOrderId, milestoneId: milestone.id, status: input.status });
     emitToOrg(milestone.purchaseOrder.supplierOrgId, "milestone:updated", { orderId: milestone.purchaseOrderId, milestoneId: milestone.id, status: input.status });
+    emitToRole("ADMIN", "milestone:updated", { orderId: milestone.purchaseOrderId, milestoneId: milestone.id, status: input.status });
     return sendOk(res, updated);
   } catch (e) { next(e); }
 }
