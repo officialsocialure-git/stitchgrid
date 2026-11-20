@@ -96,7 +96,7 @@ export default function SamplesPage() {
           let category: FilterTab = "New Samples";
           if (s.status === "APPROVED") category = "Approved";
           else if (s.status === "REVISION_REQUIRED" || s.status === "REJECTED") category = "Changes Needed";
-          else if (s.status === "IN_PROGRESS") category = "Checking";
+          else if (s.status === "DISPATCHED") category = "Checking";
           else category = "New Samples";
 
           const rawDate = new Date(s.createdAt || Date.now());

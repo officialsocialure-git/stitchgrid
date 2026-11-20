@@ -26,7 +26,6 @@ interface MessageItem {
 export default function MessagesPage() {
   const { user, membership } = useAuth();
   const isSupplier = membership?.role === "SUPPLIER";
-  const isBuyer = membership?.role === "BUYER";
   const [conversations, setConversations] = useState<ConvItem[]>([]);
   const [activeChatId, setActiveChatId] = useState<string>("");
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
@@ -62,7 +61,7 @@ export default function MessagesPage() {
     } finally {
       setLoadingConv(false);
     }
-  }, []);
+  }, [isSupplier]);
 
   const loadMessages = useCallback(async (convId: string) => {
     if (!convId) {
@@ -149,8 +148,8 @@ export default function MessagesPage() {
 
   return (
     <div className="h-[calc(100dvh-8rem)] min-h-0 max-w-7xl mx-auto flex rounded-2xl bg-surface-container-lowest border border-outline-variant/30 shadow-sm overflow-hidden">
-      {/* Conversation list: mobile buyer sees this until a conversation is opened. */}
-      <div className={`w-full md:w-80 border-r border-surface-container-high flex flex-col shrink-0 ${isBuyer && isMobileChatOpen ? "hidden md:flex" : "flex"}`}>
+      {/* Mobile shows the conversation list first for both Buyer and Supplier. */}
+      <div className={`w-full md:w-80 border-r border-surface-container-high flex flex-col shrink-0 ${isMobileChatOpen ? "hidden md:flex" : "flex"}`}>
         <div className="p-4 border-b border-surface-container-high">
           <h2 className="font-bold text-lg sm:text-xl text-on-surface leading-[1.2]">
             {isSupplier ? "Factory Communications" : "Chat"}
@@ -172,7 +171,7 @@ export default function MessagesPage() {
                 key={c.id}
                 onClick={() => {
                   setActiveChatId(c.id);
-                  if (isBuyer) setIsMobileChatOpen(true);
+                  setIsMobileChatOpen(true);
                 }}
                 className={`w-full p-4 text-left flex items-start gap-3 transition-colors ${
                   activeChatId === c.id ? "bg-surface-container-low" : "hover:bg-surface-container-lowest"
@@ -194,23 +193,21 @@ export default function MessagesPage() {
         </div>
       </div>
 
-      {/* Chat View: buyer mobile opens this only after selecting a conversation. */}
-      <div className={`min-w-0 flex-1 flex flex-col ${isBuyer && !isMobileChatOpen ? "hidden md:flex" : "flex"}`}>
+      {/* Chat view opens full-screen on mobile after selecting a conversation. */
+      <div className={`min-w-0 flex-1 flex flex-col ${!isMobileChatOpen ? "hidden md:flex" : "flex"}`}>
         {activeChat ? (
           <>
             {/* Header */}
             <div className="p-3 sm:p-4 border-b border-surface-container-high flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-                {isBuyer && (
-                  <button
+                <button
                     type="button"
                     aria-label="Back to conversations"
                     onClick={() => setIsMobileChatOpen(false)}
                     className="md:hidden h-9 w-9 shrink-0 rounded-full flex items-center justify-center text-primary hover:bg-primary-fixed"
                   >
                     <span className="material-symbols-outlined">arrow_back</span>
-                  </button>
-                )}
+                </button>
                 <div className="w-9 h-9 rounded-xl bg-primary-fixed text-primary font-bold flex items-center justify-center shrink-0">
                   {activeChat.name[0]}
                 </div>

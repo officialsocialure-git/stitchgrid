@@ -128,7 +128,7 @@ export default function OrdersPage() {
 
   const refresh = useCallback(() => setRefreshKey((v) => v + 1), []);
   useRealtimeSync({
-    topics: ["orders", "payments", "production", "sample:created", "sample:updated", "admin:stats_updated"],
+    topics: ["orders", "order:created", "order:updated", "milestone:updated", "payments", "production", "sample:created", "sample:updated", "admin:stats_updated"],
     onSync: refresh,
     pollIntervalMs: 30000,
     enabled: true,
