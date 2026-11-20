@@ -102,8 +102,14 @@ export const marketplaceService = {
     return api.get<any[]>("/samples");
   },
 
-  createSample: async (orderId: string, notes?: string, sampleType?: string) => {
-    return api.post(`/orders/${orderId}/samples`, { notes, sampleType });
+  createSample: async (
+    orderId: string,
+    notes?: string,
+    sampleType?: string,
+    sampleName?: string,
+    quantity?: string
+  ) => {
+    return api.post(`/orders/${orderId}/samples`, { notes, sampleType, sampleName, quantity });
   },
 
   updateSample: async (
@@ -112,6 +118,7 @@ export const marketplaceService = {
     options?:
       | {
           notes?: string;
+          supplierNote?: string;
           photos?: { url: string; label: string }[];
           feedback?: string;
         }
@@ -123,6 +130,7 @@ export const marketplaceService = {
       payload.notes = options;
     } else if (options && typeof options === "object") {
       if (options.notes !== undefined) payload.notes = options.notes;
+      if (options.supplierNote !== undefined) payload.supplierNote = options.supplierNote;
       if (options.photos !== undefined) payload.photos = options.photos;
       if (options.feedback !== undefined) payload.feedback = options.feedback;
     }

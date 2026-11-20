@@ -57,7 +57,7 @@ export default function AdminRfqsPage() {
 
   const refresh = useCallback(() => setRefreshKey((v) => v + 1), []);
   useRealtimeSync({
-    topics: ["rfqs", "quotations", "admin:stats_updated"],
+    topics: ["rfq:created", "rfq:updated", "quotation:created", "quotation:updated", "order:created", "admin:stats_updated"],
     onSync: refresh,
     pollIntervalMs: 30000,
     enabled: true,

@@ -70,9 +70,13 @@ export function RequestSampleModal({
       setSubmitting(true);
       setError(null);
 
-      // Format notes with sample type and quantity
-      const formattedNotes = `${sampleType} (${quantity}) - ${sampleName}. ${notes.trim()}`;
-      await marketplaceService.createSample(selectedOrderId, formattedNotes);
+      await marketplaceService.createSample(
+        selectedOrderId,
+        notes.trim(),
+        sampleType,
+        sampleName.trim(),
+        quantity.trim()
+      );
 
       onSuccess();
       onClose();

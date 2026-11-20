@@ -128,7 +128,7 @@ export default function OrdersPage() {
 
   const refresh = useCallback(() => setRefreshKey((v) => v + 1), []);
   useRealtimeSync({
-    topics: ["orders", "payments", "production", "admin:stats_updated"],
+    topics: ["orders", "payments", "production", "sample:created", "sample:updated", "admin:stats_updated"],
     onSync: refresh,
     pollIntervalMs: 30000,
     enabled: true,
@@ -723,6 +723,40 @@ export default function OrdersPage() {
                   </div>
                 ) : (
                   <p className="text-slate-400 text-xs italic">No specific milestone stages registered.</p>
+                )}
+              </div>
+
+              <div>
+                <h4 className="font-bold text-slate-900 mb-2">Samples & Approvals</h4>
+                {activeOrder.samples && activeOrder.samples.length > 0 ? (
+                  <div className="space-y-2">
+                    {activeOrder.samples.map((sample, idx) => {
+                      let meta: any = {};
+                      try { meta = sample.notes ? JSON.parse(sample.notes) : {}; }
+                      catch { meta = { description: sample.notes || "" }; }
+                      return (
+                        <div key={sample.id || idx} className="rounded-xl border border-slate-200 bg-[#FAF9FD] p-3 space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-bold text-slate-900">{meta.sampleName || activeOrder.items?.[0]?.name || "Apparel Sample"}</span>
+                            <span className="rounded-full bg-[#EBE4FF] px-2 py-1 text-[10px] font-bold text-[#5B13EC]">{sample.status}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600">
+                            <span>Type: <strong className="text-slate-800">{meta.sampleType || "Final Sample"}</strong></span>
+                            <span>Quantity: <strong className="text-slate-800">{meta.quantity || "5 pcs"}</strong></span>
+                            <span>Requested: <strong className="text-slate-800">{new Date(sample.createdAt).toLocaleDateString("en-IN")}</strong></span>
+                            <span>Photos: <strong className="text-slate-800">{Array.isArray(meta.photos) ? meta.photos.length : 0}</strong></span>
+                          </div>
+                          {meta.description && <p className="text-[11px] leading-4 text-slate-600">Buyer request: {meta.description}</p>}
+                          {meta.supplierNote && <p className="rounded-lg bg-blue-50 p-2 text-[11px] text-blue-800">Supplier note: {meta.supplierNote}</p>}
+                          {meta.buyerFeedback && <p className="rounded-lg bg-rose-50 p-2 text-[11px] text-rose-700">Buyer feedback: {meta.buyerFeedback}</p>}
+                          {Array.isArray(meta.files) && meta.files.length > 0 && <p className="text-[10px] text-slate-500">{meta.files.length} file attachment(s) linked</p>}
+                          {Array.isArray(meta.history) && <p className="text-[10px] text-slate-500">{meta.history.length} sample activity event(s) recorded</p>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-slate-400 text-xs italic">No sample requests registered for this order.</p>
                 )}
               </div>
             </div>

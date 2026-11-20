@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Modal } from "@/components/common/Modal";
+import { SOCKET_SERVER_URL } from "@/constants";
 
 interface SampleDetailsModalProps {
   isOpen: boolean;
@@ -27,11 +28,10 @@ export function SampleDetailsModal({
   if (!sample) return null;
 
   const po = sample.purchaseOrder || {};
-  const supplier = po.supplier || {};
   const item = po.items?.[0] || {};
 
   // Extract clean name
-  let sampleName = item.name || "Apparel Sample";
+  let sampleName = sample.sampleName || sample.parsedMeta?.sampleName || item.name || "Apparel Sample";
   if (sampleName.includes("(Cut, Sew")) {
     sampleName = sampleName.split("(")[0].trim();
   }
@@ -42,8 +42,7 @@ export function SampleDetailsModal({
     else sampleName = "Apparel Production Sample";
   }
 
-  const orderId = po.poNumber ? po.poNumber.replace("SG-", "") : `PO-${sample.purchaseOrderId?.slice(-4) || "6479"}`;
-  const supplierName = supplier.name || "Northstar Apparel Works";
+  const orderId = po.poNumber ? po.poNumber.replace("SG-", "") : sample.purchaseOrderId ? `PO-${sample.purchaseOrderId.slice(-4)}` : "—";
 
   // Derive sample type
   const rawNotes = sample.notes || "";
@@ -53,17 +52,24 @@ export function SampleDetailsModal({
   else if (rawNotes.toLowerCase().includes("lab dip")) sampleType = "Lab Dip";
   else if (rawNotes.toLowerCase().includes("size set")) sampleType = "Size Set";
   else if (rawNotes.toLowerCase().includes("pp") || rawNotes.toLowerCase().includes("pre-production")) sampleType = "Final Sample";
+  sampleType = sample.sampleType || sample.parsedMeta?.sampleType || sampleType;
 
-  const quantity = "5 pcs";
+  const quantity = sample.quantity || sample.parsedMeta?.quantity || "5 pcs";
+  const specifications = sample.parsedMeta?.specifications || {};
+  const sampleFiles = Array.isArray(sample.files)
+    ? sample.files
+    : Array.isArray(sample.parsedMeta?.files) ? sample.parsedMeta.files : [];
+  const techPackFile = sampleFiles.find((file: any) => /tech.?pack/i.test(`${file.label || ""} ${file.filename || ""}`));
   const sentDate = sample.createdAt
     ? new Date(sample.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
-    : "5 Nov 2026";
+    : "—";
 
   // Status mapping
   const status = sample.status;
   const isApproved = status === "APPROVED";
   const isChangesNeeded = status === "REVISION_REQUIRED" || status === "REJECTED";
   const isChecking = status === "IN_PROGRESS";
+  const isDispatched = status === "DISPATCHED";
 
   const statusLabel = isApproved
     ? "Approved"
@@ -71,6 +77,8 @@ export function SampleDetailsModal({
     ? "Changes Needed"
     : isChecking
     ? "Checking"
+    : isDispatched
+    ? "Waiting for Buyer"
     : "New Sample";
 
   const statusBadgeStyle = isApproved
@@ -79,9 +87,11 @@ export function SampleDetailsModal({
     ? "bg-rose-50 text-rose-700 border-rose-200"
     : isChecking
     ? "bg-blue-50 text-blue-700 border-blue-200"
+    : isDispatched
+    ? "bg-purple-50 text-purple-700 border-purple-200"
     : "bg-amber-50 text-amber-800 border-amber-200";
 
-  // Real photos uploaded by supplier (normalized to relative URLs for deployment resilience)
+  // Resolve stored supplier photo URLs against the backend origin.
   const rawPhotos: { url: string; label: string }[] =
     Array.isArray(sample.photos) && sample.photos.length > 0
       ? sample.photos
@@ -91,7 +101,11 @@ export function SampleDetailsModal({
 
   const photosList = rawPhotos.map((p) => ({
     ...p,
-    url: typeof p.url === "string" ? p.url.replace(/^https?:\/\/localhost:\d+/, "") : p.url,
+    url: typeof p.url === "string"
+      ? (/^https?:\/\//i.test(p.url)
+          ? p.url.replace(/^https?:\/\/localhost:\d+/, SOCKET_SERVER_URL)
+          : `${SOCKET_SERVER_URL.replace(/\/$/, "")}${p.url.startsWith("/") ? "" : "/"}${p.url}`)
+      : p.url,
   }));
 
   const currentPhoto = photosList[activeImageIndex] || photosList[0] || null;
@@ -297,19 +311,19 @@ export function SampleDetailsModal({
             <div className="sm:col-span-6 space-y-2 text-xs sm:text-sm">
               <div className="flex items-center justify-between py-1 border-b border-slate-100">
                 <span className="text-slate-500 font-medium">Fabric:</span>
-                <span className="font-bold text-slate-900">100% Combed Cotton Single Jersey</span>
+                <span className="font-bold text-slate-900">{specifications.fabric || "Not provided"}</span>
               </div>
               <div className="flex items-center justify-between py-1 border-b border-slate-100">
                 <span className="text-slate-500 font-medium">Color:</span>
-                <span className="font-bold text-slate-900">Beige</span>
+                <span className="font-bold text-slate-900">{specifications.color || "Not provided"}</span>
               </div>
               <div className="flex items-center justify-between py-1 border-b border-slate-100">
                 <span className="text-slate-500 font-medium">Sizes:</span>
-                <span className="font-bold text-slate-900">S, M, L, XL</span>
+                <span className="font-bold text-slate-900">{specifications.sizes || "Not provided"}</span>
               </div>
               <div className="flex items-center justify-between py-1">
                 <span className="text-slate-500 font-medium">Finish:</span>
-                <span className="font-bold text-slate-900">Bio-wash &amp; Pre-shrunk</span>
+                <span className="font-bold text-slate-900">{specifications.finish || "Not provided"}</span>
               </div>
             </div>
 
@@ -319,27 +333,20 @@ export function SampleDetailsModal({
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-700 block mb-2">
                   Tech Pack
                 </span>
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-slate-200">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="material-symbols-outlined text-[#5B13EC] text-[22px]">
-                      description
-                    </span>
-                    <div className="truncate">
-                      <span className="text-xs font-bold text-slate-900 block truncate">
-                        {sampleName.replace(/\s+/g, "_")}_TechPack.pdf
-                      </span>
-                      <span className="text-[11px] text-slate-500 font-mono">2.4 MB</span>
+                {techPackFile ? (
+                  <a href={techPackFile.url} target="_blank" rel="noreferrer" className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-slate-200">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="material-symbols-outlined text-[#5B13EC] text-[22px]">description</span>
+                      <div className="truncate">
+                        <span className="text-xs font-bold text-slate-900 block truncate">{techPackFile.filename || techPackFile.label}</span>
+                        <span className="text-[11px] text-slate-500 font-mono">{techPackFile.size ? `${(techPackFile.size / 1024 / 1024).toFixed(1)} MB` : "Uploaded file"}</span>
+                      </div>
                     </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => alert(`Downloading Tech Pack for ${sampleName}...`)}
-                    className="p-1.5 rounded-lg text-slate-600 hover:text-[#5B13EC] hover:bg-purple-50 transition-colors"
-                    title="Download Tech Pack"
-                  >
-                    <span className="material-symbols-outlined text-[20px]">download</span>
-                  </button>
-                </div>
+                    <span className="material-symbols-outlined text-[20px] text-slate-600">download</span>
+                  </a>
+                ) : (
+                  <p className="text-xs text-slate-500 rounded-xl border border-dashed border-slate-200 bg-white p-3">No Tech Pack has been uploaded for this sample.</p>
+                )}
               </div>
             </div>
           </div>
@@ -352,8 +359,14 @@ export function SampleDetailsModal({
               Manufacturer &amp; Factory Notes
             </h4>
             <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 text-slate-700 leading-relaxed font-mono">
-              {sample.description || sample.notes || "No additional notes provided by the manufacturer."}
+              {sample.supplierNote || sample.parsedMeta?.supplierNote || "The supplier has not added a note yet."}
             </div>
+            {sample.description && (
+              <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-100 text-blue-900 leading-relaxed">
+                <span className="font-bold block text-xs uppercase mb-1">Buyer Request Notes:</span>
+                <p>{sample.description}</p>
+              </div>
+            )}
 
             {sample.buyerFeedback && (
               <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800">
@@ -367,65 +380,42 @@ export function SampleDetailsModal({
         {/* Tab 3: Files */}
         {activeTab === "files" && (
           <div className="space-y-2 animate-fade-in text-xs sm:text-sm">
-            <div className="p-3 rounded-xl border border-slate-200 bg-white flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-[#5B13EC]">picture_as_pdf</span>
-                <div>
-                  <span className="text-xs font-bold text-slate-900 block">TechPack_Specification_v2.pdf</span>
-                  <span className="text-[11px] text-slate-500">2.4 MB • Complete specs &amp; measurements</span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => alert("Downloading Tech Pack...")}
-                className="p-2 text-slate-600 hover:text-[#5B13EC] rounded-lg hover:bg-slate-50"
-              >
-                <span className="material-symbols-outlined text-[18px]">download</span>
-              </button>
-            </div>
-            <div className="p-3 rounded-xl border border-slate-200 bg-white flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-[#5B13EC]">fact_check</span>
-                <div>
-                  <span className="text-xs font-bold text-slate-900 block">Factory_QC_Inspection_Sheet.pdf</span>
-                  <span className="text-[11px] text-slate-500">1.1 MB • Factory signoff before dispatch</span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => alert("Downloading QC Sheet...")}
-                className="p-2 text-slate-600 hover:text-[#5B13EC] rounded-lg hover:bg-slate-50"
-              >
-                <span className="material-symbols-outlined text-[18px]">download</span>
-              </button>
-            </div>
+            {(Array.isArray(sample.files) ? sample.files : Array.isArray(sample.parsedMeta?.files) ? sample.parsedMeta.files : []).length > 0 ? (
+              (Array.isArray(sample.files) ? sample.files : sample.parsedMeta.files).map((file: any, index: number) => (
+                <a key={file.url || index} href={file.url} target="_blank" rel="noreferrer" className="p-3 rounded-xl border border-slate-200 bg-white flex items-center justify-between hover:border-[#5B13EC]/40">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="material-symbols-outlined text-[#5B13EC]">description</span>
+                    <div className="min-w-0">
+                      <span className="text-xs font-bold text-slate-900 block truncate">{file.filename || file.label || "Sample attachment"}</span>
+                      <span className="text-[11px] text-slate-500">{file.size ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : "Uploaded file"}</span>
+                    </div>
+                  </div>
+                  <span className="material-symbols-outlined text-[18px] text-slate-600">download</span>
+                </a>
+              ))
+            ) : (
+              <p className="p-4 text-center text-xs text-slate-500 rounded-xl border border-dashed border-slate-200">No files have been uploaded for this sample yet.</p>
+            )}
           </div>
         )}
 
         {/* Tab 4: History */}
         {activeTab === "history" && (
           <div className="space-y-3 animate-fade-in py-1">
-            <div className="flex items-start gap-3">
-              <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[12px] font-bold">1</span>
-              <div>
-                <p className="text-xs font-bold text-slate-900">Sample Requested by Buyer</p>
-                <p className="text-[11px] text-slate-500">{sentDate}</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <span className="w-6 h-6 rounded-full bg-purple-100 text-[#5B13EC] flex items-center justify-center text-[12px] font-bold">2</span>
-              <div>
-                <p className="text-xs font-bold text-slate-900">Produced &amp; Dispatched by {supplierName}</p>
-                <p className="text-[11px] text-slate-500">Photos uploaded and submitted for buyer signoff</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[12px] font-bold ${isApproved ? "bg-emerald-100 text-emerald-700" : isChangesNeeded ? "bg-rose-100 text-rose-700" : "bg-blue-100 text-blue-700"}`}>3</span>
-              <div>
-                <p className="text-xs font-bold text-slate-900">{isApproved ? "Approved by Buyer" : isChangesNeeded ? "Changes Requested by Buyer" : "Awaiting Buyer Review"}</p>
-                <p className="text-[11px] text-slate-500">{isApproved ? "Bulk cutting unlocked" : isChangesNeeded ? "Revision in progress" : "Under inspection"}</p>
-              </div>
-            </div>
+            {(Array.isArray(sample.history) ? sample.history : Array.isArray(sample.parsedMeta?.history) ? sample.parsedMeta.history : []).length > 0 ? (
+              [...(Array.isArray(sample.history) ? sample.history : sample.parsedMeta.history)].reverse().map((event: any, index: number) => (
+                <div key={event.createdAt || index} className="flex items-start gap-3">
+                  <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[12px] font-bold">{index + 1}</span>
+                  <div>
+                    <p className="text-xs font-bold text-slate-900">{event.action || event.status || "Sample updated"}</p>
+                    {event.note && <p className="text-[11px] text-slate-600 mt-0.5">{event.note}</p>}
+                    <p className="text-[11px] text-slate-500">{event.createdAt ? new Date(event.createdAt).toLocaleString("en-IN") : "—"}{event.actorRole ? ` • ${event.actorRole}` : ""}</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="p-4 text-center text-xs text-slate-500 rounded-xl border border-dashed border-slate-200">No sample activity has been recorded yet.</p>
+            )}
           </div>
         )}
 

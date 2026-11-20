@@ -114,6 +114,14 @@ export function SupplierSamplesView({
   const selectedSample = useMemo(() => {
     return samples.find((s) => s.id === selectedSampleId) || null;
   }, [samples, selectedSampleId]);
+  const selectedMeta = selectedSample?.rawSample?.parsedMeta || {};
+  const selectedSpecs = selectedMeta.specifications || {};
+  const selectedFiles = Array.isArray(selectedSample?.rawSample?.files)
+    ? selectedSample.rawSample.files
+    : Array.isArray(selectedMeta.files) ? selectedMeta.files : [];
+  const selectedHistory = Array.isArray(selectedSample?.rawSample?.history)
+    ? selectedSample.rawSample.history
+    : Array.isArray(selectedMeta.history) ? selectedMeta.history : [];
 
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
 
@@ -165,10 +173,15 @@ export function SupplierSamplesView({
 
   // Quick Action: Mark Ready on List row
   const handleMarkReady = async (sampleId: string) => {
+    const sampleToSubmit = samples.find((sample) => sample.id === sampleId);
+    if (!sampleToSubmit?.photos?.length) {
+      alert("Upload at least one sample photo before submitting to the buyer.");
+      return;
+    }
     try {
       setSubmittingAction(true);
       await marketplaceService.updateSample(sampleId, "DISPATCHED", {
-        notes: "Sample marked as ready and dispatched to buyer."
+        supplierNote: "Sample marked as ready and dispatched to buyer."
       });
       setActionSuccessMsg("Sample marked as ready and dispatched to buyer!");
       setTimeout(() => setActionSuccessMsg(null), 4000);
@@ -188,7 +201,7 @@ export function SupplierSamplesView({
       setSubmittingAction(true);
       await marketplaceService.updateSample(selectedSample.id, undefined, {
         photos: localPhotos,
-        notes: `Sample draft photos (${localPhotos.length} views) saved.`,
+        supplierNote: `Sample draft photos (${localPhotos.length} views) saved.`,
       });
       setActionSuccessMsg("Draft saved successfully with updated sample photos!");
       setTimeout(() => setActionSuccessMsg(null), 4000);
@@ -206,9 +219,13 @@ export function SupplierSamplesView({
     if (!selectedSample) return;
     try {
       setSubmittingAction(true);
+      if (localPhotos.length === 0) {
+        alert("Upload at least one sample photo before submitting to the buyer.");
+        return;
+      }
       await marketplaceService.updateSample(selectedSample.id, "DISPATCHED", {
         photos: localPhotos,
-        notes: `Sample prototype (${localPhotos.length} photos) submitted to buyer for approval.`,
+        supplierNote: `Sample prototype (${localPhotos.length} photos) submitted to buyer for approval.`,
       });
       setActionSuccessMsg("Sample prototype and photos submitted to buyer for approval!");
       setTimeout(() => setActionSuccessMsg(null), 4000);
@@ -495,7 +512,7 @@ export function SupplierSamplesView({
                       : "text-slate-500 hover:text-slate-800 border-transparent"
                   }`}
                 >
-                  Files (1)
+                  Files ({selectedFiles.length})
                 </button>
 
                 <button
@@ -633,20 +650,20 @@ export function SupplierSamplesView({
                 <h3 className="font-sans font-extrabold text-base text-slate-900">Technical Specifications</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
-                    <span className="text-slate-400 font-medium">Yarn Composition</span>
-                    <p className="font-bold text-slate-800">100% Combed Compact Cotton (32s count)</p>
+                    <span className="text-slate-400 font-medium">Fabric / Yarn Composition</span>
+                    <p className="font-bold text-slate-800">{selectedSpecs.fabric || "Not provided"}</p>
                   </div>
                   <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
                     <span className="text-slate-400 font-medium">Fabric Weight (GSM)</span>
-                    <p className="font-bold text-slate-800">{selectedSample.fabric}</p>
+                    <p className="font-bold text-slate-800">{selectedSpecs.gsm || "Not provided"}</p>
                   </div>
                   <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
                     <span className="text-slate-400 font-medium">Dyeing &amp; Fastness</span>
-                    <p className="font-bold text-slate-800">Reactive Soft Flow Dyeing • Grade 4+ Wash Fastness</p>
+                    <p className="font-bold text-slate-800">{selectedSpecs.dyeing || "Not provided"}</p>
                   </div>
                   <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
                     <span className="text-slate-400 font-medium">Stitching Specs</span>
-                    <p className="font-bold text-slate-800">4-thread overlock seam with neck binding</p>
+                    <p className="font-bold text-slate-800">{selectedSpecs.stitching || "Not provided"}</p>
                   </div>
                 </div>
               </div>
@@ -660,7 +677,7 @@ export function SupplierSamplesView({
                   <p className="leading-relaxed font-medium">
                     &ldquo;{selectedSample.buyerNote}&rdquo;
                   </p>
-                  <span className="text-[11px] text-slate-500 block">Received: 5 Nov 2026</span>
+                  <span className="text-[11px] text-slate-500 block">Received: {selectedSample.rawSample?.createdAt ? new Date(selectedSample.rawSample.createdAt).toLocaleDateString("en-IN") : "—"}</span>
                 </div>
               </div>
             )}
@@ -669,27 +686,20 @@ export function SupplierSamplesView({
             {activeDetailsTab === "FILES" && (
               <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs space-y-3">
                 <h3 className="font-sans font-extrabold text-base text-slate-900">Attached Tech Pack &amp; Files</h3>
-                <div className="p-3 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center font-bold text-xs">
-                      PDF
+                {selectedFiles.length > 0 ? selectedFiles.map((file: any, index: number) => (
+                  <a key={file.url || index} href={file.url} target="_blank" rel="noreferrer" className="p-3 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-between">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-lg bg-purple-100 text-[#5B13EC] flex items-center justify-center font-bold text-xs">
+                        {(file.mimeType || "").includes("pdf") ? "PDF" : "FILE"}
+                      </div>
+                      <div className="min-w-0">
+                        <span className="font-bold text-xs sm:text-sm text-slate-900 block truncate">{file.filename || file.label || "Sample attachment"}</span>
+                        <span className="text-[11px] text-slate-500">{file.size ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : "Uploaded attachment"}</span>
+                      </div>
                     </div>
-                    <div>
-                      <span className="font-bold text-xs sm:text-sm text-slate-900 block">Hoodie_TechPack_v2.pdf</span>
-                      <span className="text-[11px] text-slate-500">2.4 MB • Updated 5 Nov 2026</span>
-                    </div>
-                  </div>
-                  <a
-                    href="#download"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      alert("Tech Pack file ready for download.");
-                    }}
-                    className="p-2 text-slate-500 hover:text-[#5B13EC] hover:bg-white rounded-lg transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[20px]">download</span>
+                    <span className="material-symbols-outlined text-[20px] text-slate-500">download</span>
                   </a>
-                </div>
+                )) : <p className="text-xs text-slate-500 rounded-xl border border-dashed border-slate-200 p-4 text-center">No files have been uploaded for this sample yet.</p>}
               </div>
             )}
 
@@ -697,23 +707,18 @@ export function SupplierSamplesView({
             {activeDetailsTab === "HISTORY" && (
               <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs space-y-3">
                 <h3 className="font-sans font-extrabold text-base text-slate-900">Sample Activity History</h3>
-                <div className="relative pl-6 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200 text-xs">
-                  <div className="relative">
-                    <div className="absolute -left-6 top-0.5 w-4 h-4 rounded-full bg-[#5B13EC] ring-4 ring-purple-100"></div>
-                    <span className="font-bold text-slate-900 block">Sample Requested by Buyer</span>
-                    <span className="text-slate-500 text-[11px]">5 Nov 2026</span>
+                {selectedHistory.length > 0 ? (
+                  <div className="relative pl-6 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200 text-xs">
+                    {[...selectedHistory].reverse().map((event: any, index: number) => (
+                      <div key={event.createdAt || index} className="relative">
+                        <div className="absolute -left-6 top-0.5 w-4 h-4 rounded-full bg-[#5B13EC] ring-4 ring-purple-100"></div>
+                        <span className="font-bold text-slate-900 block">{event.action || event.status || "Sample updated"}</span>
+                        {event.note && <span className="text-slate-600 block mt-1">{event.note}</span>}
+                        <span className="text-slate-500 text-[11px]">{event.createdAt ? new Date(event.createdAt).toLocaleString("en-IN") : "—"}{event.actorRole ? ` • ${event.actorRole}` : ""}</span>
+                      </div>
+                    ))}
                   </div>
-                  <div className="relative">
-                    <div className="absolute -left-6 top-0.5 w-4 h-4 rounded-full bg-slate-300"></div>
-                    <span className="font-bold text-slate-800 block">Factory Fabric Allocated &amp; Knitted</span>
-                    <span className="text-slate-500 text-[11px]">7 Nov 2026</span>
-                  </div>
-                  <div className="relative">
-                    <div className="absolute -left-6 top-0.5 w-4 h-4 rounded-full bg-slate-300"></div>
-                    <span className="font-bold text-slate-800 block">Pre-Production Cut &amp; Sew Initiated</span>
-                    <span className="text-slate-500 text-[11px]">10 Nov 2026</span>
-                  </div>
-                </div>
+                ) : <p className="text-xs text-slate-500 rounded-xl border border-dashed border-slate-200 p-4 text-center">No sample activity has been recorded yet.</p>}
               </div>
             )}
           </div>

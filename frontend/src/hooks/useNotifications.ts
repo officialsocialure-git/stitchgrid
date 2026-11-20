@@ -27,7 +27,7 @@ export function useNotifications() {
   useEffect(() => {
     refresh();
     const unsubscribe = realtime.subscribe(
-      ["notification:new", "order:updated", "sample:updated", "quotation:created"],
+      ["notification:new", "order:updated", "sample:created", "sample:updated", "quotation:created"],
       refresh
     );
     const interval = window.setInterval(refresh, 25000);

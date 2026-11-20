@@ -11,6 +11,7 @@ import {
   SupplierSampleItem,
 } from "@/components/samples/SupplierSamplesView";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
+import { SOCKET_SERVER_URL } from "@/constants";
 
 type FilterTab = "All" | "New Samples" | "Checking" | "Approved" | "Changes Needed";
 
@@ -107,11 +108,11 @@ export default function SamplesPage() {
 
           return {
             id: s.id,
-            sampleName: name,
-            supplierName: supplier.name || "Northstar Apparel Works",
+            sampleName: s.sampleName || s.parsedMeta?.sampleName || name,
+            supplierName: supplier.name || "Supplier",
             orderId: orderNum,
-            sampleType,
-            quantity: "5 pcs",
+            sampleType: s.sampleType || s.parsedMeta?.sampleType || sampleType,
+            quantity: s.quantity || s.parsedMeta?.quantity || "5 pcs",
             sentDate,
             rawDate,
             status: s.status || "REQUESTED",
@@ -291,7 +292,7 @@ export default function SamplesPage() {
       const buyer = po.buyer || {};
       const item = po.items?.[0] || {};
 
-      let name = item.name || "Apparel Sample";
+      let name = s.sampleName || s.parsedMeta?.sampleName || item.name || "Apparel Sample";
       if (name.includes("(Cut, Sew")) name = name.split("(")[0].trim();
       if (!name || name === "Apparel Sample" || name === "Apparel Production Lot") {
         if (s.notes?.includes("Hoodie")) name = "Heavyweight Hoodie";
@@ -324,46 +325,40 @@ export default function SamplesPage() {
             month: "short",
             year: "numeric",
           })
-        : "12 Nov 2026";
+        : "—";
 
-      const fabric = name.includes("Hoodie")
-        ? "French Terry (400 GSM)"
-        : name.includes("T-shirt") || name.includes("Polo")
-        ? "100% Cotton, 180 GSM"
-        : name.includes("Jogger")
-        ? "Cotton Fleece (300 GSM)"
-        : "Cotton Linen";
-
-      const color = name.includes("Hoodie")
-        ? "Navy Blue"
-        : name.includes("T-shirt")
-        ? "Charcoal Grey"
-        : name.includes("Jogger")
-        ? "Olive Green"
-        : "Beige";
+      const specifications = s.parsedMeta?.specifications || {};
+      const fabric = specifications.fabric || "Not provided";
+      const color = specifications.color || "Not provided";
 
       // Real photos parsed from the database
-      const photos = Array.isArray(s.photos) && s.photos.length > 0
+      const rawPhotos = Array.isArray(s.photos) && s.photos.length > 0
         ? s.photos
         : (s.parsedMeta?.photos && Array.isArray(s.parsedMeta.photos) && s.parsedMeta.photos.length > 0
             ? s.parsedMeta.photos
             : []);
+      const photos = rawPhotos.map((photo: any) => ({
+        ...photo,
+        url: typeof photo.url === "string" && !/^https?:\/\//i.test(photo.url)
+          ? `${SOCKET_SERVER_URL.replace(/\/$/, "")}${photo.url.startsWith("/") ? "" : "/"}${photo.url}`
+          : photo.url,
+      }));
 
       return {
         id: s.id,
         productName: name,
-        buyerName: buyer.name || "Enterprise Buyer",
+        buyerName: buyer.name || "Buyer",
         orderId: orderNum,
-        sampleType,
-        quantity: "5 pcs",
+        sampleType: s.sampleType || s.parsedMeta?.sampleType || sampleType,
+        quantity: s.quantity || s.parsedMeta?.quantity || "5 pcs",
         dueDate,
         rawDate,
         status,
         fabric,
         color,
-        sizes: "S, M, L, XL",
-        finish: "Bio-wash & Compacted",
-        buyerNote: s.buyerFeedback || s.notes || "Please check garment dimensions, fabric GSM, and stitching finish.",
+        sizes: specifications.sizes || "Not provided",
+        finish: specifications.finish || "Not provided",
+        buyerNote: s.description || s.notes || "No buyer notes provided.",
         rawSample: s,
         photos,
       };
