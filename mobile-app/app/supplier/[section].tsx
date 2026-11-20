@@ -1,3 +1,4 @@
+import { ui } from '@/theme/ui';
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
@@ -43,15 +44,15 @@ export default function SupplierSectionScreen() {
       <View style={styles.container}>
         <Text style={styles.brand}>STITCHGRID</Text>
         <Text style={styles.title}>{title}</Text>
-        <Text style={styles.note}>This Supplier screen will be built from your next reference image. Your Home dashboard and existing account data remain available.</Text>
+        <Text style={styles.note}>This section is not available in the mobile app yet. Your requests, offers and orders are still available from the workspace.</Text>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F7F8FC', alignItems: 'center', justifyContent: 'center', padding: 28 },
-  brand: { color: '#5B13EC', fontSize: 24, fontWeight: '900' },
-  title: { marginTop: 18, color: '#24212A', fontSize: 20, fontWeight: '800' },
+  container: { flex: 1, backgroundColor: ui.canvas, alignItems: 'center', justifyContent: 'center', padding: 28 },
+  brand: { color: ui.accent, fontSize: 24, fontWeight: '700' },
+  title: { marginTop: 18, color: '#24212A', fontSize: 20, fontWeight: '700' },
   note: { marginTop: 10, color: '#77717D', fontSize: 14, textAlign: 'center', lineHeight: 21 },
 });

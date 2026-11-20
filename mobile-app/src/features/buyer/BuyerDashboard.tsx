@@ -1,3 +1,5 @@
+import { ui } from '@/theme/ui';
+import { AppBottomNav } from '@/components/AppBottomNav';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet,
@@ -11,7 +13,7 @@ import { apiGet } from '@/services/api';
 import CreateRfqModal from '@/features/buyer/CreateRfqModal';
 import { AppHeader } from '@/components/AppHeader';
 
-const PURPLE = '#5314E8';
+const PURPLE = ui.accent;
 const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparent.png';
 const FILTERS = [
   { label: 'All Categories', value: 'All' },
@@ -209,11 +211,10 @@ export default function BuyerDashboard() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
-          <Text style={styles.heroEyebrow}>FIND SUPPLIERS</Text>
-          <Text style={styles.heroTitle}>Find the right production partner.</Text>
-          <Text style={styles.heroSubtitle}>Explore verified businesses by category, location and capability.</Text>
+          <Text style={styles.heroTitle}>Find a manufacturing partner.</Text>
+          <Text style={styles.heroSubtitle}>Search suppliers by location, product and capability.</Text>
           <Pressable style={styles.postRfqButton} onPress={() => { setRfqSupplier({}); setRfqModalVisible(true); }}>
-            <MaterialCommunityIcons name="plus" size={22} color={PURPLE} />
+            <MaterialCommunityIcons name="plus" size={22} color="#FFFFFF" />
             <Text style={styles.postRfqText}>Post RFQ</Text>
           </Pressable>
         </View>
@@ -225,7 +226,7 @@ export default function BuyerDashboard() {
               value={search}
               onChangeText={setSearch}
               placeholder="Search by name, capability or location."
-              placeholderTextColor="#9AA1AA"
+              placeholderTextColor={ui.muted}
               style={styles.searchInput}
               returnKeyType="search"
               autoCapitalize="none"
@@ -264,26 +265,7 @@ export default function BuyerDashboard() {
         )}
       </ScrollView>
 
-      <View
-        onLayout={(event) => setBottomNavHeight(event.nativeEvent.layout.height)}
-        style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 7) }]}
-      >
-        {[
-          { label: 'Dashboard', icon: 'view-dashboard' },
-          { label: 'Requests', icon: 'file-document-outline' },
-          { label: 'Orders', icon: 'archive-outline' },
-          { label: 'Chat', icon: 'message-text-outline' },
-          { label: 'Settings', icon: 'cog-outline' },
-        ].map(item => {
-          const active = activeTab === item.label;
-          return (
-            <Pressable key={item.label} onPress={() => openNextPage(item.label)} style={[styles.navItem, active && styles.navItemActive]}>
-              <MaterialCommunityIcons name={item.icon as any} size={22} color={active ? PURPLE : '#687687'} />
-              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{item.label}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <AppBottomNav role="BUYER" activeSection="home" onNavigate={(section) => openNextPage(section === 'organization-settings' ? 'Settings' : section === 'chat' ? 'Chat' : section === 'orders' ? 'Orders' : section === 'requests' ? 'Requests' : 'Home')} onLayout={event => setBottomNavHeight(event.nativeEvent.layout.height)} />
 
       <Modal visible={filterOpen} transparent animationType="slide" onRequestClose={() => setFilterOpen(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setFilterOpen(false)}>
@@ -357,88 +339,88 @@ export default function BuyerDashboard() {
 }
 
 const styles = StyleSheet.create({
-  screen:{flex:1,backgroundColor:'#F7F8FC'},
-  header:{minHeight:70,backgroundColor:'#fff',borderBottomWidth:1,borderBottomColor:'#ECEEF2',paddingHorizontal:14,paddingBottom:6,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:6,zIndex:2},
+  screen:{flex:1,backgroundColor:ui.canvas},
+  header:{minHeight:70,backgroundColor:ui.surface,borderBottomWidth:1,borderBottomColor:ui.border,paddingHorizontal:14,paddingBottom:6,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:6,zIndex:2},
   headerIcon:{width:30,alignItems:'flex-start',justifyContent:'center'},
   headerLogo:{height:36,flexShrink:1},
   headerActions:{flexDirection:'row',alignItems:'center',gap:9},
-  roundHeaderButton:{width:38,height:38,borderRadius:19,backgroundColor:'#F4F0FC',alignItems:'center',justifyContent:'center',position:'relative'},
-  notificationBadge:{position:'absolute',right:-1,top:-4,width:25,height:25,borderRadius:13,backgroundColor:'#D62828',alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:'#fff'},
-  notificationText:{fontSize:12,fontWeight:'800',color:'#fff'},
-  scrollContent:{paddingHorizontal:15,paddingTop:16,paddingBottom:16,gap:16},
-  hero:{backgroundColor:'#5314E8',borderRadius:25,paddingHorizontal:21,paddingTop:23,paddingBottom:22,minHeight:255,justifyContent:'center',shadowColor:'#3B0AAB',shadowOpacity:.14,shadowRadius:9,shadowOffset:{width:0,height:5},elevation:3},
-  heroEyebrow:{alignSelf:'flex-start',backgroundColor:'#4510C8',color:'#fff',fontSize:12,fontWeight:'800',letterSpacing:.4,paddingHorizontal:13,paddingVertical:7,borderRadius:20,overflow:'hidden',marginBottom:15},
-  heroTitle:{fontSize:22,lineHeight:29,fontWeight:'900',letterSpacing:-.6,color:'#fff',maxWidth:360},
-  heroSubtitle:{fontSize:15,lineHeight:22,color:'#F0E9FF',marginTop:11,maxWidth:380},
-  postRfqButton:{alignSelf:'flex-start',height:54,paddingHorizontal:18,backgroundColor:'#fff',borderRadius:14,marginTop:23,flexDirection:'row',alignItems:'center',gap:8},
-  postRfqText:{fontSize:16,fontWeight:'800',color:'#4D13C6'},
+  roundHeaderButton:{width:38,height:38,borderRadius:19,backgroundColor:ui.accentSoft,alignItems:'center',justifyContent:'center',position:'relative'},
+  notificationBadge:{position:'absolute',right:-1,top:-4,width:25,height:25,borderRadius:13,backgroundColor:'#D62828',alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:ui.surface},
+  notificationText:{fontSize: 13,fontWeight: '700',color:ui.surface},
+  scrollContent:{paddingHorizontal:16,paddingTop:16,paddingBottom:20,gap:16,width:'100%',maxWidth:840,alignSelf:'center'},
+  hero:{backgroundColor: ui.surface, borderWidth: 1, borderColor: ui.border,borderRadius:16,paddingHorizontal:21,paddingTop:23,paddingBottom:22,minHeight: 0,justifyContent:'center',shadowColor:'#3B0AAB',shadowOpacity: 0,shadowRadius:9,shadowOffset:{width:0,height:5},elevation: 0},
+
+  heroTitle:{fontSize:22,lineHeight:29,fontWeight: '700',letterSpacing:-.6,color:ui.ink,maxWidth:360},
+  heroSubtitle:{fontSize:15,lineHeight:22,color:ui.body,marginTop:9,maxWidth:380},
+  postRfqButton:{alignSelf:'flex-start',height:54,paddingHorizontal:18,backgroundColor:ui.accent,borderRadius:12,marginTop:23,flexDirection:'row',alignItems:'center',gap:8},
+  postRfqText:{fontSize:16,fontWeight: '700',color:ui.surface},
   searchRow:{flexDirection:'row',alignItems:'center',gap:12},
-  searchBox:{flex:1,minHeight:52,borderRadius:28,backgroundColor:'#fff',borderWidth:1,borderColor:'#E5E7EB',paddingHorizontal:14,flexDirection:'row',alignItems:'center',gap:8,shadowColor:'#000',shadowOpacity:.025,shadowRadius:4,elevation:1},
+  searchBox:{flex:1,minHeight:52,borderRadius:12,backgroundColor:ui.surface,borderWidth:1,borderColor:ui.border,paddingHorizontal:14,flexDirection:'row',alignItems:'center',gap:8,shadowColor:'#000',shadowOpacity: 0,shadowRadius:4,elevation: 0},
   searchInput:{flex:1,minWidth:0,fontSize:15,color:'#303744',paddingVertical:10},
-  filterButton:{width:52,height:52,borderRadius:18,backgroundColor:'#F4F0FC',borderWidth:1,borderColor:'#E9DFF8',alignItems:'center',justifyContent:'center'},
-  activeFilter:{alignSelf:'flex-start',flexDirection:'row',alignItems:'center',gap:7,backgroundColor:'#F0E9FF',paddingHorizontal:12,paddingVertical:7,borderRadius:18},
+  filterButton:{width:52,height:52,borderRadius:12,backgroundColor:ui.accentSoft,borderWidth:1,borderColor:'#E9DFF8',alignItems:'center',justifyContent:'center'},
+  activeFilter:{alignSelf:'flex-start',flexDirection:'row',alignItems:'center',gap:7,backgroundColor:ui.accentSoft,paddingHorizontal:12,paddingVertical:7,borderRadius:18},
   activeFilterText:{fontSize:13,color:PURPLE,fontWeight:'700'},
-  supplierCard:{backgroundColor:'#fff',borderRadius:20,borderWidth:1,borderColor:'#E6E7EB',padding:15,shadowColor:'#111827',shadowOpacity:.04,shadowRadius:6,shadowOffset:{width:0,height:2},elevation:1},
+  supplierCard:{backgroundColor:ui.surface,borderRadius:16,borderWidth:1,borderColor:'#E6E7EB',padding:15,shadowColor:ui.ink,shadowOpacity: 0,shadowRadius:6,shadowOffset:{width:0,height:2},elevation: 0},
   cardTopRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:17},
   statusPill:{minHeight:36,paddingHorizontal:11,borderRadius:22,borderWidth:1,flexDirection:'row',alignItems:'center',gap:6},
   verifiedPill:{backgroundColor:'#F0FBF4',borderColor:'#BDE8CB'},
   reviewPill:{backgroundColor:'#FFFCED',borderColor:'#F5E6A1'},
   statusText:{fontSize:13,fontWeight:'700'},
-  categoryPill:{maxWidth:'52%',backgroundColor:'#F4EFFC',color:PURPLE,fontSize:13,fontWeight:'800',paddingHorizontal:12,paddingVertical:7,borderRadius:18,overflow:'hidden'},
+  categoryPill:{maxWidth:'52%',backgroundColor:'#F4EFFC',color:PURPLE,fontSize:13,fontWeight: '700',paddingHorizontal:12,paddingVertical:7,borderRadius:18,overflow:'hidden'},
   supplierInfo:{flexDirection:'row',alignItems:'center',gap:15,marginBottom:19},
   factoryIcon:{width:54,height:54,borderRadius:16,backgroundColor:'#F8F3FF',borderWidth:1,borderColor:'#F0E7FA',alignItems:'center',justifyContent:'center'},
-  supplierName:{fontSize:19,fontWeight:'800',color:'#111827',letterSpacing:-.3},
+  supplierName:{fontSize:19,fontWeight: '700',color:ui.ink,letterSpacing:-.3},
   locationRow:{flexDirection:'row',alignItems:'center',gap:4,marginTop:3},
-  locationText:{fontSize:14,color:'#7B8490',flexShrink:1},
-  statsRow:{borderTopWidth:1,borderTopColor:'#F0F1F3',borderBottomWidth:1,borderBottomColor:'#F0F1F3',paddingVertical:16,flexDirection:'row',alignItems:'center',gap:8},
+  locationText:{fontSize:14,color:ui.muted,flexShrink:1},
+  statsRow:{borderTopWidth:1,borderTopColor:ui.border,borderBottomWidth:1,borderBottomColor:ui.border,paddingVertical:16,flexDirection:'row',alignItems:'center',gap:8,flexWrap:'wrap'},
   statColumn:{flex:1,minWidth:0},
-  statLabel:{fontSize:13,color:'#7A828D',lineHeight:19},
-  statValue:{fontSize:15,fontWeight:'900',color:'#111827',marginTop:2},
-  profileButton:{minHeight:42,paddingHorizontal:9,borderWidth:1,borderColor:'#E5DDF1',borderRadius:13,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:2,backgroundColor:'#fff'},
-  profileButtonText:{fontSize:12,fontWeight:'800',color:PURPLE},
+  statLabel:{fontSize:13,color:ui.muted,lineHeight:19},
+  statValue:{fontSize:15,fontWeight: '700',color:ui.ink,marginTop:2},
+  profileButton:{minHeight:48,width:'100%',paddingHorizontal:12,borderWidth:1,borderColor:'#E5DDF1',borderRadius:13,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:2,backgroundColor:ui.surface},
+  profileButtonText:{fontSize: 13,fontWeight: '700',color:PURPLE},
   tagsRow:{paddingTop:14},
-  tagsText:{fontSize:12,color:'#747C87',fontWeight:'500'},
-  bottomNav:{minHeight:75,backgroundColor:'#fff',borderTopWidth:1,borderTopColor:'#E6E8ED',paddingTop:7,paddingHorizontal:5,flexDirection:'row',alignItems:'center',justifyContent:'space-around'},
+  tagsText:{fontSize: 13,color:'#747C87',fontWeight:'500'},
+  bottomNav:{minHeight:75,backgroundColor:ui.surface,borderTopWidth:1,borderTopColor:'#E6E8ED',paddingTop:7,paddingHorizontal:5,flexDirection:'row',alignItems:'center',justifyContent:'space-around'},
   navItem:{minWidth:61,minHeight:61,borderRadius:18,alignItems:'center',justifyContent:'center',paddingHorizontal:8,paddingVertical:5,gap:2},
-  navItemActive:{backgroundColor:'#F1EBFB'},
-  navLabel:{fontSize:11,color:'#687687',fontWeight:'600'},
-  navLabelActive:{color:PURPLE,fontWeight:'900'},
-  loadingCard:{minHeight:100,borderRadius:22,borderWidth:1,borderColor:'#E7E8ED',backgroundColor:'#fff',alignItems:'center',justifyContent:'center',gap:9},
-  loadingText:{fontSize:13,color:'#7B8490'},
-  emptyState:{backgroundColor:'#fff',borderRadius:22,borderWidth:1,borderColor:'#E7E8ED',padding:25,alignItems:'center',gap:10},
-  emptyTitle:{fontSize:17,fontWeight:'800',color:'#202633'},
-  emptyText:{fontSize:13,color:'#7B8490',textAlign:'center',lineHeight:20},
-  retryButton:{paddingHorizontal:18,paddingVertical:11,borderRadius:12,backgroundColor:'#F0E9FF',marginTop:4},
-  retryText:{fontSize:13,color:PURPLE,fontWeight:'800'},
+  navItemActive:{backgroundColor:ui.accentSoft},
+  navLabel:{fontSize: 12,color:ui.muted,fontWeight:'600'},
+  navLabelActive:{color:PURPLE,fontWeight: '700'},
+  loadingCard:{minHeight:100,borderRadius:22,borderWidth:1,borderColor:'#E7E8ED',backgroundColor:ui.surface,alignItems:'center',justifyContent:'center',gap:9},
+  loadingText:{fontSize:13,color:ui.muted},
+  emptyState:{backgroundColor:ui.surface,borderRadius:22,borderWidth:1,borderColor:'#E7E8ED',padding:25,alignItems:'center',gap:10},
+  emptyTitle:{fontSize:17,fontWeight: '700',color:ui.ink},
+  emptyText:{fontSize:13,color:ui.muted,textAlign:'center',lineHeight:20},
+  retryButton:{paddingHorizontal:18,paddingVertical:11,borderRadius:12,backgroundColor:ui.accentSoft,marginTop:4},
+  retryText:{fontSize:13,color:PURPLE,fontWeight: '700'},
   modalBackdrop:{flex:1,backgroundColor:'rgba(13,10,22,.48)',justifyContent:'flex-end'},
-  sheet:{backgroundColor:'#fff',borderTopLeftRadius:28,borderTopRightRadius:28,paddingHorizontal:22,paddingTop:12,paddingBottom:28},
+  sheet:{backgroundColor:ui.surface,borderTopLeftRadius:28,borderTopRightRadius:28,paddingHorizontal:22,paddingTop:12,paddingBottom:28},
   dragHandle:{width:48,height:5,borderRadius:3,backgroundColor:'#D1D5DB',alignSelf:'center',marginBottom:17},
   sheetHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12,marginBottom:14},
-  sheetTitle:{fontSize:18,fontWeight:'900',color:'#202633',flex:1},
+  sheetTitle:{fontSize:18,fontWeight: '700',color:ui.ink,flex:1},
   filterOption:{minHeight:54,flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderBottomWidth:1,borderBottomColor:'#F0F1F3'},
   filterOptionText:{fontSize:15,color:'#3F4854',fontWeight:'600'},
   sheetActions:{flexDirection:'row',alignItems:'center',gap:12,marginTop:19},
   clearButton:{height:50,paddingHorizontal:23,borderWidth:1,borderColor:'#E1E3E8',borderRadius:13,alignItems:'center',justifyContent:'center'},
-  clearText:{fontSize:14,color:'#515B67',fontWeight:'800'},
+  clearText:{fontSize:14,color:'#515B67',fontWeight: '700'},
   applyButton:{height:50,flex:1,backgroundColor:PURPLE,borderRadius:13,alignItems:'center',justifyContent:'center'},
-  applyText:{fontSize:15,color:'#fff',fontWeight:'900'},
-  profileSheet:{maxHeight:'88%',backgroundColor:'#fff',borderTopLeftRadius:25,borderTopRightRadius:25,paddingHorizontal:20,paddingTop:22,paddingBottom:30},
+  applyText:{fontSize:15,color:ui.surface,fontWeight: '700'},
+  profileSheet:{maxHeight:'88%',backgroundColor:ui.surface,borderTopLeftRadius:25,borderTopRightRadius:25,paddingHorizontal:20,paddingTop:22,paddingBottom:30},
   profileSummary:{flexDirection:'row',alignItems:'center',gap:13,backgroundColor:'#F8F4FF',borderRadius:17,padding:13,marginBottom:19},
-  profileName:{fontSize:16,fontWeight:'900',color:'#202633'},
-  detailHeading:{fontSize:12,fontWeight:'900',letterSpacing:.6,color:'#697381',marginBottom:9,marginTop:8},
+  profileName:{fontSize:16,fontWeight: '700',color:ui.ink},
+  detailHeading:{fontSize: 13,fontWeight: '700',letterSpacing:.6,color:'#697381',marginBottom:9,marginTop:8},
   description:{fontSize:14,color:'#4B5563',lineHeight:21,backgroundColor:'#F8F9FB',borderRadius:13,padding:13,marginBottom:14},
   detailGrid:{flexDirection:'row',gap:10,marginBottom:15},
   detailBox:{flex:1,backgroundColor:'#F8F9FB',borderRadius:13,padding:12},
   catalogRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12,padding:12,borderWidth:1,borderColor:'#E6E8ED',borderRadius:13,marginBottom:8},
-  catalogName:{fontSize:13,fontWeight:'800',color:'#202633'},
-  catalogPrice:{fontSize:14,fontWeight:'900',color:PURPLE},
+  catalogName:{fontSize:13,fontWeight: '700',color:ui.ink},
+  catalogPrice:{fontSize:14,fontWeight: '700',color:PURPLE},
   directRfqButton:{minHeight:53,backgroundColor:PURPLE,borderRadius:14,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:8,marginTop:14},
-  directRfqText:{fontSize:14,color:'#fff',fontWeight:'800'},
+  directRfqText:{fontSize:14,color:ui.surface,fontWeight: '700'},
   drawerLayer:{position:'absolute',left:0,right:0,zIndex:20,flexDirection:'row'},
   drawerBackdrop:{flex:1,backgroundColor:'rgba(13,10,22,.38)'},
-  drawer:{width:'68%',maxWidth:320,backgroundColor:'#fff',paddingTop:18,paddingHorizontal:14,elevation:14,shadowColor:'#000',shadowOpacity:.16,shadowRadius:12,shadowOffset:{width:3,height:0}},
+  drawer:{width:'68%',maxWidth:320,backgroundColor:ui.surface,paddingTop:18,paddingHorizontal:14,elevation: 0,shadowColor:'#000',shadowOpacity: 0,shadowRadius:12,shadowOffset:{width:3,height:0}},
   drawerItem:{minHeight:49,borderRadius:12,marginBottom:3,paddingHorizontal:12,flexDirection:'row',alignItems:'center',gap:14},
   drawerItemActive:{backgroundColor:PURPLE},
   drawerItemText:{fontSize:15,fontWeight:'600',color:'#4B515B'},
-  drawerItemTextActive:{color:'#FFFFFF',fontWeight:'800'},
+  drawerItemTextActive:{color:ui.surface,fontWeight: '700'},
 });

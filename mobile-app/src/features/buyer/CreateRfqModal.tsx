@@ -1,3 +1,4 @@
+import { ui } from '@/theme/ui';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable,
@@ -7,7 +8,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { apiPost } from '@/services/api';
 
-const PURPLE = '#5314E8';
+const PURPLE = ui.accent;
 type Section = 'product' | 'quantity' | 'delivery';
 type Props = {
   visible: boolean;
@@ -34,10 +35,11 @@ function Field({ label, value, onChangeText, placeholder, multiline, keyboardTyp
     <View style={styles.field}>
       <Text style={styles.label}>{label}{required ? <Text style={styles.required}> *</Text> : null}</Text>
       <TextInput
+        accessibilityLabel={label}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#A1A1AA"
+        placeholderTextColor={ui.muted}
         keyboardType={keyboardType}
         multiline={multiline}
         textAlignVertical={multiline ? 'top' : 'center'}
@@ -233,11 +235,11 @@ export default function CreateRfqModal({ visible, onClose, onSuccess, supplierOr
                 </View>
                 <View style={styles.field}>
                   <Text style={styles.label}>Upload Design / Tech Pack (Optional)</Text>
-                  <Pressable style={styles.uploadBox} onPress={() => Alert.alert('Tech Pack attachment', 'The web app currently stores the selected file name in the RFQ description; actual file upload is not connected to its RFQ creation flow. You can continue without an attachment.')}>
-                    <View style={styles.uploadIcon}><MaterialCommunityIcons name="cloud-upload-outline" size={26} color={PURPLE} /></View>
+                  <Pressable style={styles.uploadBox} onPress={() => Alert.alert('Tech pack attachments', 'File uploads are not available in this mobile form. Include the relevant specifications in Requirement Details before publishing.')}>
+                    <View style={styles.uploadIcon}><MaterialCommunityIcons name="information-outline" size={26} color={PURPLE} /></View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.uploadLink}>{fileName || 'click to upload'}</Text>
-                      <Text style={styles.uploadHint}>PDF, JPG, PNG (Max 10 MB)</Text>
+                      <Text style={styles.uploadLink}>{fileName || 'About tech-pack attachments'}</Text>
+                      <Text style={styles.uploadHint}>File uploads are not available here yet; include specifications below.</Text>
                     </View>
                   </Pressable>
                 </View>
@@ -247,10 +249,10 @@ export default function CreateRfqModal({ visible, onClose, onSuccess, supplierOr
                 <Field label="Total Quantity" required value={totalQuantity} onChangeText={setTotalQuantity} keyboardType="numeric" placeholder="5000" />
                 <ChoiceField label="Unit" value={unit} options={UNITS} onSelect={setUnit} />
                 <View style={styles.field}>
-                  <View style={styles.sizeHeader}><Text style={styles.label}>Size-wise Quantity (Optional)</Text><Pressable onPress={() => setTotalQuantity(String(sizeSum))}><Text style={styles.syncText}>Set Total to {sizeSum.toLocaleString('en-IN')}</Text></Pressable></View>
+                  <View style={styles.sizeHeader}><Text style={styles.label}>Size-wise Quantity (Optional)</Text><Pressable accessibilityRole="button" accessibilityLabel={`Set total quantity to ${sizeSum}`} style={{ minHeight: 44, justifyContent: 'center' }} onPress={() => setTotalQuantity(String(sizeSum))}><Text style={styles.syncText}>Set Total to {sizeSum.toLocaleString('en-IN')}</Text></Pressable></View>
                   <View style={styles.sizeGrid}>
                     {(['S','M','L','XL','XXL'] as const).map(size => (
-                      <View key={size} style={styles.sizeCell}><Text style={styles.sizeLabel}>{size}</Text><TextInput keyboardType="numeric" value={sizes[size]} onChangeText={value => setSizes(prev => ({ ...prev, [size]: value }))} style={styles.sizeInput} /></View>
+                      <View key={size} style={styles.sizeCell}><Text style={styles.sizeLabel}>{size}</Text><TextInput accessibilityLabel={`Quantity for size ${size}`} keyboardType="numeric" value={sizes[size]} onChangeText={value => setSizes(prev => ({ ...prev, [size]: value }))} style={styles.sizeInput} /></View>
                     ))}
                   </View>
                 </View>
@@ -287,59 +289,59 @@ export default function CreateRfqModal({ visible, onClose, onSuccess, supplierOr
 const styles = StyleSheet.create({
   backdrop:{flex:1,backgroundColor:'rgba(0,0,0,.52)',justifyContent:'center',alignItems:'center',paddingTop:12,paddingBottom:12},
   modalOuter:{width:'96%',height:'94%',maxWidth:680},
-  modal:{flex:1,backgroundColor:'#FFFFFF',borderRadius:27,borderWidth:1,borderColor:'#ECECF0',overflow:'hidden',paddingHorizontal:15,paddingTop:16,paddingBottom:12},
+  modal:{flex:1,backgroundColor:ui.surface,borderRadius:27,borderWidth:1,borderColor:'#ECECF0',overflow:'hidden',paddingHorizontal:15,paddingTop:16,paddingBottom:12},
   modalHeader:{flexDirection:'row',alignItems:'flex-start',gap:9,paddingBottom:14,borderBottomWidth:1,borderBottomColor:'#F0F0F2'},
   headerIntro:{flex:1,flexDirection:'row',alignItems:'center',gap:11},
   headerIcon:{width:47,height:47,borderRadius:16,backgroundColor:'#F7F1FF',alignItems:'center',justifyContent:'center'},
   headerCopy:{flex:1},
-  modalTitle:{fontSize:20,fontWeight:'900',color:'#151923'},
+  modalTitle:{fontSize:20,fontWeight: '700',color:'#151923'},
   subtitle:{fontSize:13,lineHeight:19,color:'#737B87',marginTop:3},
-  closeButton:{width:31,height:35,alignItems:'center',justifyContent:'center'},
+  closeButton:{width:48,height:48,alignItems:'center',justifyContent:'center'},
   formScroll:{flex:1},
   formContent:{paddingTop:14,paddingBottom:12,gap:13},
-  sectionCard:{borderWidth:1,borderColor:'#E7E7EB',borderRadius:21,padding:14,backgroundColor:'#FFFFFF'},
+  sectionCard:{borderWidth:1,borderColor:'#E7E7EB',borderRadius:21,padding:14,backgroundColor:ui.surface},
   sectionHeader:{minHeight:34,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
   sectionTitleRow:{flexDirection:'row',alignItems:'center',gap:11},
-  sectionTitle:{fontSize:16,fontWeight:'900',color:'#191D27'},
+  sectionTitle:{fontSize:16,fontWeight: '700',color:'#191D27'},
   sectionBody:{paddingTop:12,gap:13},
   field:{gap:7},
-  label:{fontSize:13,fontWeight:'800',color:'#303642'},
+  label:{fontSize:13,fontWeight: '700',color:'#303642'},
   required:{color:'#D92D20'},
-  input:{minHeight:48,borderWidth:1,borderColor:'#E0E1E5',borderRadius:14,paddingHorizontal:13,paddingVertical:10,fontSize:14,color:'#252B35',backgroundColor:'#FFFFFF'},
+  input:{minHeight:48,borderWidth:1,borderColor:'#E0E1E5',borderRadius:12,paddingHorizontal:13,paddingVertical:10,fontSize:14,color:'#252B35',backgroundColor:ui.surface},
   textArea:{minHeight:100,paddingTop:12,lineHeight:21},
-  choice:{minHeight:49,borderWidth:1,borderColor:'#E0E1E5',borderRadius:14,paddingHorizontal:13,flexDirection:'row',alignItems:'center',gap:9},
+  choice:{minHeight:49,borderWidth:1,borderColor:'#E0E1E5',borderRadius:12,paddingHorizontal:13,flexDirection:'row',alignItems:'center',gap:9},
   choiceText:{flex:1,fontSize:14,color:'#252B35'},
-  options:{borderWidth:1,borderColor:'#E7E4ED',borderRadius:13,overflow:'hidden',backgroundColor:'#FFFFFF'},
+  options:{borderWidth:1,borderColor:'#E7E4ED',borderRadius:13,overflow:'hidden',backgroundColor:ui.surface},
   option:{minHeight:43,paddingHorizontal:13,flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderBottomWidth:1,borderBottomColor:'#F1F1F3'},
   optionText:{fontSize:13,color:'#4B5360'},
-  optionSelected:{color:PURPLE,fontWeight:'800'},
+  optionSelected:{color:PURPLE,fontWeight: '700'},
   colorBox:{minHeight:64,borderWidth:1,borderColor:'#E0E1E5',borderRadius:14,padding:10,gap:9},
   chips:{flexDirection:'row',flexWrap:'wrap',gap:7},
   colorChip:{backgroundColor:'#F1F2F4',borderRadius:9,paddingHorizontal:10,paddingVertical:7,flexDirection:'row',alignItems:'center',gap:5},
   colorText:{fontSize:13,color:'#303642'},
   addColorButton:{flexDirection:'row',alignItems:'center',alignSelf:'flex-start',gap:5,paddingVertical:3},
-  addColorAction:{fontSize:14,fontWeight:'800',color:PURPLE},
+  addColorAction:{fontSize:14,fontWeight: '700',color:PURPLE},
   addColorRow:{flexDirection:'row',alignItems:'center',gap:9},
   addColorInput:{height:36,minWidth:120,borderWidth:1,borderColor:'#D8C8F7',borderRadius:9,paddingHorizontal:9,color:'#222',flex:1},
-  uploadBox:{minHeight:76,borderWidth:1,borderStyle:'dashed',borderColor:'#D9C7F4',borderRadius:14,padding:12,flexDirection:'row',alignItems:'center',gap:12,backgroundColor:'#FCFAFF'},
+  uploadBox:{minHeight:76,borderWidth:1,borderStyle:'solid',borderColor:ui.border,borderRadius:14,padding:12,flexDirection:'row',alignItems:'center',gap:12,backgroundColor:ui.surfaceMuted},
   uploadIcon:{width:43,height:43,borderRadius:13,backgroundColor:'#F1E9FF',alignItems:'center',justifyContent:'center'},
-  uploadLink:{fontSize:14,fontWeight:'800',color:PURPLE,textDecorationLine:'underline'},
-  uploadHint:{fontSize:12,color:'#818894',marginTop:4},
-  sizeHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:5},
-  syncText:{fontSize:10,fontWeight:'800',color:PURPLE},
-  sizeGrid:{flexDirection:'row',gap:6},
-  sizeCell:{flex:1,alignItems:'center',gap:5},
-  sizeLabel:{fontSize:12,fontWeight:'800',color:'#737B87'},
-  sizeInput:{width:'100%',height:42,borderWidth:1,borderColor:'#E0E1E5',borderRadius:10,textAlign:'center',fontSize:13,fontWeight:'700',color:'#242A34',paddingHorizontal:2},
-  counter:{fontSize:11,color:'#9AA1AA'},
+  uploadLink:{fontSize:14,fontWeight:'600',color:ui.ink},
+  uploadHint:{fontSize: 13,color:ui.muted,marginTop:4},
+  sizeHeader:{flexDirection:'row',flexWrap:'wrap',alignItems:'center',justifyContent:'space-between',gap:8},
+  syncText:{fontSize:13,fontWeight: '700',color:PURPLE},
+  sizeGrid:{flexDirection:'row',flexWrap:'wrap',gap:8},
+  sizeCell:{flexGrow:1,flexBasis:'18%',minWidth:68,alignItems:'center',gap:5},
+  sizeLabel:{fontSize: 13,fontWeight: '700',color:'#737B87'},
+  sizeInput:{width:'100%',minHeight:48,borderWidth:1,borderColor:'#E0E1E5',borderRadius:10,textAlign:'center',fontSize:13,fontWeight:'700',color:'#242A34',paddingHorizontal:2},
+  counter:{fontSize: 12,color:ui.muted},
   footer:{paddingTop:11,borderTopWidth:1,borderTopColor:'#EEEEF1',gap:9},
   draftButton:{minHeight:47,borderRadius:13,backgroundColor:'#F3EDFF',flexDirection:'row',alignItems:'center',justifyContent:'center',gap:9},
-  draftText:{fontSize:14,fontWeight:'900',color:PURPLE},
+  draftText:{fontSize:14,fontWeight: '700',color:PURPLE},
   publishButton:{minHeight:49,borderRadius:13,backgroundColor:PURPLE,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:9},
-  publishText:{fontSize:15,fontWeight:'900',color:'#FFFFFF'},
+  publishText:{fontSize:15,fontWeight: '700',color:ui.surface},
   disabled:{opacity:.55},
   errorBox:{marginTop:10,padding:10,borderRadius:11,backgroundColor:'#FFF1F0',flexDirection:'row',alignItems:'center',gap:8},
-  errorText:{flex:1,fontSize:12,color:'#B42318',lineHeight:17},
+  errorText:{flex:1,fontSize: 13,color:'#B42318',lineHeight:17},
   successBox:{marginTop:10,padding:10,borderRadius:11,backgroundColor:'#ECFDF3',flexDirection:'row',alignItems:'center',gap:8},
-  successText:{flex:1,fontSize:12,color:'#16804A',lineHeight:17,fontWeight:'700'},
+  successText:{flex:1,fontSize: 13,color:'#16804A',lineHeight:17,fontWeight:'700'},
 });

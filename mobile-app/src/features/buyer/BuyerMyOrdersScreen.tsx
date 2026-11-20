@@ -1,6 +1,8 @@
+import { ui } from '@/theme/ui';
+import { AppBottomNav } from '@/components/AppBottomNav';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Image, Modal, Pressable, RefreshControl,
+  ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -10,7 +12,7 @@ import * as SecureStore from 'expo-secure-store';
 import { apiGet, apiPost, apiRequest } from '@/services/api';
 import { AppHeader } from '@/components/AppHeader';
 
-const PURPLE = '#5314E8';
+const PURPLE = ui.accent;
 const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparent.png';
 
 type Milestone = { id: string; title: string; status: string; dueDate?: string | null; completedAt?: string | null };
@@ -269,15 +271,7 @@ export default function BuyerMyOrdersScreen() {
         )}
       </ScrollView>
 
-      <View onLayout={e => setBottomHeight(e.nativeEvent.layout.height)} style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 7) }]}>
-        {[
-          { label: 'Dashboard', icon: 'view-dashboard', section: 'home' },
-          { label: 'Requests', icon: 'file-document-outline', section: 'requests' },
-          { label: 'Orders', icon: 'archive-outline', section: 'orders' },
-          { label: 'Chat', icon: 'message-text-outline', section: 'chat' },
-          { label: 'Settings', icon: 'cog-outline', section: 'organization-settings' },
-        ].map(item => <Pressable key={item.label} onPress={() => navigate(item.section)} style={[styles.navItem, item.label === 'Orders' && styles.navItemActive]}><MaterialCommunityIcons name={item.icon as any} size={25} color={item.label === 'Orders' ? PURPLE : '#687687'} /><Text style={[styles.navLabel, item.label === 'Orders' && styles.navLabelActive]}>{item.label}</Text></Pressable>)}
-      </View>
+      <AppBottomNav role="BUYER" activeSection="orders" onNavigate={navigate} onLayout={e => setBottomHeight(e.nativeEvent.layout.height)} />
 
       {drawerOpen && <View style={[styles.drawerLayer, { top: headerHeight, bottom: bottomHeight }]}>
         <View style={styles.drawer}>
@@ -317,96 +311,101 @@ export default function BuyerMyOrdersScreen() {
       </Modal>
 
       <Modal visible={!!reviewOrder} transparent animationType="fade" onRequestClose={() => setReviewOrder(null)}>
-        <View style={styles.reviewBackdrop}>
-          <View style={styles.reviewSheet}>
-            <View style={styles.sheetHeader}><View style={{ flex: 1 }}><Text style={styles.sheetTitle}>Review Supplier</Text><Text style={styles.sheetSubtitle}>{reviewOrder?.poNumber}</Text></View><Pressable onPress={() => setReviewOrder(null)}><MaterialCommunityIcons name="close" size={24} color="#737B87" /></Pressable></View>
-            <Text style={styles.ratingPrompt}>How was your experience?</Text>
-            <View style={styles.starsRow}>{[1, 2, 3, 4, 5].map(value => <Pressable key={value} onPress={() => setRating(value)}><MaterialCommunityIcons name={value <= rating ? 'star' : 'star-outline'} size={34} color="#F5A623" /></Pressable>)}</View>
-            <TextInput value={comment} onChangeText={setComment} placeholder="Share your feedback (optional)" placeholderTextColor="#9AA1AA" multiline style={styles.commentInput} />
-            <Pressable disabled={reviewBusy} onPress={submitReview} style={[styles.submitReviewButton, reviewBusy && { opacity: .6 }]}>{reviewBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitReviewText}>Submit Review</Text>}</Pressable>
-          </View>
-        </View>
+        <KeyboardAvoidingView style={styles.reviewBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <ScrollView contentContainerStyle={styles.reviewScroll} keyboardShouldPersistTaps="handled" bounces={false}>
+            <View style={styles.reviewSheet}>
+              <View style={styles.sheetHeader}><View style={{ flex: 1 }}><Text style={styles.sheetTitle}>Review Supplier</Text><Text style={styles.sheetSubtitle}>{reviewOrder?.poNumber}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close review" style={styles.reviewClose} onPress={() => setReviewOrder(null)}><MaterialCommunityIcons name="close" size={24} color={ui.muted} /></Pressable></View>
+              <Text style={styles.ratingPrompt}>How was your experience?</Text>
+              <View style={styles.starsRow}>{[1, 2, 3, 4, 5].map(value => <Pressable key={value} accessibilityRole="radio" accessibilityLabel={`${value} out of 5 stars`} accessibilityState={{ checked: rating === value }} style={styles.starButton} onPress={() => setRating(value)}><MaterialCommunityIcons name={value <= rating ? 'star' : 'star-outline'} size={32} color="#B67806" /></Pressable>)}</View>
+              <TextInput accessibilityLabel="Review comment" value={comment} onChangeText={setComment} placeholder="Share your feedback (optional)" placeholderTextColor={ui.muted} multiline style={styles.commentInput} />
+              <Pressable disabled={reviewBusy} onPress={submitReview} style={[styles.submitReviewButton, reviewBusy && { opacity: .6 }]}>{reviewBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitReviewText}>Submit Review</Text>}</Pressable>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#F7F8FC' },
-  header: { minHeight: 58, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E9EAF0', paddingHorizontal: 14, paddingBottom: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  screen: { flex: 1, backgroundColor: ui.canvas },
+  header: { minHeight: 58, backgroundColor: ui.surface, borderBottomWidth: 1, borderBottomColor: '#E9EAF0', paddingHorizontal: 14, paddingBottom: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerIcon: { width: 40, height: 42, alignItems: 'center', justifyContent: 'center' },
   logo: { width: 142, height: 34, flex: 1, marginHorizontal: 5 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerCircle: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#F4F0FC', alignItems: 'center', justifyContent: 'center' },
-  content: { padding: 16, paddingBottom: 24, gap: 16 },
-  pageTitle: { fontSize: 22, fontWeight: '900', color: '#17202D', marginBottom: 1 },
-  issueButton: { minHeight: 58, alignSelf: 'flex-start', maxWidth: '100%', backgroundColor: '#4B00B8', borderRadius: 13, paddingHorizontal: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, elevation: 2 },
-  issueButtonText: { fontSize: 16, fontWeight: '900', color: '#fff' },
+  headerCircle: { width: 38, height: 38, borderRadius: 19, backgroundColor: ui.accentSoft, alignItems: 'center', justifyContent: 'center' },
+  content: { padding: 16, paddingBottom: 24, gap: 16, width: '100%', maxWidth: 840, alignSelf: 'center' },
+  pageTitle: { fontSize: 22, fontWeight: '700', color: ui.ink, marginBottom: 1 },
+  issueButton: { minHeight: 58, alignSelf: 'flex-start', maxWidth: '100%', backgroundColor: '#4B00B8', borderRadius: 13, paddingHorizontal: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, elevation: 0 },
+  issueButtonText: { fontSize: 16, fontWeight: '700', color: ui.surface },
   topDivider: { height: 1, backgroundColor: '#E7E9EF', marginTop: -7, marginBottom: 1 },
-  orderCard: { backgroundColor: '#fff', borderRadius: 24, borderWidth: 1, borderColor: '#E4E6EB', padding: 16, gap: 0, elevation: 2, shadowColor: '#1D2433', shadowOpacity: .05, shadowRadius: 7, shadowOffset: { width: 0, height: 2 }, marginTop: 0, marginBottom: 2 },
+  orderCard: { backgroundColor: ui.surface, borderRadius: 16, borderWidth: 1, borderColor: '#E4E6EB', padding: 16, gap: 0, elevation: 0, shadowColor: '#1D2433', shadowOpacity: 0, shadowRadius: 7, shadowOffset: { width: 0, height: 2 }, marginTop: 0, marginBottom: 2 },
   orderMeta: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
-  poNumber: { fontSize: 13, fontWeight: '800', color: '#5314B8' },
+  poNumber: { fontSize: 13, fontWeight: '700', color: '#5314B8' },
   statusPill: { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 18 },
-  statusText: { fontSize: 11, fontWeight: '900' },
-  orderTitle: { fontSize: 19, fontWeight: '900', color: '#17202D', lineHeight: 25 },
-  buyerLine: { fontSize: 14, color: '#68727F', marginTop: 8 },
-  buyerName: { fontWeight: '900', color: '#17202D' },
+  statusText: { fontSize: 12, fontWeight: '700' },
+  orderTitle: { fontSize: 19, fontWeight: '700', color: ui.ink, lineHeight: 25 },
+  buyerLine: { fontSize: 14, color: ui.muted, marginTop: 8 },
+  buyerName: { fontWeight: '700', color: ui.ink },
   amountRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginTop: 21, marginBottom: 17 },
-  amount: { fontSize: 27, fontWeight: '900', color: '#5314B8' },
-  targetDate: { fontSize: 12, color: '#68727F', textAlign: 'right', flexShrink: 0 },
-  progressPanel: { backgroundColor: '#F5F0FC', borderRadius: 20, padding: 14, marginBottom: 14 },
+  amount: { fontSize: 27, fontWeight: '700', color: '#5314B8' },
+  targetDate: { fontSize: 13, color: ui.muted, textAlign: 'right', flexShrink: 0 },
+  progressPanel: { backgroundColor: '#F5F0FC', borderRadius: 16, padding: 14, marginBottom: 14 },
   progressTextRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 9 },
-  currentMilestone: { fontSize: 13, fontWeight: '900', color: '#5314B8', lineHeight: 20, flex: 1 },
-  progressPercent: { fontSize: 12, color: '#68727F', lineHeight: 18, textAlign: 'left', minWidth: 76 },
+  currentMilestone: { fontSize: 13, fontWeight: '700', color: '#5314B8', lineHeight: 20, flex: 1 },
+  progressPercent: { fontSize: 13, color: ui.muted, lineHeight: 18, textAlign: 'left', minWidth: 76 },
   progressTrack: { height: 8, borderRadius: 8, backgroundColor: '#E4DDF1', overflow: 'hidden' },
   progressFill: { height: 8, borderRadius: 8, backgroundColor: '#4B00B8' },
   inlineStatus: { minHeight: 42, backgroundColor: '#F5F0FC', borderWidth: 1, borderColor: '#E7DDF8', borderRadius: 12, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
-  inlineStatusText: { flex: 1, fontSize: 11, fontWeight: '800', color: '#5314B8', lineHeight: 16 },
+  inlineStatusText: { flex: 1, fontSize: 12, fontWeight: '700', color: '#5314B8', lineHeight: 16 },
   buyerActionButton: { minHeight: 44, alignSelf: 'flex-start', backgroundColor: PURPLE, borderRadius: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 2 },
-  buyerActionText: { fontSize: 13, fontWeight: '900', color: '#fff' },
+  buyerActionText: { fontSize: 13, fontWeight: '700', color: ui.surface },
   cardDivider: { height: 1, backgroundColor: '#E9EBEF', marginVertical: 13 },
-  reviewButton: { alignSelf: 'flex-start', minHeight: 46, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: '#D8DCE2', backgroundColor: '#fff', flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 13 },
-  reviewButtonText: { fontSize: 14, fontWeight: '800', color: '#17202D' },
+  reviewButton: { alignSelf: 'flex-start', minHeight: 46, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: '#D8DCE2', backgroundColor: ui.surface, flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 13 },
+  reviewButtonText: { fontSize: 14, fontWeight: '700', color: ui.ink },
   reviewedTag: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
-  reviewedText: { fontSize: 12, fontWeight: '800', color: '#087653' },
+  reviewedText: { fontSize: 13, fontWeight: '700', color: '#087653' },
   actionsRow: { flexDirection: 'row', alignItems: 'stretch', justifyContent: 'space-between', gap: 5 },
   actionItem: { flex: 1, minHeight: 74, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, paddingHorizontal: 2 },
   actionItemActive: { flex: 1, minHeight: 74, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, borderWidth: 1, borderColor: '#D8DCE2', paddingHorizontal: 2 },
-  actionLabel: { fontSize: 11, fontWeight: '800', color: '#17202D', textAlign: 'center' },
-  stateCard: { backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: '#E5E7EB', padding: 24, alignItems: 'center', gap: 9, marginTop: 12 },
-  stateTitle: { fontSize: 16, fontWeight: '900', color: '#202633' },
+  actionLabel: { fontSize: 12, fontWeight: '700', color: ui.ink, textAlign: 'center' },
+  stateCard: { backgroundColor: ui.surface, borderRadius: 16, borderWidth: 1, borderColor: ui.border, padding: 24, alignItems: 'center', gap: 9, marginTop: 12 },
+  stateTitle: { fontSize: 16, fontWeight: '700', color: ui.ink },
   stateText: { fontSize: 13, color: '#737B87', textAlign: 'center', lineHeight: 19 },
-  retryButton: { backgroundColor: '#F0E9FF', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 11, marginTop: 3 },
-  retryText: { fontSize: 13, fontWeight: '800', color: PURPLE },
+  retryButton: { backgroundColor: ui.accentSoft, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 11, marginTop: 3 },
+  retryText: { fontSize: 13, fontWeight: '700', color: PURPLE },
   emptyButton: { marginTop: 7, backgroundColor: PURPLE, borderRadius: 12, paddingHorizontal: 18, paddingVertical: 12 },
-  emptyButtonText: { fontSize: 13, fontWeight: '800', color: '#fff' },
-  bottomNav: { minHeight: 75, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#E6E8ED', paddingTop: 7, paddingHorizontal: 5, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
+  emptyButtonText: { fontSize: 13, fontWeight: '700', color: ui.surface },
+  bottomNav: { minHeight: 75, backgroundColor: ui.surface, borderTopWidth: 1, borderTopColor: '#E6E8ED', paddingTop: 7, paddingHorizontal: 5, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
   navItem: { minWidth: 57, minHeight: 58, borderRadius: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, paddingVertical: 4, gap: 2 },
-  navItemActive: { backgroundColor: '#F1EBFB' },
-  navLabel: { fontSize: 10, color: '#687687', fontWeight: '600' },
-  navLabelActive: { color: PURPLE, fontWeight: '900' },
+  navItemActive: { backgroundColor: ui.accentSoft },
+  navLabel: { fontSize: 10, color: ui.muted, fontWeight: '600' },
+  navLabelActive: { color: PURPLE, fontWeight: '700' },
   drawerLayer: { position: 'absolute', left: 0, right: 0, zIndex: 30, flexDirection: 'row' },
-  drawer: { width: '68%', maxWidth: 320, backgroundColor: '#fff', paddingTop: 18, paddingHorizontal: 14, elevation: 14, shadowColor: '#000', shadowOpacity: .16, shadowRadius: 12, shadowOffset: { width: 3, height: 0 } },
+  drawer: { width: '68%', maxWidth: 320, backgroundColor: ui.surface, paddingTop: 18, paddingHorizontal: 14, elevation: 0, shadowColor: '#000', shadowOpacity: 0, shadowRadius: 12, shadowOffset: { width: 3, height: 0 } },
   drawerBackdrop: { flex: 1, backgroundColor: 'rgba(13,10,22,.38)' },
   drawerItem: { minHeight: 49, borderRadius: 12, marginBottom: 3, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 14 },
   drawerItemActive: { backgroundColor: PURPLE },
   drawerText: { fontSize: 15, fontWeight: '600', color: '#4B515B' },
-  drawerTextActive: { color: '#fff', fontWeight: '800' },
+  drawerTextActive: { color: ui.surface, fontWeight: '700' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(13,10,22,.45)', justifyContent: 'flex-end' },
-  milestoneSheet: { backgroundColor: '#fff', borderTopLeftRadius: 25, borderTopRightRadius: 25, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 28, maxHeight: '78%' },
+  milestoneSheet: { backgroundColor: ui.surface, borderTopLeftRadius: 25, borderTopRightRadius: 25, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 28, maxHeight: '78%' },
   dragHandle: { width: 45, height: 5, borderRadius: 3, backgroundColor: '#D1D5DB', alignSelf: 'center', marginBottom: 17 },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 },
-  sheetTitle: { fontSize: 19, fontWeight: '900', color: '#202633' },
-  sheetSubtitle: { fontSize: 12, color: '#737B87', marginTop: 3 },
+  sheetTitle: { fontSize: 19, fontWeight: '700', color: ui.ink },
+  sheetSubtitle: { fontSize: 13, color: '#737B87', marginTop: 3 },
   milestoneRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0F1F3' },
   milestoneIcon: { width: 35, height: 35, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  milestoneTitle: { fontSize: 13, fontWeight: '800', color: '#303744' },
-  milestoneMeta: { fontSize: 11, color: '#7C8490', marginTop: 4 },
+  milestoneTitle: { fontSize: 13, fontWeight: '700', color: '#303744' },
+  milestoneMeta: { fontSize: 12, color: ui.muted, marginTop: 4 },
   reviewBackdrop: { flex: 1, backgroundColor: 'rgba(13,10,22,.48)', justifyContent: 'center', padding: 18 },
-  reviewSheet: { backgroundColor: '#fff', borderRadius: 22, padding: 20 },
-  ratingPrompt: { fontSize: 14, fontWeight: '800', color: '#303744', marginTop: 7 },
-  starsRow: { flexDirection: 'row', gap: 8, marginTop: 10, marginBottom: 17 },
-  commentInput: { minHeight: 100, borderWidth: 1, borderColor: '#DDE0E6', borderRadius: 13, padding: 12, textAlignVertical: 'top', fontSize: 14, color: '#202633' },
+  reviewSheet: { width: '100%', maxWidth: 480, alignSelf: 'center', backgroundColor: ui.surface, borderRadius: 20, padding: 20 },
+  reviewScroll: { flexGrow: 1, justifyContent: 'center' },
+  reviewClose: { minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
+  starButton: { flex: 1, minWidth: 44, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
+  ratingPrompt: { fontSize: 14, fontWeight: '700', color: '#303744', marginTop: 7 },
+  starsRow: { flexDirection: 'row', gap: 2, marginTop: 10, marginBottom: 12 },
+  commentInput: { minHeight: 100, maxHeight: 190, borderWidth: 1, borderColor: '#DDE0E6', borderRadius: 13, padding: 12, textAlignVertical: 'top', fontSize: 14, color: ui.ink },
   submitReviewButton: { height: 49, borderRadius: 13, backgroundColor: PURPLE, alignItems: 'center', justifyContent: 'center', marginTop: 15 },
-  submitReviewText: { fontSize: 14, fontWeight: '900', color: '#fff' },
+  submitReviewText: { fontSize: 14, fontWeight: '700', color: ui.surface },
 });

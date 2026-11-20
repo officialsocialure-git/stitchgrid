@@ -1,3 +1,5 @@
+import { ui } from '@/theme/ui';
+import { AppBottomNav } from '@/components/AppBottomNav';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator, Alert, AppState, Image, Pressable, RefreshControl, ScrollView,
@@ -10,7 +12,7 @@ import * as SecureStore from 'expo-secure-store';
 import { apiGet, apiPatch, apiPost } from '@/services/api';
 import { AppHeader } from '@/components/AppHeader';
 
-const PURPLE = '#5314E8';
+const PURPLE = ui.accent;
 const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparent.png';
 
 type Milestone = {
@@ -295,15 +297,7 @@ export default function BuyerOrderTrackingScreen() {
         )}
       </ScrollView>
 
-      <View onLayout={event => setBottomHeight(event.nativeEvent.layout.height)} style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 7) }]}>
-        {[
-          { label: 'Dashboard', icon: 'view-dashboard', section: 'home' },
-          { label: 'Requests', icon: 'file-document-outline', section: 'requests' },
-          { label: 'Orders', icon: 'archive-outline', section: 'orders' },
-          { label: 'Chat', icon: 'message-text-outline', section: 'chat' },
-          { label: 'Settings', icon: 'cog-outline', section: 'organization-settings' },
-        ].map(item => <Pressable key={item.label} onPress={() => navigate(item.section)} style={[styles.navItem, item.label === 'Orders' && styles.navItemActive]}><MaterialCommunityIcons name={item.icon as any} size={21} color={item.label === 'Orders' ? PURPLE : '#687687'} /><Text style={[styles.navLabel, item.label === 'Orders' && styles.navLabelActive]}>{item.label}</Text></Pressable>)}
-      </View>
+      <AppBottomNav role={isSupplier ? 'SUPPLIER' : 'BUYER'} activeSection="tracking" onNavigate={navigate} onLayout={event => setBottomHeight(event.nativeEvent.layout.height)} />
 
 
     </View>
@@ -311,28 +305,28 @@ export default function BuyerOrderTrackingScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen:{flex:1,backgroundColor:'#F7F8FC'},
-  header:{minHeight:64,backgroundColor:'#fff',borderBottomWidth:1,borderBottomColor:'#E9EAF0',paddingHorizontal:14,paddingBottom:7,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
+  screen:{flex:1,backgroundColor:ui.canvas},
+  header:{minHeight:64,backgroundColor:ui.surface,borderBottomWidth:1,borderBottomColor:'#E9EAF0',paddingHorizontal:14,paddingBottom:7,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
   headerIcon:{width:40,height:42,alignItems:'center',justifyContent:'center'},
   logo:{width:158,height:40,flex:1,marginHorizontal:5},
   headerActions:{flexDirection:'row',alignItems:'center',gap:8},
-  headerCircle:{width:38,height:38,borderRadius:19,backgroundColor:'#F4F0FC',alignItems:'center',justifyContent:'center'},
-  content:{padding:16,paddingBottom:24,gap:16},
+  headerCircle:{width:38,height:38,borderRadius:19,backgroundColor:ui.accentSoft,alignItems:'center',justifyContent:'center'},
+  content:{padding:16,paddingBottom:24,gap:16,width:'100%',maxWidth:840,alignSelf:'center'},
   pageHeading:{paddingBottom:18,borderBottomWidth:1,borderBottomColor:'#E3E6EC',gap:5},
   metaRow:{flexDirection:'row',alignItems:'center',flexWrap:'wrap',gap:9},
-  poNumber:{fontSize:13,fontWeight:'900',color:'#5314B8'},
+  poNumber:{fontSize:13,fontWeight: '700',color:'#5314B8'},
   liveBadge:{backgroundColor:'#EFE5FF',borderWidth:1,borderColor:'#D8C3F7',borderRadius:20,paddingHorizontal:11,paddingVertical:5},
-  liveText:{fontSize:11,fontWeight:'900',letterSpacing:.3,color:'#5314B8'},
-  pageTitle:{fontSize:22,fontWeight:'900',color:'#17202D',lineHeight:36},
-  subtitle:{fontSize:14,color:'#68727F',lineHeight:22},
-  requestButton:{alignSelf:'flex-start',minHeight:45,borderWidth:1,borderColor:'#D6DAE1',borderRadius:12,paddingHorizontal:13,flexDirection:'row',alignItems:'center',gap:9,marginTop:12,backgroundColor:'#FFFFFF'},
-  requestButtonText:{fontSize:13,fontWeight:'800',color:'#17202D'},
+  liveText:{fontSize: 12,fontWeight: '700',letterSpacing:.3,color:'#5314B8'},
+  pageTitle:{fontSize:22,fontWeight: '700',color:ui.ink,lineHeight:36},
+  subtitle:{fontSize:14,color:ui.muted,lineHeight:22},
+  requestButton:{alignSelf:'flex-start',minHeight:45,borderWidth:1,borderColor:'#D6DAE1',borderRadius:12,paddingHorizontal:13,flexDirection:'row',alignItems:'center',gap:9,marginTop:12,backgroundColor:ui.surface},
+  requestButtonText:{fontSize:13,fontWeight: '700',color:ui.ink},
   milestoneActionRow:{borderTopWidth:1,borderTopColor:'#DDE3EF',marginTop:12,paddingTop:10,alignItems:'flex-end'},
-  milestoneActionButton:{minHeight:43,borderWidth:1,borderColor:'#CAD1DD',borderRadius:11,paddingHorizontal:13,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:8,backgroundColor:'#FFFFFF'},
+  milestoneActionButton:{minHeight:43,borderWidth:1,borderColor:'#CAD1DD',borderRadius:11,paddingHorizontal:13,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:8,backgroundColor:ui.surface},
   milestoneCompleteButton:{backgroundColor:PURPLE,borderColor:PURPLE},
-  milestoneActionText:{fontSize:13,fontWeight:'800',color:'#17202D'},
-  milestoneCompleteText:{color:'#FFFFFF'},
-  timelineCard:{backgroundColor:'#fff',borderRadius:23,borderWidth:1,borderColor:'#E6E8EE',paddingHorizontal:14,paddingVertical:20,elevation:1},
+  milestoneActionText:{fontSize:13,fontWeight: '700',color:ui.ink},
+  milestoneCompleteText:{color:ui.surface},
+  timelineCard:{backgroundColor:ui.surface,borderRadius:23,borderWidth:1,borderColor:'#E6E8EE',paddingHorizontal:14,paddingVertical:20,elevation: 0},
   timeline:{gap:0},
   timelineRow:{flexDirection:'row',alignItems:'stretch'},
   markerColumn:{width:31,alignItems:'center'},
@@ -340,37 +334,37 @@ const styles = StyleSheet.create({
   markerCompleted:{backgroundColor:'#16A36A',borderColor:'#16A36A'},
   markerActive:{backgroundColor:PURPLE,borderColor:PURPLE},
   markerBlocked:{backgroundColor:'#D92D20',borderColor:'#D92D20'},
-  markerNumber:{fontSize:13,fontWeight:'900',color:'#52627A'},
+  markerNumber:{fontSize:13,fontWeight: '700',color:'#52627A'},
   connector:{width:3,flex:1,minHeight:20,backgroundColor:'#D5E4F8',marginTop:-1},
   connectorCompleted:{backgroundColor:'#79D5AC'},
-  stageCard:{flex:1,backgroundColor:'#EFF3FF',borderWidth:1,borderColor:'#D5E0F3',borderRadius:17,padding:14,marginBottom:17,minHeight:126},
+  stageCard:{flex:1,backgroundColor:'#EFF3FF',borderWidth:1,borderColor:'#D5E0F3',borderRadius:16,padding:14,marginBottom:17,minHeight:126},
   stageCardActive:{backgroundColor:'#F5F0FF',borderColor:'#B99BEF',borderWidth:1.5},
   stageCardCompleted:{backgroundColor:'#F0FBF5',borderColor:'#BDEBD2'},
   stageCardBlocked:{backgroundColor:'#FFF5F4',borderColor:'#F2C6C2'},
-  stageTitle:{fontSize:15,fontWeight:'900',color:'#17202D',lineHeight:21,marginBottom:8},
+  stageTitle:{fontSize:15,fontWeight: '700',color:ui.ink,lineHeight:21,marginBottom:8},
   stageMetaRow:{flexDirection:'row',alignItems:'center',flexWrap:'wrap',gap:9,marginBottom:8},
   statusBadge:{paddingHorizontal:10,paddingVertical:5,borderRadius:18},
-  statusText:{fontSize:11,fontWeight:'800'},
-  stageDate:{fontSize:12,color:'#68727F',letterSpacing:.5},
+  statusText:{fontSize: 12,fontWeight: '700'},
+  stageDate:{fontSize: 13,color:ui.muted,letterSpacing:.5},
   stageDescription:{fontSize:13,color:'#626D7B',lineHeight:20},
-  stateCard:{backgroundColor:'#fff',borderRadius:18,borderWidth:1,borderColor:'#E5E7EB',padding:24,alignItems:'center',gap:10,marginTop:10},
-  stateTitle:{fontSize:16,fontWeight:'900',color:'#202633',textAlign:'center'},
+  stateCard:{backgroundColor:ui.surface,borderRadius:16,borderWidth:1,borderColor:ui.border,padding:24,alignItems:'center',gap:10,marginTop:10},
+  stateTitle:{fontSize:16,fontWeight: '700',color:ui.ink,textAlign:'center'},
   stateText:{fontSize:13,color:'#737B87',textAlign:'center',lineHeight:19},
-  retryButton:{backgroundColor:'#F0E9FF',paddingHorizontal:18,paddingVertical:10,borderRadius:11,marginTop:3},
-  retryText:{fontSize:13,fontWeight:'800',color:PURPLE},
+  retryButton:{backgroundColor:ui.accentSoft,paddingHorizontal:18,paddingVertical:10,borderRadius:11,marginTop:3},
+  retryText:{fontSize:13,fontWeight: '700',color:PURPLE},
   emptyMilestones:{alignItems:'center',paddingVertical:22,gap:10},
   syncHint:{flexDirection:'row',alignItems:'center',justifyContent:'center',gap:5},
-  syncHintText:{fontSize:11,color:'#7B8491',textAlign:'center'},
-  bottomNav:{minHeight:75,backgroundColor:'#fff',borderTopWidth:1,borderTopColor:'#E6E8ED',paddingTop:7,paddingHorizontal:5,flexDirection:'row',alignItems:'center',justifyContent:'space-around'},
+  syncHintText:{fontSize: 12,color:ui.muted,textAlign:'center'},
+  bottomNav:{minHeight:75,backgroundColor:ui.surface,borderTopWidth:1,borderTopColor:'#E6E8ED',paddingTop:7,paddingHorizontal:5,flexDirection:'row',alignItems:'center',justifyContent:'space-around'},
   navItem:{minWidth:57,minHeight:58,borderRadius:16,alignItems:'center',justifyContent:'center',paddingHorizontal:6,paddingVertical:4,gap:2},
-  navItemActive:{backgroundColor:'#F1EBFB'},
-  navLabel:{fontSize:10,color:'#687687',fontWeight:'600'},
-  navLabelActive:{color:PURPLE,fontWeight:'900'},
+  navItemActive:{backgroundColor:ui.accentSoft},
+  navLabel:{fontSize:10,color:ui.muted,fontWeight:'600'},
+  navLabelActive:{color:PURPLE,fontWeight: '700'},
   drawerLayer:{position:'absolute',left:0,right:0,zIndex:30,flexDirection:'row'},
-  drawer:{width:'68%',maxWidth:320,backgroundColor:'#fff',paddingTop:18,paddingHorizontal:14,elevation:14,shadowColor:'#000',shadowOpacity:.16,shadowRadius:12,shadowOffset:{width:3,height:0}},
+  drawer:{width:'68%',maxWidth:320,backgroundColor:ui.surface,paddingTop:18,paddingHorizontal:14,elevation: 0,shadowColor:'#000',shadowOpacity: 0,shadowRadius:12,shadowOffset:{width:3,height:0}},
   drawerBackdrop:{flex:1,backgroundColor:'rgba(13,10,22,.38)'},
   drawerItem:{minHeight:49,borderRadius:12,marginBottom:3,paddingHorizontal:12,flexDirection:'row',alignItems:'center',gap:14},
   drawerItemActive:{backgroundColor:PURPLE},
   drawerText:{fontSize:15,fontWeight:'600',color:'#4B515B'},
-  drawerTextActive:{color:'#fff',fontWeight:'800'},
+  drawerTextActive:{color:ui.surface,fontWeight: '700'},
 });

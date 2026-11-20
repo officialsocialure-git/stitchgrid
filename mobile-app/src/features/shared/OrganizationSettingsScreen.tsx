@@ -1,14 +1,25 @@
+import { ui } from '@/theme/ui';
 import React,{useCallback,useEffect,useState} from 'react';
 import {ActivityIndicator,Alert,KeyboardAvoidingView,Platform,Pressable,ScrollView,StyleSheet,Text,TextInput,View} from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import {apiGet,apiRequest} from '@/services/api';
 import {AppHeader} from '@/components/AppHeader';
+import {AppBottomNav} from '@/components/AppBottomNav';
+import {useRouter} from 'expo-router';
+import {useKeyboardVisible} from '@/hooks/useKeyboardVisible';
 
-const PURPLE='#5314E8';
+const PURPLE = ui.accent;
 type OrgProfile={id:string;name:string;legalName?:string|null;businessType?:string|null;taxId?:string|null;city?:string|null;country?:string|null;address?:string|null;verificationStatus:string;supplierProfile?:{description?:string|null;yearsInBusiness?:number|null;productionCapacity?:number|null;categories?:{id:string;category:string}[]}|null};
 export default function OrganizationSettingsScreen(){
+ const router=useRouter();
+ const keyboardVisible=useKeyboardVisible();
+
+ const navigate=(section:string)=>section==='home'
+  ? router.replace(`/workspace?role=${navRole}` as any)
+  : router.replace({pathname:navRole==='SUPPLIER'?'/supplier/[section]':'/buyer/[section]',params:{section}} as any);
  const [profile,setProfile]=useState<OrgProfile|null>(null);const [role,setRole]=useState('BUYER');const [orgId,setOrgId]=useState('');
+ const navRole=role === 'SUPPLIER' ? 'SUPPLIER' : 'BUYER';
  const [name,setName]=useState('');const [legalName,setLegalName]=useState('');const [taxId,setTaxId]=useState('');const [city,setCity]=useState('');const [country,setCountry]=useState('India');const [address,setAddress]=useState('');
  const [description,setDescription]=useState('');const [years,setYears]=useState('');const [capacity,setCapacity]=useState('');const [categories,setCategories]=useState('');const [loading,setLoading]=useState(true);const [saving,setSaving]=useState(false);const [error,setError]=useState('');const [success,setSuccess]=useState('');
  const load=useCallback(async()=>{
@@ -30,7 +41,7 @@ export default function OrganizationSettingsScreen(){
    const raw=await SecureStore.getItemAsync('sg_membership');if(raw){const m=JSON.parse(raw);m.organization={...(m.organization||{}),id:orgId,name:updated.name};await SecureStore.setItemAsync('sg_membership',JSON.stringify(m));}
   }catch(e){setError(e instanceof Error?e.message:'Unable to save organization profile.');}finally{setSaving(false);}
  };
- const Field=({label,value,onChange,placeholder,editable=true}:{label:string;value:string;onChange:(v:string)=>void;placeholder:string;editable?:boolean})=><View style={s.field}><Text style={s.label}>{label}</Text><TextInput value={value} onChangeText={onChange} placeholder={placeholder} placeholderTextColor="#A1A1AA" editable={editable} style={[s.input,!editable&&s.readOnly]}/></View>;
+ const Field=({label,value,onChange,placeholder,editable=true}:{label:string;value:string;onChange:(v:string)=>void;placeholder:string;editable?:boolean})=><View style={s.field}><Text style={s.label}>{label}</Text><TextInput accessibilityLabel={label} value={value} onChangeText={onChange} placeholder={placeholder} placeholderTextColor={ui.muted} editable={editable} style={[s.input,!editable&&s.readOnly]}/></View>;
  return <KeyboardAvoidingView style={s.screen} behavior={Platform.OS==='ios'?'padding':undefined}>
   <AppHeader
     isBack
@@ -62,6 +73,8 @@ export default function OrganizationSettingsScreen(){
     <Pressable disabled={saving} onPress={()=>void save()} style={[s.save,saving&&{opacity:.6}]}>{saving?<ActivityIndicator color="#fff"/>:<MaterialCommunityIcons name="content-save" size={22} color="#fff"/>}<Text style={s.saveText}>{saving?'Saving Changes...':'Save Changes'}</Text></Pressable>
    </View>
   </>}
- </ScrollView></KeyboardAvoidingView>;
+ </ScrollView>
+ {!keyboardVisible && <AppBottomNav role={navRole} activeSection="organization-settings" onNavigate={navigate} />}
+ </KeyboardAvoidingView>;
 }
-const s=StyleSheet.create({screen:{flex:1,backgroundColor:'#F7F8FC'},content:{padding:16,paddingBottom:30,gap:15},heading:{fontSize:22,lineHeight:29,fontWeight:'900',color:'#142033'},subheading:{fontSize:15,lineHeight:23,color:'#68727F',marginBottom:2},card:{backgroundColor:'#fff',borderRadius:22,borderWidth:1,borderColor:'#E8EAF0',padding:18,gap:17},statusRow:{flexDirection:'row',alignItems:'center',gap:10},sectionTitle:{fontSize:20,fontWeight:'900',color:'#17202D'},statusDesc:{fontSize:14,lineHeight:21,color:'#68727F',marginTop:4},badge:{flexDirection:'row',alignItems:'center',gap:6,paddingHorizontal:12,paddingVertical:10,borderRadius:30,backgroundColor:'#E5EDFF'},approved:{backgroundColor:'#E8F8EF'},badgeText:{fontSize:12,fontWeight:'800',color:'#4B5563'},separator:{height:1,backgroundColor:'#E9EAF0',marginVertical:2},field:{gap:8},label:{fontSize:12,fontWeight:'800',color:'#596273'},input:{height:54,borderWidth:1,borderColor:'#E2E4E9',borderRadius:15,paddingHorizontal:14,fontSize:15,color:'#202633',backgroundColor:'#fff'},readOnly:{backgroundColor:'#F0F3FF'},save:{minHeight:54,alignSelf:'flex-end',backgroundColor:'#5200B9',borderRadius:13,paddingHorizontal:22,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:10},saveText:{fontSize:16,fontWeight:'800',color:'#fff'},state:{minHeight:220,alignItems:'center',justifyContent:'center',gap:10},muted:{fontSize:13,color:'#7B8491'},error:{color:'#B42318',fontSize:13},success:{flexDirection:'row',alignItems:'center',gap:8,backgroundColor:'#ECFDF3',padding:12,borderRadius:12},successText:{flex:1,color:'#167447',fontSize:13,fontWeight:'600'}});
+const s=StyleSheet.create({screen:{flex:1,backgroundColor:ui.canvas},content:{padding:16,paddingBottom:30,gap:15,width:'100%',maxWidth:840,alignSelf:'center'},heading:{fontSize:22,lineHeight:29,fontWeight: '700',color:'#142033'},subheading:{fontSize:15,lineHeight:23,color:ui.muted,marginBottom:2},card:{backgroundColor:ui.surface,borderRadius:16,borderWidth:1,borderColor:ui.border,padding:18,gap:17},statusRow:{flexDirection:'row',alignItems:'center',gap:10},sectionTitle:{fontSize:20,fontWeight: '700',color:ui.ink},statusDesc:{fontSize:14,lineHeight:21,color:ui.muted,marginTop:4},badge:{flexDirection:'row',alignItems:'center',gap:6,paddingHorizontal:12,paddingVertical:10,borderRadius:30,backgroundColor:'#E5EDFF'},approved:{backgroundColor:'#E8F8EF'},badgeText:{fontSize: 13,fontWeight: '700',color:'#4B5563'},separator:{height:1,backgroundColor:'#E9EAF0',marginVertical:2},field:{gap:8},label:{fontSize: 13,fontWeight: '700',color:'#596273'},input:{height:54,borderWidth:1,borderColor:'#E2E4E9',borderRadius:12,paddingHorizontal:14,fontSize:15,color:ui.ink,backgroundColor:ui.surface},readOnly:{backgroundColor:'#F0F3FF'},save:{minHeight:54,alignSelf:'flex-end',backgroundColor:ui.accent,borderRadius:13,paddingHorizontal:22,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:10},saveText:{fontSize:16,fontWeight: '700',color:ui.surface},state:{minHeight:220,alignItems:'center',justifyContent:'center',gap:10},muted:{fontSize:13,color:ui.muted},error:{color:'#B42318',fontSize:13},success:{flexDirection:'row',alignItems:'center',gap:8,backgroundColor:'#ECFDF3',padding:12,borderRadius:12},successText:{flex:1,color:'#167447',fontSize:13,fontWeight:'600'}});

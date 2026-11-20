@@ -1,3 +1,4 @@
+import { ui } from '@/theme/ui';
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -45,13 +46,13 @@ export default function BuyerSectionScreen() {
       <AppHeader isBack role="BUYER" title={page.title} showLogo={false} />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.iconWrap}>
-          <MaterialCommunityIcons name={page.icon as any} size={24} color="#5314E8" />
+          <MaterialCommunityIcons name={page.icon as any} size={24} color={ui.accent} />
         </View>
         <Text style={styles.title}>{page.title}</Text>
         <Text style={styles.description}>{page.description}</Text>
         <View style={styles.notice}>
           <MaterialCommunityIcons name="information-outline" size={20} color="#6D4AB2" />
-          <Text style={styles.noticeText}>This screen is ready for navigation. Its complete layout and actions will be connected to the existing STITCHGRID backend as you share its web-app screenshot.</Text>
+          <Text style={styles.noticeText}>This section is not available in the mobile app yet. You can continue managing your orders, requests and messages from your workspace.</Text>
         </View>
         <Pressable style={styles.homeButton} onPress={() => router.replace('/workspace?role=BUYER' as any)}>
           <MaterialCommunityIcons name="home-outline" size={19} color="#FFFFFF" />
@@ -63,16 +64,16 @@ export default function BuyerSectionScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen:{flex:1,backgroundColor:'#F7F8FC'},
-  header:{minHeight:64,backgroundColor:'#FFFFFF',borderBottomWidth:1,borderBottomColor:'#E9EAF0',paddingHorizontal:14,paddingBottom:7,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
+  screen:{flex:1,backgroundColor:ui.canvas},
+  header:{minHeight:64,backgroundColor:ui.surface,borderBottomWidth:1,borderBottomColor:'#E9EAF0',paddingHorizontal:14,paddingBottom:7,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
   backButton:{width:36,height:36,alignItems:'center',justifyContent:'center'},
-  headerTitle:{fontSize:16,fontWeight:'800',color:'#202633'},
+  headerTitle:{fontSize:16,fontWeight: '700',color:ui.ink},
   content:{flexGrow:1,alignItems:'center',justifyContent:'center',padding:22},
-  iconWrap:{width:66,height:66,borderRadius:20,backgroundColor:'#F0E9FF',alignItems:'center',justifyContent:'center'},
-  title:{fontSize:22,fontWeight:'900',color:'#202633',marginTop:18},
+  iconWrap:{width:66,height:66,borderRadius:20,backgroundColor:ui.accentSoft,alignItems:'center',justifyContent:'center'},
+  title:{fontSize:22,fontWeight: '700',color:ui.ink,marginTop:18},
   description:{fontSize:14,color:'#727B88',textAlign:'center',lineHeight:21,marginTop:8,maxWidth:310},
-  notice:{flexDirection:'row',alignItems:'flex-start',gap:10,backgroundColor:'#F1EBFB',borderRadius:14,padding:14,marginTop:24,maxWidth:390},
-  noticeText:{flex:1,fontSize:12,color:'#615775',lineHeight:18},
-  homeButton:{height:46,backgroundColor:'#5314E8',borderRadius:13,paddingHorizontal:18,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:8,marginTop:22},
-  homeButtonText:{fontSize:14,fontWeight:'800',color:'#FFFFFF'},
+  notice:{flexDirection:'row',alignItems:'flex-start',gap:10,backgroundColor:ui.accentSoft,borderRadius:14,padding:14,marginTop:24,maxWidth:390},
+  noticeText:{flex:1,fontSize: 13,color:'#615775',lineHeight:18},
+  homeButton:{height:46,backgroundColor:ui.accent,borderRadius:13,paddingHorizontal:18,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:8,marginTop:22},
+  homeButtonText:{fontSize:14,fontWeight: '700',color:ui.surface},
 });
