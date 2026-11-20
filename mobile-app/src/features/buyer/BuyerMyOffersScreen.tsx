@@ -1,5 +1,5 @@
 import { ui } from '@/theme/ui';
-import { SourcingTabs } from '@/components/SourcingTabs';
+
 import { AppBottomNav } from '@/components/AppBottomNav';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -158,7 +158,7 @@ export default function BuyerMyOffersScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {setRefreshing(true);void load(true);}} tintColor={PURPLE}/>}
       >
-        <SourcingTabs role="BUYER" active="offers" />
+
         {loading ? <View style={styles.stateCard}><ActivityIndicator color={PURPLE}/><Text style={styles.stateText}>Loading supplier quotations...</Text></View> :
         error ? <View style={styles.stateCard}><MaterialCommunityIcons name="cloud-alert-outline" size={30} color="#8B929C"/><Text style={styles.stateTitle}>Couldn't load offers</Text><Text style={styles.stateText}>{error}</Text><Pressable style={styles.retry} onPress={() => void load()}><Text style={styles.retryText}>Try Again</Text></Pressable></View> :
         !activeRfq ? <View style={styles.stateCard}><MaterialCommunityIcons name="file-document-outline" size={32} color="#9AA1AA"/><Text style={styles.stateTitle}>No requests available</Text><Text style={styles.stateText}>Post a buyer request to receive supplier quotations.</Text><Pressable style={styles.primaryButton} onPress={() => navigate('requests')}><Text style={styles.primaryButtonText}>Go to My Requests</Text></Pressable></View> :

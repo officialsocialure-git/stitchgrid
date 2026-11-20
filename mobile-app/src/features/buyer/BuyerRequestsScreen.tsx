@@ -1,5 +1,5 @@
 import { ui } from '@/theme/ui';
-import { SourcingTabs } from '@/components/SourcingTabs';
+
 import { AppBottomNav } from '@/components/AppBottomNav';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -154,7 +154,7 @@ export default function BuyerRequestsScreen() {
           <Text style={styles.hubPill}>Buyer Sourcing Hub</Text>
         </View>
         <Text style={styles.subtitle}>Create and manage your production requests (RFQs), compare supplier quotes, and move to order.</Text>
-        <SourcingTabs role="BUYER" active="requests" />
+
 
         <Pressable style={styles.postButton} onPress={() => setPostModalVisible(true)}>
           <MaterialCommunityIcons name="plus" size={21} color="#FFFFFF" />
