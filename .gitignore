@@ -134,3 +134,26 @@ console.log*
 p.$disconnect*
 
 ADMIN_PANEL_IMPLEMENTATION.md
+
+# ------------------------------------------------------------------------------
+# Expo / React Native (mobile-app)
+# ------------------------------------------------------------------------------
+.expo/
+**/.expo/
+.expo-shared/
+web-build/
+**/web-build/
+android/.gradle/
+**/android/.gradle/
+*.apk
+*.aab
+*.ipa
+*.jks
+*.keystore
+*.mobileprovision
+*.p8
+*.p12
+*.cer
+*.provisionprofile
+GoogleService-Info.plist
+google-services.json

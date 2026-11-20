@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "STITCHGRID",
+    "slug": "stitchgrid-mobile-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "stitchgridapp",
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow STITCHGRID to access photos so suppliers can upload garment sample images."
+        }
+      ],
+      "expo-font",
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "android": {
+      "package": "com.stitchgrid.mobileapp",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "com.stitchgrid.mobileapp"
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "51f8285d-870a-4081-bb42-cc80aeeb983d"
+      }
+    }
+  }
+}
