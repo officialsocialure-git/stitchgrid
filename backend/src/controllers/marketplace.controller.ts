@@ -569,6 +569,77 @@ export async function submitQuote(req: Request, res: Response, next: NextFunctio
   } catch (e) { next(e); }
 }
 
+export async function reviseSupplierQuotation(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = z.object({
+      rfqId: z.string(),
+      supplierOrgId: z.string(),
+      totalAmount: z.number().positive(),
+      currency: z.string().length(3).default("INR"),
+      leadTimeDays: z.number().int().positive(),
+      sampleCost: z.coerce.number().nonnegative().optional(),
+      sampleLeadDays: z.number().int().positive().optional(),
+      moq: z.number().int().positive().optional(),
+      validityUntil: z.coerce.date().optional(),
+      terms: z.string().max(4000).optional(),
+      items: z.array(z.object({
+        description: z.string().min(1),
+        quantity: z.number().int().positive(),
+        unitPrice: z.number().positive(),
+        rfqItemId: z.string().optional()
+      })).min(1)
+    }).parse(req.body);
+
+    const quotationId = Array.isArray(req.params.quotationId) ? req.params.quotationId[0] : req.params.quotationId;
+    const quotation = await prisma.quotation.findUnique({ where: { id: quotationId } });
+    if (!quotation) throw new AppError(404, "Quotation not found");
+    if (quotation.rfqId !== input.rfqId || quotation.supplierOrgId !== input.supplierOrgId) {
+      throw new AppError(400, "Quotation details do not match the selected RFQ and supplier");
+    }
+
+    const member = await prisma.organizationMember.findFirst({
+      where: { userId: req.auth!.userId, organizationId: input.supplierOrgId, role: "SUPPLIER", isActive: true }
+    });
+    if (!member) throw new AppError(403, "Active supplier membership required");
+    if (quotation.status !== "SUBMITTED" && quotation.status !== "REVISED") {
+      throw new AppError(400, "Only submitted quotations can be revised");
+    }
+
+    const rfq = await prisma.rfq.findUnique({ where: { id: input.rfqId } });
+    if (!rfq || rfq.status !== "OPEN") throw new AppError(400, "This RFQ is no longer open for quotation revisions");
+
+    const updated = await prisma.quotation.update({
+      where: { id: quotationId },
+      data: {
+        totalAmount: input.totalAmount,
+        currency: input.currency,
+        leadTimeDays: input.leadTimeDays,
+        sampleCost: input.sampleCost,
+        sampleLeadDays: input.sampleLeadDays,
+        moq: input.moq,
+        validityUntil: input.validityUntil,
+        terms: input.terms,
+        status: "REVISED",
+        revision: { increment: 1 },
+        items: {
+          deleteMany: {},
+          create: input.items.map(item => ({
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            rfqItemId: item.rfqItemId
+          }))
+        }
+      },
+      include: { items: true }
+    });
+
+    emitToOrg(quotation.buyerOrgId, "quotation:updated", { rfqId: quotation.rfqId, quotationId, status: "REVISED" });
+    emitToRole("BUYER", "quotation:updated", { rfqId: quotation.rfqId, quotationId, status: "REVISED" });
+    return sendOk(res, updated);
+  } catch (e) { next(e); }
+}
+
 export async function updateQuotationStatus(req: Request, res: Response, next: NextFunction) {
   try {
     const input = z.object({
