@@ -565,6 +565,7 @@ export async function submitQuote(req: Request, res: Response, next: NextFunctio
 
     emitToOrg(rfq.buyerOrgId, "quotation:created", { rfqId: quote.rfqId, quotationId: quote.id });
     emitToRole("BUYER", "quotation:created", { rfqId: quote.rfqId, quotationId: quote.id });
+    emitToRole("ADMIN", "quotation:created", { rfqId: quote.rfqId, quotationId: quote.id });
     return sendOk(res, quote, 201);
   } catch (e) { next(e); }
 }
@@ -636,6 +637,7 @@ export async function reviseSupplierQuotation(req: Request, res: Response, next:
 
     emitToOrg(quotation.buyerOrgId, "quotation:updated", { rfqId: quotation.rfqId, quotationId, status: "REVISED" });
     emitToRole("BUYER", "quotation:updated", { rfqId: quotation.rfqId, quotationId, status: "REVISED" });
+    emitToRole("ADMIN", "quotation:updated", { rfqId: quotation.rfqId, quotationId, status: "REVISED" });
     return sendOk(res, updated);
   } catch (e) { next(e); }
 }
@@ -683,6 +685,7 @@ export async function updateQuotationStatus(req: Request, res: Response, next: N
 
     emitToOrg(quote.buyerOrgId, "quotation:updated", { quotationId: quote.id, status: input.status });
     emitToOrg(quote.supplierOrgId, "quotation:updated", { quotationId: quote.id, status: input.status });
+    emitToRole("ADMIN", "quotation:updated", { rfqId: quote.rfqId, quotationId: quote.id, status: input.status });
 
     return sendOk(res, updated);
   } catch (e) { next(e); }
@@ -1006,6 +1009,9 @@ export async function createPurchaseOrder(req: Request, res: Response, next: Nex
     await audit("PURCHASE_ORDER_CREATED", "PurchaseOrder", order.id, req.auth!.userId, quote.buyerOrgId);
     emitToOrg(quote.supplierOrgId, "order:created", { orderId: order.id, poNumber: order.poNumber });
     emitToOrg(quote.buyerOrgId, "order:created", { orderId: order.id, poNumber: order.poNumber });
+    emitToRole("ADMIN", "quotation:updated", { rfqId: quote.rfqId, quotationId: quote.id, status: "ACCEPTED" });
+    emitToRole("ADMIN", "rfq:updated", { rfqId: quote.rfqId, status: "AWARDED" });
+    emitToRole("ADMIN", "order:created", { orderId: order.id, poNumber: order.poNumber });
     return sendOk(res, order, 201);
   } catch (e) { next(e); }
 }
