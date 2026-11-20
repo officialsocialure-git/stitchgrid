@@ -49,7 +49,7 @@ export default function MessagesPage() {
           unread: 0,
         }));
         setConversations(mapped);
-        setActiveChatId(mapped[0].id);
+        setActiveChatId((current) => mapped.some((conversation) => conversation.id === current) ? current : mapped[0].id);
       } else {
         setConversations([]);
         setActiveChatId("");
@@ -147,9 +147,9 @@ export default function MessagesPage() {
   const activeChat = conversations.find((c) => c.id === activeChatId);
 
   return (
-    <div className="h-[calc(100dvh-8rem)] min-h-0 max-w-7xl mx-auto flex rounded-2xl bg-surface-container-lowest border border-outline-variant/30 shadow-sm overflow-hidden">
-      {/* Mobile shows the conversation list first for both Buyer and Supplier. */}
-      <div className={`w-full md:w-80 border-r border-surface-container-high flex flex-col shrink-0 ${isMobileChatOpen ? "hidden md:flex" : "flex"}`}>
+    <div className="relative isolate h-[calc(100dvh-8rem)] min-h-0 max-w-7xl mx-auto flex rounded-2xl bg-surface-container-lowest border border-outline-variant/30 shadow-sm overflow-hidden">
+      {/* WhatsApp-style mobile inbox: list first, selected chat as a full-screen panel. */}
+      <div className={`w-full md:w-80 border-r border-surface-container-high flex-col shrink-0 ${isMobileChatOpen ? "hidden md:flex" : "flex"}`}>
         <div className="p-4 border-b border-surface-container-high">
           <h2 className="font-bold text-lg sm:text-xl text-on-surface leading-[1.2]">
             {isSupplier ? "Factory Communications" : "Chat"}
@@ -194,7 +194,7 @@ export default function MessagesPage() {
       </div>
 
       {/* Chat view opens full-screen on mobile after selecting a conversation. */
-      <div className={`min-w-0 flex-1 flex flex-col ${!isMobileChatOpen ? "hidden md:flex" : "flex"}`}>
+      <div className={`min-w-0 flex-1 flex-col bg-surface-container-lowest ${isMobileChatOpen ? "fixed inset-0 z-[60] flex h-[100dvh] w-full md:relative md:inset-auto md:z-auto md:h-auto md:w-auto" : "hidden md:flex"}`}>
         {activeChat ? (
           <>
             {/* Header */}
