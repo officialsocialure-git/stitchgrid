@@ -1,9 +1,12 @@
+import { ui } from '@/theme/ui';
+import { STITCHGRID_LOGO } from '@/theme/assets';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Image,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -25,9 +28,9 @@ import {
   saveRememberMePreference,
 } from '@/services/auth';
 
-const PURPLE = '#8124CF';
-const DEEP_PURPLE = '#6816B8';
-const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparent.png';
+const PURPLE = ui.accent;
+const DEEP_PURPLE = ui.accentPressed;
+
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -118,18 +121,20 @@ export default function LoginScreen() {
           contentContainerStyle={[
             styles.scrollContent,
             {
-              paddingTop: Math.max(insets.top + (compact ? 4 : 10), 12),
-              paddingBottom: Math.max(insets.bottom + 8, 12),
-              minHeight: Math.max(height - insets.top - insets.bottom, 0),
+              paddingTop: Math.max(insets.top, 12),
+              paddingBottom: Math.max(insets.bottom, 12),
             },
           ]}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          bounces={false}
+          alwaysBounceVertical={false}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.brand}>
             <View style={styles.logoFrame}>
               <Image
-                source={{ uri: LOGO_URI }}
+                source={STITCHGRID_LOGO}
                 style={styles.logoImage}
                 resizeMode="contain"
                 accessibilityLabel="STITCHGRID - The Garment Manufacturing Network"
@@ -137,7 +142,7 @@ export default function LoginScreen() {
             </View>
             <Text style={styles.tagline}>The operating network for garment manufacturing</Text>
           </View>
-          <View style={[styles.card, { width: Math.min(width - 44, 650), padding: compact ? 23 : 28 }]}>
+          <View style={[styles.card, { width: Math.min(width - 32, 460), padding: compact ? 18 : 22 }]}>
             <View style={styles.welcomeBlock}>
               <Text style={styles.welcomeTitle}>Welcome Back</Text>
               <Text style={styles.welcomeSubtitle}>Sign in to your STITCHGRID account</Text>
@@ -153,12 +158,14 @@ export default function LoginScreen() {
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>REGISTERED EMAIL OR MOBILE NUMBER</Text>
               <View style={[styles.inputShell, styles.identifierShell]}>
-                <MaterialCommunityIcons name="account-outline" size={25} color={PURPLE} />
+                <MaterialCommunityIcons name="account-outline" size={22} color={PURPLE} />
                 <TextInput
+                  accessibilityLabel="Registered email or mobile number"
+                  autoComplete="username"
                   value={identifier}
                   onChangeText={setIdentifier}
                   placeholder="name@company.com or mobile number"
-                  placeholderTextColor="#A1A1AA"
+                  placeholderTextColor={ui.muted}
                   autoCapitalize="none"
                   autoCorrect={false}
                   keyboardType="email-address"
@@ -171,12 +178,14 @@ export default function LoginScreen() {
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>ACCOUNT PASSWORD</Text>
               <View style={styles.inputShell}>
-                <MaterialCommunityIcons name="lock-outline" size={25} color={PURPLE} />
+                <MaterialCommunityIcons name="lock-outline" size={22} color={PURPLE} />
                 <TextInput
+                  accessibilityLabel="Account password"
+                  autoComplete="current-password"
                   value={password}
                   onChangeText={setPassword}
                   placeholder="••••••••••"
-                  placeholderTextColor="#A1A1AA"
+                  placeholderTextColor={ui.muted}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -184,25 +193,25 @@ export default function LoginScreen() {
                   onSubmitEditing={handleLogin}
                   style={styles.input}
                 />
-                <Pressable onPress={() => setShowPassword((value) => !value)} hitSlop={12}>
+                <Pressable onPress={() => setShowPassword((value) => !value)} style={styles.iconAction} accessibilityRole="button" accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}>
                   <MaterialCommunityIcons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={25} color="#626B75" />
                 </Pressable>
               </View>
             </View>
 
             <View style={styles.optionsRow}>
-              <Pressable style={styles.rememberRow} onPress={() => setRememberMe((value) => !value)}>
+              <Pressable style={styles.rememberRow} onPress={() => setRememberMe((value) => !value)} accessibilityRole="checkbox" accessibilityState={{ checked: rememberMe }}>
                 <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
                   {rememberMe && <MaterialCommunityIcons name="check" size={17} color="#FFFFFF" />}
                 </View>
                 <Text style={styles.rememberText}>Remember me</Text>
               </Pressable>
-              <Pressable onPress={() => { setForgotIdentifier(identifier); setForgotOpen(true); }}>
+              <Pressable style={styles.forgotAction} onPress={() => { setForgotIdentifier(identifier); setForgotOpen(true); }}>
                 <Text style={styles.forgotText}>Forgot Password?</Text>
               </Pressable>
             </View>
 
-            <Pressable style={[styles.signInButton, loading && styles.buttonDisabled]} onPress={handleLogin} disabled={loading}>
+            <Pressable style={[styles.signInButton, loading && styles.buttonDisabled]} onPress={handleLogin} disabled={loading} accessibilityRole="button">
               {loading ? <ActivityIndicator color="#FFFFFF" /> : (
                 <>
                   <Text style={styles.signInText}>Sign In</Text>
@@ -236,7 +245,7 @@ export default function LoginScreen() {
 
             <View style={styles.footer}>
               <Text style={styles.footerMuted}>New to STITCHGRID?</Text>
-              <Pressable style={styles.registerLink} onPress={() => router.push('/register')}>
+              <Pressable style={styles.registerLink} onPress={() => router.push('/register')} accessibilityRole="link">
                 <Text style={styles.registerText}>Register Organization</Text>
                 <MaterialCommunityIcons name="arrow-right" size={23} color={PURPLE} />
               </Pressable>
@@ -246,91 +255,92 @@ export default function LoginScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {forgotOpen && (
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalTitleRow}>
-              <MaterialCommunityIcons name="lock-reset" size={23} color={PURPLE} />
-              <Text style={styles.modalTitle}>Reset Account Password</Text>
-              <Pressable onPress={() => setForgotOpen(false)} style={styles.modalClose}>
-                <MaterialCommunityIcons name="close" size={22} color="#6B7280" />
+      <Modal visible={forgotOpen} transparent animationType="fade" onRequestClose={() => setForgotOpen(false)}>
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView contentContainerStyle={styles.modalScrollContent} keyboardShouldPersistTaps="handled" bounces={false}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalTitleRow}>
+                <MaterialCommunityIcons name="lock-reset" size={23} color={PURPLE} />
+                <Text style={styles.modalTitle}>Reset Account Password</Text>
+                <Pressable onPress={() => setForgotOpen(false)} style={styles.modalClose} accessibilityRole="button" accessibilityLabel="Close password reset">
+                  <MaterialCommunityIcons name="close" size={22} color="#6B7280" />
+                </Pressable>
+              </View>
+              <Text style={styles.modalDescription}>Enter your registered email address or mobile number.</Text>
+              <TextInput
+                accessibilityLabel="Password reset email or mobile number"
+                value={forgotIdentifier}
+                onChangeText={setForgotIdentifier}
+                placeholder="Email or mobile number"
+                placeholderTextColor={ui.muted}
+                autoCapitalize="none"
+                style={styles.modalInput}
+              />
+              <Pressable style={styles.signInButton} onPress={handleForgotPassword} disabled={forgotLoading} accessibilityRole="button">
+                {forgotLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.signInText}>Continue</Text>}
               </Pressable>
             </View>
-            <Text style={styles.modalDescription}>Enter your registered email address or mobile number.</Text>
-            <TextInput
-              value={forgotIdentifier}
-              onChangeText={setForgotIdentifier}
-              placeholder="Email or mobile number"
-              placeholderTextColor="#9CA3AF"
-              autoCapitalize="none"
-              style={styles.modalInput}
-            />
-            <Pressable style={styles.signInButton} onPress={handleForgotPassword} disabled={forgotLoading}>
-              {forgotLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.signInText}>Continue</Text>}
-            </Pressable>
-          </View>
-        </View>
-      )}
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#FFFFFF' },
+  screen: { flex: 1, backgroundColor: ui.canvas },
   keyboard: { flex: 1 },
-  scrollContent: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 0, gap: 0 },
-  brand: { width: '100%', maxWidth: 650, alignItems: 'center', marginBottom: 28 },
-  logoFrame: { width: '100%', height: 92, alignItems: 'center', justifyContent: 'center' },
-  logoImage: { width: '88%', height: 92 },
-  tagline: { color: '#535D73', fontSize: 14, lineHeight: 20, textAlign: 'center', marginTop: 13, fontWeight: '500' },
+  scrollContent: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  brand: { width: '100%', maxWidth: 460, alignItems: 'center', marginBottom: 12 },
+  logoFrame: { width: '100%', height: 60, alignItems: 'center', justifyContent: 'center' },
+  logoImage: { width: '86%', height: 60 },
+  tagline: { color: ui.body, fontSize: 13, lineHeight: 18, textAlign: 'center', marginTop: 4 },
   card: {
-    backgroundColor: 'rgba(255,255,255,0.96)',
-    borderRadius: 34,
+    backgroundColor: ui.surface,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#F2E9FA',
-    shadowColor: '#6D28D9',
-    shadowOpacity: 0.14,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 6,
+    borderColor: ui.border,
   },
-  welcomeBlock: { alignItems: 'center', marginBottom: 25 },
-  welcomeTitle: { color: '#17172D', fontSize: 29, lineHeight: 36, fontWeight: '800' },
-  welcomeSubtitle: { color: '#515B73', fontSize: 15, marginTop: 5, textAlign: 'center' },
+  welcomeBlock: { alignItems: 'center', marginBottom: 14 },
+  welcomeTitle: { color: ui.ink, fontSize: 25, lineHeight: 31, fontWeight: '700' },
+  welcomeSubtitle: { color: ui.body, fontSize: 14, lineHeight: 20, marginTop: 3, textAlign: 'center' },
   errorBox: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 11, borderRadius: 12, backgroundColor: '#FFF1F2', borderWidth: 1, borderColor: '#FECDD3', marginBottom: 16 },
-  errorText: { flex: 1, color: '#9F1239', fontSize: 12, lineHeight: 17 },
-  fieldGroup: { marginBottom: 20 },
-  label: { color: '#17172D', fontSize: 13, letterSpacing: 0.1, fontWeight: '700', marginBottom: 9, textTransform: 'capitalize' },
-  inputShell: { height: 58, borderRadius: 16, borderWidth: 1.5, borderColor: '#E1D8EA', paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFFFFF' },
-  identifierShell: { borderWidth: 2, borderColor: '#8B35D1' },
-  input: { flex: 1, color: '#20212A', fontSize: 15, paddingVertical: 0 },
-  optionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: -2, marginBottom: 14 },
-  rememberRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  errorText: { flex: 1, color: '#9F1239', fontSize: 13, lineHeight: 17 },
+  fieldGroup: { marginBottom: 12 },
+  label: { color: ui.ink, fontSize: 13, fontWeight: '600', marginBottom: 6 },
+  inputShell: { minHeight: 52, borderRadius: 12, borderWidth: 1, borderColor: ui.border, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: ui.surface },
+  identifierShell: { borderWidth: 1, borderColor: ui.border },
+  input: { flex: 1, minWidth: 0, minHeight: 48, color: ui.ink, fontSize: 16, paddingVertical: 6 },
+  optionsRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', columnGap: 8, marginBottom: 6 },
+  rememberRow: { flexDirection: 'row', alignItems: 'center', gap: 9, minHeight: 44 },
+  forgotAction: { minHeight: 44, justifyContent: 'center' },
+  iconAction: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   checkbox: { width: 21, height: 21, borderRadius: 3, borderWidth: 1.5, borderColor: '#B6B6BE', alignItems: 'center', justifyContent: 'center' },
   checkboxChecked: { backgroundColor: '#8A2BD0', borderColor: '#8A2BD0' },
-  rememberText: { color: '#343B50', fontSize: 14 },
-  forgotText: { color: '#7119C7', fontSize: 14, fontWeight: '800' },
-  signInButton: { minHeight: 58, borderRadius: 17, backgroundColor: '#8124CF', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, shadowColor: '#7E22CE', shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 4 },
+  rememberText: { color: ui.body, fontSize: 14 },
+  forgotText: { color: ui.accent, fontSize: 14, fontWeight: '600' },
+  signInButton: { minHeight: 52, borderRadius: 12, backgroundColor: ui.accent, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
   buttonDisabled: { opacity: 0.7 },
-  signInText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
-  orRow: { flexDirection: 'row', alignItems: 'center', gap: 0, marginVertical: 20 },
-  orLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
-  orText: { overflow: 'hidden', color: '#777B84', fontWeight: '700', letterSpacing: 2, backgroundColor: '#F4F4F5', borderRadius: 20, paddingHorizontal: 17, paddingVertical: 8, marginHorizontal: -1 },
-  googleButton: { height: 56, borderWidth: 1.5, borderColor: '#E4E0E9', borderRadius: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 13, backgroundColor: '#FFFFFF' },
+  signInText: { color: ui.surface, fontSize: 16, fontWeight: '700' },
+  orRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 10 },
+  orLine: { flex: 1, height: 1, backgroundColor: ui.border },
+  orText: { color: ui.muted, fontSize: 12, fontWeight: '600', paddingHorizontal: 12 },
+  googleButton: { minHeight: 52, borderWidth: 1, borderColor: ui.border, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: ui.surface },
   googleText: { color: '#252630', fontSize: 15, fontWeight: '600' },
-  footer: { marginTop: 22, paddingTop: 17, borderTopWidth: 1, borderTopColor: '#F0F0F2', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  footer: { marginTop: 12, paddingTop: 6, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', flexWrap: 'wrap', columnGap: 8 },
   footerMuted: { color: '#777E89', fontSize: 13 },
-  registerLink: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  registerLink: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
   registerText: { color: '#7132A7', fontSize: 13, fontWeight: '700' },
   stepPill: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#F0E6FB', borderColor: '#E7D5F8', borderWidth: 1, borderRadius: 28, paddingVertical: 8, paddingHorizontal: 18 },
   stepNumber: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#7921C5', alignItems: 'center', justifyContent: 'center' },
-  stepNumberText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  stepNumberText: { color: ui.surface, fontSize: 14, fontWeight: '700' },
   stepText: { color: '#54217E', fontSize: 14, fontWeight: '700' },
-  modalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10, backgroundColor: 'rgba(15, 10, 25, 0.48)', justifyContent: 'center', alignItems: 'center', padding: 22 },
-  modalCard: { width: '100%', maxWidth: 420, backgroundColor: '#FFFFFF', borderRadius: 22, padding: 22, gap: 15 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(15, 10, 25, 0.48)' },
+  modalScrollContent: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
+  modalCard: { width: '100%', maxWidth: 420, backgroundColor: ui.surface, borderRadius: 20, padding: 20, gap: 12 },
   modalTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   modalTitle: { flex: 1, fontSize: 14, fontWeight: '700', color: '#252330' },
-  modalClose: { padding: 3 },
+  modalClose: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   modalDescription: { color: '#646B76', fontSize: 13, lineHeight: 19 },
   modalInput: { height: 52, borderRadius: 12, borderWidth: 1, borderColor: '#DDD6E5', paddingHorizontal: 13, color: '#24212A' },
 });

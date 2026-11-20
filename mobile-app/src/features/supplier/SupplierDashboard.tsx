@@ -1,6 +1,8 @@
+import { ui } from '@/theme/ui';
+import { AppBottomNav } from '@/components/AppBottomNav';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Image, Modal, Pressable, RefreshControl, ScrollView,
+  ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView,
   StyleSheet, Text, TextInput, View, useWindowDimensions,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -10,9 +12,9 @@ import * as SecureStore from 'expo-secure-store';
 import { apiGet, apiRequest } from '@/services/api';
 import { AppHeader } from '@/components/AppHeader';
 
-const PURPLE = '#5B13EC';
+const PURPLE = ui.accent;
 const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparent.png';
-const BG = '#F7F8FC';
+const BG = ui.canvas;
 
 type Membership = { organizationId?: string; organization?: { id?: string; name?: string }; role?: string };
 type Rfq = {
@@ -368,15 +370,13 @@ export default function SupplierDashboard() {
             {loadWarnings.length > 0 && <View style={styles.warningCard}><MaterialCommunityIcons name="alert-circle-outline" size={22} color="#B7791F" /><View style={{ flex: 1 }}><Text style={styles.warningTitle}>Some dashboard data could not load</Text>{loadWarnings.map((warning, index) => <Text key={`${index}-${warning}`} style={styles.warningText}>{warning}</Text>)}</View></View>}
             <View style={styles.hero}>
               <View style={styles.heroCopy}>
-                <Text style={styles.eyebrow}>SUPPLIER DASHBOARD</Text>
-                <Text style={styles.heroTitle}>Your Factory,{'\n'}More Opportunities.</Text>
-                <Text style={styles.heroSubtitle}>Get RFQs, send quotes, manage orders and samples in one place.</Text>
+                <Text style={styles.heroTitle}>Factory overview</Text>
+                <Text style={styles.heroSubtitle}>Review requests, quotations, orders and samples.</Text>
                 <Pressable style={styles.catalogButton} onPress={() => setCatalogOpen(true)}>
                   <MaterialCommunityIcons name="plus" size={25} color="#FFFFFF" />
                   <Text style={styles.catalogButtonText}>Update Catalogue</Text>
                 </Pressable>
               </View>
-              <View style={styles.heroArt}><MaterialCommunityIcons name="factory" size={48} color="#FFFFFF" /></View>
             </View>
 
             <Pressable style={styles.profileCard} onPress={() => navigate('profile')}>
@@ -424,20 +424,7 @@ export default function SupplierDashboard() {
         )}
       </ScrollView>
 
-      <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 7) }]}>
-        {[
-          { label: 'Home', icon: 'home', section: 'home' },
-          { label: 'Buyer Requests', icon: 'format-list-bulleted', section: 'requests' },
-          { label: 'My Orders', icon: 'archive-outline', section: 'orders' },
-          { label: 'Messages', icon: 'message-text-outline', section: 'chat' },
-          { label: 'Profile', icon: 'account-outline', section: 'profile' },
-        ].map((item, index) => (
-          <Pressable key={item.label} style={[styles.tabItem, index === 0 && styles.tabActive]} onPress={() => navigate(item.section)}>
-            <MaterialCommunityIcons name={item.icon as any} size={25} color={index === 0 ? PURPLE : '#75808D'} />
-            <Text numberOfLines={1} style={[styles.tabLabel, index === 0 && styles.tabLabelActive]}>{item.label}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <AppBottomNav role="SUPPLIER" activeSection="home" onNavigate={navigate} />
 
       {menuOpen && (
         <View style={[styles.drawerLayer, { top: 78 + insets.top, bottom: 76 + insets.bottom }]}>
@@ -474,25 +461,33 @@ export default function SupplierDashboard() {
       </Modal>
 
       <Modal visible={quoteOpen} transparent animationType="slide" onRequestClose={() => { setQuoteOpen(false); setSelectedRfq(null); }}>
-        <View style={styles.modalBackdrop}><View style={styles.formSheet}>
-          <View style={styles.modalHeader}><Text style={styles.modalTitle}>Submit Quotation</Text><Pressable onPress={() => { setQuoteOpen(false); setSelectedRfq(null); }}><MaterialCommunityIcons name="close" size={26} color="#68727F" /></Pressable></View>
-          <Text style={styles.formHint}>{selectedRfq?.title || 'RFQ'} · {Number(selectedRfq?.targetQuantity || 0).toLocaleString('en-IN')} pcs</Text>
-          <Text style={styles.inputLabel}>TOTAL QUOTE AMOUNT (INR)</Text><TextInput value={quoteAmount} onChangeText={setQuoteAmount} keyboardType="decimal-pad" placeholder="e.g. 185000" placeholderTextColor="#9AA1AA" style={styles.input} />
-          <Text style={styles.inputLabel}>LEAD TIME (DAYS)</Text><TextInput value={leadDays} onChangeText={setLeadDays} keyboardType="number-pad" placeholder="e.g. 21" placeholderTextColor="#9AA1AA" style={styles.input} />
-          <Pressable disabled={quoteBusy} style={[styles.modalPrimary, { minHeight: 52, opacity: quoteBusy ? .65 : 1 }]} onPress={() => void submitQuote()}>{quoteBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalPrimaryText}>Submit Quote</Text>}</Pressable>
-        </View></View>
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={[styles.formSheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+            <View style={styles.modalHeader}><Text style={styles.modalTitle}>Submit Quotation</Text><Pressable onPress={() => { setQuoteOpen(false); setSelectedRfq(null); }}><MaterialCommunityIcons name="close" size={26} color="#68727F" /></Pressable></View>
+            <ScrollView style={styles.formScroll} contentContainerStyle={styles.formFields} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} bounces={false}>
+              <Text style={styles.formHint}>{selectedRfq?.title || 'RFQ'} · {Number(selectedRfq?.targetQuantity || 0).toLocaleString('en-IN')} pcs</Text>
+              <Text style={styles.inputLabel}>TOTAL QUOTE AMOUNT (INR)</Text><TextInput accessibilityLabel="Total quote amount in rupees" value={quoteAmount} onChangeText={setQuoteAmount} keyboardType="decimal-pad" placeholder="e.g. 185000" placeholderTextColor={ui.muted} style={styles.input} />
+              <Text style={styles.inputLabel}>LEAD TIME (DAYS)</Text><TextInput accessibilityLabel="Lead time in days" value={leadDays} onChangeText={setLeadDays} keyboardType="number-pad" placeholder="e.g. 21" placeholderTextColor={ui.muted} style={styles.input} />
+              <Pressable disabled={quoteBusy} style={[styles.modalPrimary, { minHeight: 52, opacity: quoteBusy ? .65 : 1 }]} onPress={() => void submitQuote()}>{quoteBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalPrimaryText}>Submit Quote</Text>}</Pressable>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={catalogOpen} transparent animationType="slide" onRequestClose={() => setCatalogOpen(false)}>
-        <View style={styles.modalBackdrop}><View style={styles.formSheet}>
-          <View style={styles.modalHeader}><Text style={styles.modalTitle}>Update Catalogue</Text><Pressable onPress={() => setCatalogOpen(false)}><MaterialCommunityIcons name="close" size={26} color="#68727F" /></Pressable></View>
-          <Text style={styles.formHint}>{catalogItems.length} catalogue item(s) currently listed</Text>
-          <Text style={styles.inputLabel}>PRODUCT / ITEM NAME</Text><TextInput value={catalogName} onChangeText={setCatalogName} placeholder="e.g. Cotton T-Shirt" placeholderTextColor="#9AA1AA" style={styles.input} />
-          <Text style={styles.inputLabel}>CATEGORY / ITEM TYPE</Text><TextInput value={catalogType} onChangeText={setCatalogType} placeholder="e.g. T-Shirts" placeholderTextColor="#9AA1AA" style={styles.input} />
-          <Text style={styles.inputLabel}>MINIMUM ORDER QUANTITY (OPTIONAL)</Text><TextInput value={catalogMoq} onChangeText={setCatalogMoq} keyboardType="number-pad" placeholder="e.g. 500" placeholderTextColor="#9AA1AA" style={styles.input} />
-          <Text style={styles.inputLabel}>UNIT PRICE IN INR (OPTIONAL)</Text><TextInput value={catalogPrice} onChangeText={setCatalogPrice} keyboardType="decimal-pad" placeholder="e.g. 185" placeholderTextColor="#9AA1AA" style={styles.input} />
-          <Pressable disabled={catalogBusy} style={[styles.modalPrimary, { minHeight: 52, opacity: catalogBusy ? .65 : 1 }]} onPress={() => void createCatalogItem()}>{catalogBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalPrimaryText}>Add Catalogue Item</Text>}</Pressable>
-        </View></View>
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={[styles.formSheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+            <View style={styles.modalHeader}><Text style={styles.modalTitle}>Update Catalogue</Text><Pressable onPress={() => setCatalogOpen(false)}><MaterialCommunityIcons name="close" size={26} color="#68727F" /></Pressable></View>
+            <ScrollView style={styles.formScroll} contentContainerStyle={styles.formFields} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} bounces={false}>
+              <Text style={styles.formHint}>{catalogItems.length} catalogue item(s) currently listed</Text>
+              <Text style={styles.inputLabel}>PRODUCT / ITEM NAME</Text><TextInput accessibilityLabel="Product or item name" value={catalogName} onChangeText={setCatalogName} placeholder="e.g. Cotton T-Shirt" placeholderTextColor={ui.muted} style={styles.input} />
+              <Text style={styles.inputLabel}>CATEGORY / ITEM TYPE</Text><TextInput accessibilityLabel="Category or item type" value={catalogType} onChangeText={setCatalogType} placeholder="e.g. T-Shirts" placeholderTextColor={ui.muted} style={styles.input} />
+              <Text style={styles.inputLabel}>MINIMUM ORDER QUANTITY (OPTIONAL)</Text><TextInput accessibilityLabel="Minimum order quantity" value={catalogMoq} onChangeText={setCatalogMoq} keyboardType="number-pad" placeholder="e.g. 500" placeholderTextColor={ui.muted} style={styles.input} />
+              <Text style={styles.inputLabel}>UNIT PRICE IN INR (OPTIONAL)</Text><TextInput accessibilityLabel="Unit price in rupees" value={catalogPrice} onChangeText={setCatalogPrice} keyboardType="decimal-pad" placeholder="e.g. 185" placeholderTextColor={ui.muted} style={styles.input} />
+              <Pressable disabled={catalogBusy} style={[styles.modalPrimary, { minHeight: 52, opacity: catalogBusy ? .65 : 1 }]} onPress={() => void createCatalogItem()}>{catalogBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalPrimaryText}>Add Catalogue Item</Text>}</Pressable>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={rangeOpen} transparent animationType="fade" onRequestClose={() => setRangeOpen(false)}>
@@ -504,36 +499,36 @@ export default function SupplierDashboard() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: BG },
-  header: { minHeight: 62, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#ECEEF2', paddingHorizontal: 14, paddingBottom: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 5, zIndex: 3 },
+  header: { minHeight: 62, backgroundColor: ui.surface, borderBottomWidth: 1, borderBottomColor: ui.border, paddingHorizontal: 14, paddingBottom: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 5, zIndex: 3 },
   menuButton: { width: 28, alignItems: 'flex-start', justifyContent: 'center' },
   logo: { height: 36, flexShrink: 1 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerCircle: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#F4F0FC', alignItems: 'center', justifyContent: 'center' },
-  notificationBadge: { position: 'absolute', right: -2, top: -4, minWidth: 21, height: 21, borderRadius: 11, backgroundColor: '#D62828', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, borderWidth: 1, borderColor: '#FFFFFF' },
-  notificationBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },
-  content: { paddingHorizontal: 15, paddingTop: 17, paddingBottom: 22, gap: 17 },
-  hero: { minHeight: 275, borderRadius: 27, paddingHorizontal: 21, paddingVertical: 24, backgroundColor: '#F0E7FF', flexDirection: 'row', alignItems: 'center', overflow: 'hidden' },
-  heroCopy: { flex: 1, maxWidth: '76%', zIndex: 1 },
-  eyebrow: { color: '#5B13EC', fontSize: 12, fontWeight: '900', letterSpacing: 2.2, marginBottom: 13 },
-  heroTitle: { color: '#0D1020', fontSize: 22, lineHeight: 29, fontWeight: '900', letterSpacing: -.8 },
+  headerCircle: { width: 38, height: 38, borderRadius: 19, backgroundColor: ui.accentSoft, alignItems: 'center', justifyContent: 'center' },
+  notificationBadge: { position: 'absolute', right: -2, top: -4, minWidth: 21, height: 21, borderRadius: 11, backgroundColor: '#D62828', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, borderWidth: 1, borderColor: ui.surface },
+  notificationBadgeText: { color: ui.surface, fontSize: 10, fontWeight: '700' },
+  content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 20, gap: 16, width: '100%', maxWidth: 840, alignSelf: 'center' },
+  hero: { minHeight: 0, borderRadius: 16, paddingHorizontal: 21, paddingVertical: 24, backgroundColor: ui.surface, borderWidth: 1, borderColor: ui.border, flexDirection: 'row', alignItems: 'center', overflow: 'hidden' },
+  heroCopy: { flex: 1, zIndex: 1 },
+
+  heroTitle: { color: '#0D1020', fontSize: 22, lineHeight: 29, fontWeight: '700', letterSpacing: -.8 },
   heroSubtitle: { color: '#626B79', fontSize: 14, lineHeight: 21, marginTop: 11 },
-  heroArt: { position: 'absolute', right: 17, top: '39%', width: 100, height: 100, borderRadius: 29, backgroundColor: PURPLE, alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '6deg' }], elevation: 7 },
-  catalogButton: { alignSelf: 'flex-start', minHeight: 51, paddingHorizontal: 17, borderRadius: 14, backgroundColor: PURPLE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 19, elevation: 2 },
-  catalogButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
-  profileCard: { minHeight: 148, borderRadius: 24, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#EAE5F2', padding: 16, flexDirection: 'row', alignItems: 'center', gap: 15, elevation: 1 },
-  progressOuter: { width: 91, height: 91, borderRadius: 46, borderWidth: 8, borderColor: '#E9DFFF', borderTopColor: PURPLE, borderRightColor: PURPLE, borderBottomColor: PURPLE, alignItems: 'center', justifyContent: 'center' },
-  progressInner: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
-  progressText: { color: '#111827', fontSize: 22, fontWeight: '900' },
-  profileTitle: { color: '#111827', fontSize: 16, fontWeight: '900' },
-  profileSubtitle: { color: '#7B8490', fontSize: 12, lineHeight: 19, marginTop: 5 },
+
+  catalogButton: { alignSelf: 'flex-start', minHeight: 51, paddingHorizontal: 17, borderRadius: 12, backgroundColor: PURPLE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 19, elevation: 0 },
+  catalogButtonText: { color: ui.surface, fontSize: 15, fontWeight: '700' },
+  profileCard: { minHeight: 118, borderRadius: 16, backgroundColor: ui.surface, borderWidth: 1, borderColor: '#EAE5F2', padding: 16, flexDirection: 'row', alignItems: 'center', gap: 15, elevation: 0 },
+  progressOuter: { width: 72, height: 72, borderRadius: 36, borderWidth: 6, borderColor: '#E9DFFF', borderTopColor: PURPLE, borderRightColor: PURPLE, borderBottomColor: PURPLE, alignItems: 'center', justifyContent: 'center' },
+  progressInner: { width: 58, height: 58, borderRadius: 29, backgroundColor: ui.surface, alignItems: 'center', justifyContent: 'center' },
+  progressText: { color: ui.ink, fontSize: 18, fontWeight: '700' },
+  profileTitle: { color: ui.ink, fontSize: 16, fontWeight: '700' },
+  profileSubtitle: { color: ui.muted, fontSize: 13, lineHeight: 19, marginTop: 5 },
   profileLink: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 8 },
-  profileLinkText: { color: PURPLE, fontSize: 14, fontWeight: '900' },
+  profileLinkText: { color: PURPLE, fontSize: 14, fontWeight: '700' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 2 },
-  sectionTitle: { color: '#17202D', fontSize: 18, fontWeight: '900' },
-  rangeButton: { minHeight: 43, paddingHorizontal: 13, borderRadius: 15, borderWidth: 1, borderColor: '#E0E3E9', backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', gap: 5 },
+  sectionTitle: { color: ui.ink, fontSize: 18, fontWeight: '700' },
+  rangeButton: { minHeight: 43, paddingHorizontal: 13, borderRadius: 15, borderWidth: 1, borderColor: '#E0E3E9', backgroundColor: ui.surface, flexDirection: 'row', alignItems: 'center', gap: 5 },
   rangeText: { color: '#515B67', fontSize: 13, fontWeight: '700' },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  statCard: { width: '48.5%', minHeight: 108, borderRadius: 20, borderWidth: 1, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  statCard: { width: '48.5%', minHeight: 108, borderRadius: 16, borderWidth: 1, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
   stat_purple: { backgroundColor: '#F8F5FE', borderColor: '#EFE6FF' },
   stat_amber: { backgroundColor: '#FFFCF0', borderColor: '#F8EDC7' },
   stat_green: { backgroundColor: '#F0FBF4', borderColor: '#D8F2E2' },
@@ -543,87 +538,89 @@ const styles = StyleSheet.create({
   statIcon_green: { backgroundColor: '#DDF8E9' },
   statIcon_blue: { backgroundColor: '#E0EEFF' },
   statIcon: { width: 43, height: 43, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  statValue: { color: '#111827', fontSize: 25, fontWeight: '900' },
-  statLabel: { color: '#596273', fontSize: 12, lineHeight: 17, marginTop: 2 },
+  statValue: { color: ui.ink, fontSize: 25, fontWeight: '700' },
+  statLabel: { color: '#596273', fontSize: 13, lineHeight: 17, marginTop: 2 },
   viewAll: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  viewAllText: { color: PURPLE, fontSize: 13, fontWeight: '900' },
-  rfqCard: { backgroundColor: '#FFFFFF', borderRadius: 21, borderWidth: 1, borderColor: '#E4E7EC', padding: 16, gap: 11 },
+  viewAllText: { color: PURPLE, fontSize: 13, fontWeight: '700' },
+  rfqCard: { backgroundColor: ui.surface, borderRadius: 16, borderWidth: 1, borderColor: ui.border, padding: 16, gap: 11 },
   rfqTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  rfqCode: { color: PURPLE, fontSize: 13, fontWeight: '900' },
+  rfqCode: { color: PURPLE, fontSize: 13, fontWeight: '700' },
   statusPill: { borderRadius: 20, paddingHorizontal: 11, paddingVertical: 6 },
-  statusText: { fontSize: 12, fontWeight: '800' },
-  rfqTitle: { color: '#17202D', fontSize: 17, fontWeight: '900' },
-  buyerText: { color: '#7B8490', fontSize: 13 },
-  buyerName: { color: '#222B38', fontWeight: '900' },
+  statusText: { fontSize: 13, fontWeight: '700' },
+  rfqTitle: { color: ui.ink, fontSize: 17, fontWeight: '700' },
+  buyerText: { color: ui.muted, fontSize: 13 },
+  buyerName: { color: '#222B38', fontWeight: '700' },
   rfqMeta: { borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#EFF0F3', paddingVertical: 10, flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
-  metaText: { color: '#68727F', fontSize: 11, flexShrink: 1 },
-  metaStrong: { color: '#202633', fontWeight: '900' },
+  metaText: { color: ui.muted, fontSize: 12, flexShrink: 1 },
+  metaStrong: { color: ui.ink, fontWeight: '700' },
   detailsButton: { minHeight: 47, borderRadius: 14, borderWidth: 1, borderColor: '#E1E3E8', alignItems: 'center', justifyContent: 'center' },
-  detailsButtonText: { color: '#4B5563', fontSize: 14, fontWeight: '900' },
+  detailsButtonText: { color: '#4B5563', fontSize: 14, fontWeight: '700' },
   sendQuoteButton: { backgroundColor: PURPLE, borderColor: PURPLE },
-  sendQuoteText: { color: '#FFFFFF' },
+  sendQuoteText: { color: ui.surface },
   secondaryDetails: { alignItems: 'center', paddingVertical: 4 },
-  secondaryDetailsText: { color: PURPLE, fontSize: 13, fontWeight: '800' },
-  emptyCard: { backgroundColor: '#FFFFFF', borderRadius: 20, borderWidth: 1, borderColor: '#E5E7EB', padding: 25, alignItems: 'center', gap: 9 },
-  emptyTitle: { color: '#202633', fontSize: 16, fontWeight: '900' },
-  emptyText: { color: '#7B8490', fontSize: 13, lineHeight: 20, textAlign: 'center' },
-  stateCard: { minHeight: 230, backgroundColor: '#FFFFFF', borderRadius: 20, padding: 24, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  stateTitle: { color: '#202633', fontSize: 17, fontWeight: '900' },
-  stateText: { color: '#7B8490', fontSize: 13, textAlign: 'center', lineHeight: 20 },
-  warningCard: { backgroundColor: '#FFF8E8', borderWidth: 1, borderColor: '#F4D9A3', borderRadius: 15, padding: 13, flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  warningTitle: { color: '#8A5A12', fontSize: 13, fontWeight: '900', marginBottom: 5 },
-  warningText: { color: '#8A5A12', fontSize: 12, lineHeight: 18, marginTop: 2 },
-  retryButton: { backgroundColor: '#F0E9FF', borderRadius: 12, paddingHorizontal: 19, paddingVertical: 11 },
-  retryText: { color: PURPLE, fontSize: 13, fontWeight: '900' },
-  bottomNav: { minHeight: 75, backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#E6E8ED', paddingTop: 6, paddingHorizontal: 3, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
+  secondaryDetailsText: { color: PURPLE, fontSize: 13, fontWeight: '700' },
+  emptyCard: { backgroundColor: ui.surface, borderRadius: 16, borderWidth: 1, borderColor: ui.border, padding: 25, alignItems: 'center', gap: 9 },
+  emptyTitle: { color: ui.ink, fontSize: 16, fontWeight: '700' },
+  emptyText: { color: ui.muted, fontSize: 13, lineHeight: 20, textAlign: 'center' },
+  stateCard: { minHeight: 230, backgroundColor: ui.surface, borderRadius: 16, padding: 24, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  stateTitle: { color: ui.ink, fontSize: 17, fontWeight: '700' },
+  stateText: { color: ui.muted, fontSize: 13, textAlign: 'center', lineHeight: 20 },
+  warningCard: { backgroundColor: '#FFF8E8', borderWidth: 1, borderColor: '#F4D9A3', borderRadius: 16, padding: 13, flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  warningTitle: { color: '#8A5A12', fontSize: 13, fontWeight: '700', marginBottom: 5 },
+  warningText: { color: '#8A5A12', fontSize: 13, lineHeight: 18, marginTop: 2 },
+  retryButton: { backgroundColor: ui.accentSoft, borderRadius: 12, paddingHorizontal: 19, paddingVertical: 11 },
+  retryText: { color: PURPLE, fontSize: 13, fontWeight: '700' },
+  bottomNav: { minHeight: 75, backgroundColor: ui.surface, borderTopWidth: 1, borderTopColor: '#E6E8ED', paddingTop: 6, paddingHorizontal: 3, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
   tabItem: { flex: 1, minHeight: 61, borderRadius: 17, alignItems: 'center', justifyContent: 'center', gap: 2, paddingHorizontal: 2 },
-  tabActive: { backgroundColor: '#F1EBFB', marginHorizontal: 3 },
-  tabLabel: { color: '#687687', fontSize: 10, fontWeight: '600' },
-  tabLabelActive: { color: PURPLE, fontWeight: '900' },
+  tabActive: { backgroundColor: ui.accentSoft, marginHorizontal: 3 },
+  tabLabel: { color: ui.muted, fontSize: 10, fontWeight: '600' },
+  tabLabelActive: { color: PURPLE, fontWeight: '700' },
   drawerLayer: { position: 'absolute', left: 0, right: 0, zIndex: 10, flexDirection: 'row' },
-  drawer: { width: '66%', maxWidth: 320, backgroundColor: '#FFFFFF', paddingTop: 18, paddingHorizontal: 14, elevation: 14 },
+  drawer: { width: '66%', maxWidth: 320, backgroundColor: ui.surface, paddingTop: 18, paddingHorizontal: 14, elevation: 0 },
   drawerBackdrop: { flex: 1, backgroundColor: 'rgba(13,10,22,.38)' },
   drawerItem: { minHeight: 52, borderRadius: 13, marginBottom: 4, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 14 },
   drawerItemActive: { backgroundColor: PURPLE },
   drawerText: { color: '#4B515B', fontSize: 15, fontWeight: '600' },
-  drawerTextActive: { color: '#FFFFFF', fontWeight: '800' },
+  drawerTextActive: { color: ui.surface, fontWeight: '700' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(13,10,22,.52)', justifyContent: 'flex-end' },
-  detailsSheet: { maxHeight: '92%', backgroundColor: '#FFFFFF', borderTopLeftRadius: 25, borderTopRightRadius: 25, paddingHorizontal: 18, paddingTop: 18, paddingBottom: 25, gap: 13 },
-  formSheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 25, borderTopRightRadius: 25, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 28, gap: 12 },
+  detailsSheet: { maxHeight: '92%', backgroundColor: ui.surface, borderTopLeftRadius: 25, borderTopRightRadius: 25, paddingHorizontal: 18, paddingTop: 18, paddingBottom: 25, gap: 13 },
+  formSheet: { backgroundColor: ui.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16, gap: 8, maxHeight: '88%' },
+  formScroll: { flexShrink: 1 },
+  formFields: { gap: 8, paddingBottom: 4 },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  modalTitle: { flex: 1, color: '#17202D', fontSize: 21, fontWeight: '900' },
-  modalSub: { color: '#68727F', fontSize: 13, lineHeight: 20, marginTop: 4 },
+  modalTitle: { flex: 1, color: ui.ink, fontSize: 21, fontWeight: '700' },
+  modalSub: { color: ui.muted, fontSize: 13, lineHeight: 20, marginTop: 4 },
   detailBanner: { backgroundColor: '#F8F4FF', borderWidth: 1, borderColor: '#E9DDFB', borderRadius: 16, padding: 14, gap: 7 },
   detailCategory: { color: '#4B5563', fontSize: 14, fontWeight: '700' },
   detailGrid: { flexDirection: 'row', gap: 10 },
-  detailBox: { flex: 1, backgroundColor: '#F8F9FB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 15, padding: 13, marginTop: 3 },
-  detailLabel: { color: '#7B8490', fontSize: 11, fontWeight: '900', letterSpacing: .6 },
-  detailValue: { color: '#17202D', fontSize: 16, fontWeight: '900', marginTop: 5 },
-  detailPrice: { color: PURPLE, fontSize: 17, fontWeight: '900', marginTop: 5 },
-  detailHeading: { color: '#7B8490', fontSize: 12, fontWeight: '900', letterSpacing: .5, marginTop: 7 },
+  detailBox: { flex: 1, backgroundColor: '#F8F9FB', borderWidth: 1, borderColor: ui.border, borderRadius: 15, padding: 13, marginTop: 3 },
+  detailLabel: { color: ui.muted, fontSize: 12, fontWeight: '700', letterSpacing: .6 },
+  detailValue: { color: ui.ink, fontSize: 16, fontWeight: '700', marginTop: 5 },
+  detailPrice: { color: PURPLE, fontSize: 17, fontWeight: '700', marginTop: 5 },
+  detailHeading: { color: ui.muted, fontSize: 13, fontWeight: '700', letterSpacing: .5, marginTop: 7 },
   description: { color: '#4B5563', fontSize: 14, lineHeight: 21, backgroundColor: '#F8F9FB', borderRadius: 13, padding: 13 },
-  quoteRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 14, padding: 13 },
-  quoteName: { color: '#202633', fontSize: 14, fontWeight: '900' },
-  quoteMeta: { color: '#68727F', fontSize: 12, marginTop: 5 },
-  quoteAmount: { color: PURPLE, fontSize: 15, fontWeight: '900', textAlign: 'right' },
-  quoteStatus: { color: '#16804A', fontSize: 11, fontWeight: '800', textAlign: 'right', marginTop: 4 },
-  modalFooter: { flexDirection: 'row', gap: 10, paddingTop: 10, borderTopWidth: 1, borderColor: '#ECEEF2' },
-  closeButton: { flex: 1, minHeight: 50, borderRadius: 13, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
-  closeText: { color: '#596273', fontSize: 14, fontWeight: '800' },
+  quoteRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: ui.border, borderRadius: 14, padding: 13 },
+  quoteName: { color: ui.ink, fontSize: 14, fontWeight: '700' },
+  quoteMeta: { color: ui.muted, fontSize: 13, marginTop: 5 },
+  quoteAmount: { color: PURPLE, fontSize: 15, fontWeight: '700', textAlign: 'right' },
+  quoteStatus: { color: '#16804A', fontSize: 12, fontWeight: '700', textAlign: 'right', marginTop: 4 },
+  modalFooter: { flexDirection: 'row', gap: 10, paddingTop: 10, borderTopWidth: 1, borderColor: ui.border },
+  closeButton: { flex: 1, minHeight: 50, borderRadius: 13, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: ui.border },
+  closeText: { color: '#596273', fontSize: 14, fontWeight: '700' },
   modalPrimary: { flex: 1, minHeight: 50, borderRadius: 13, backgroundColor: PURPLE, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14 },
-  modalPrimaryText: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },
-  formHint: { color: '#68727F', fontSize: 13, lineHeight: 20 },
-  inputLabel: { color: '#596273', fontSize: 11, fontWeight: '900', letterSpacing: .5, marginTop: 5 },
-  input: { minHeight: 51, borderWidth: 1, borderColor: '#E1E4EA', borderRadius: 13, paddingHorizontal: 14, fontSize: 15, color: '#202633', backgroundColor: '#FFFFFF' },
+  modalPrimaryText: { color: ui.surface, fontSize: 15, fontWeight: '700' },
+  formHint: { color: ui.muted, fontSize: 13, lineHeight: 20 },
+  inputLabel: { color: '#596273', fontSize: 12, fontWeight: '700', letterSpacing: .5, marginTop: 5 },
+  input: { minHeight: 51, borderWidth: 1, borderColor: '#E1E4EA', borderRadius: 12, paddingHorizontal: 14, fontSize: 15, color: ui.ink, backgroundColor: ui.surface },
   accountMenuRoot: { flex: 1 },
   accountMenuBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.08)' },
-  accountMenu: { position: 'absolute', right: 16, width: 238, backgroundColor: '#FFFFFF', borderRadius: 15, paddingVertical: 5, paddingHorizontal: 7, elevation: 12, shadowColor: '#111827', shadowOpacity: 0.16, shadowRadius: 18, shadowOffset: { width: 0, height: 7 }, borderWidth: 1, borderColor: '#EEF0F4' },
+  accountMenu: { position: 'absolute', right: 16, width: 238, backgroundColor: ui.surface, borderRadius: 20, paddingVertical: 5, paddingHorizontal: 7, elevation: 0, shadowColor: ui.ink, shadowOpacity: 0, shadowRadius: 18, shadowOffset: { width: 0, height: 7 }, borderWidth: 1, borderColor: '#EEF0F4' },
   accountMenuItem: { minHeight: 47, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 10 },
   accountMenuText: { color: '#303846', fontSize: 13, fontWeight: '600' },
   accountMenuLogout: { color: '#DC2626' },
   accountMenuDivider: { height: 1, backgroundColor: '#F0F1F4', marginHorizontal: 8 },
   rangeBackdrop: { flex: 1, backgroundColor: 'rgba(13,10,22,.38)', justifyContent: 'center', padding: 25 },
-  rangeSheet: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 20, gap: 8 },
+  rangeSheet: { backgroundColor: ui.surface, borderRadius: 20, padding: 20, gap: 8 },
   rangeOption: { minHeight: 49, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#F0F1F3' },
   rangeOptionText: { color: '#3F4854', fontSize: 15, fontWeight: '700' },
 });

@@ -1,6 +1,8 @@
+import { ui } from '@/theme/ui';
+import { AppBottomNav } from '@/components/AppBottomNav';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Image, Linking, Modal, Pressable, RefreshControl,
+  ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, RefreshControl,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -11,7 +13,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { apiGet, apiPatch, apiPost, API_BASE_URL } from '@/services/api';
 import { AppHeader } from '@/components/AppHeader';
 
-const PURPLE = '#5314E8';
+const PURPLE = ui.accent;
 const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparent.png';
 const SAMPLE_TYPES = ['Final Sample', 'First Sample', 'Color Sample', 'Size Set', 'Lab Dip'];
 const BUYER_TABS = ['All', 'New Samples', 'Checking', 'Approved', 'Changes Needed'];
@@ -388,7 +390,7 @@ export default function BuyerSamplesScreen() {
         <View style={styles.searchRow}>
           <View style={styles.searchBox}>
             <MaterialCommunityIcons name="magnify" size={24} color="#929BA6" />
-            <TextInput value={search} onChangeText={setSearch} placeholder={isSupplier ? 'Search by sample, buyer or order...' : 'Search by sample name, supplier or order...'} placeholderTextColor="#9AA1AA" style={styles.searchInput} />
+            <TextInput value={search} onChangeText={setSearch} placeholder={isSupplier ? 'Search by sample, buyer or order...' : 'Search by sample name, supplier or order...'} placeholderTextColor={ui.muted} style={styles.searchInput} />
             {search.length > 0 && <Pressable onPress={() => setSearch('')}><MaterialCommunityIcons name="close-circle" size={20} color="#9AA1AA" /></Pressable>}
           </View>
           <Pressable style={styles.filterButton} onPress={() => {
@@ -486,15 +488,7 @@ export default function BuyerSamplesScreen() {
         <View style={{ height: 10 }} />
       </ScrollView>
 
-      <View onLayout={event => setBottomHeight(event.nativeEvent.layout.height)} style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 7) }]}>
-        {[
-          { label: 'Dashboard', icon: 'view-dashboard', section: 'home' },
-          { label: 'Requests', icon: 'file-document-outline', section: 'requests' },
-          { label: 'Orders', icon: 'archive-outline', section: 'orders' },
-          { label: 'Chat', icon: 'message-text-outline', section: 'chat' },
-          { label: 'Settings', icon: 'cog-outline', section: 'organization-settings' },
-        ].map(item => <Pressable key={item.label} onPress={() => navigate(item.section)} style={styles.navItem}><MaterialCommunityIcons name={item.icon as any} size={21} color="#687687" /><Text style={styles.navLabel}>{item.label}</Text></Pressable>)}
-      </View>
+      <AppBottomNav role={isSupplier ? 'SUPPLIER' : 'BUYER'} activeSection="samples" onNavigate={navigate} onLayout={event => setBottomHeight(event.nativeEvent.layout.height)} />
 
 
 
@@ -540,7 +534,7 @@ export default function BuyerSamplesScreen() {
       </Modal>
 
       <Modal visible={requestOpen} transparent animationType="slide" onRequestClose={() => setRequestOpen(false)}>
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={[styles.formSheet, { paddingBottom: Math.max(insets.bottom, 18) }]}>
             <View style={styles.sheetHeader}><Text style={styles.sheetTitle}>Request Physical Sample</Text><Pressable onPress={() => setRequestOpen(false)}><MaterialCommunityIcons name="close" size={24} color="#68727F" /></Pressable></View>
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
@@ -550,7 +544,7 @@ export default function BuyerSamplesScreen() {
               </Pressable>
               {orderPickerOpen && <View style={styles.orderOptions}>{orders.filter(order => order.status !== 'CANCELLED').map(order => <Pressable key={order.id} style={styles.orderOption} onPress={() => { setSelectedOrderId(order.id); setRequestName(order.items?.[0]?.name || 'Apparel Sample'); setOrderPickerOpen(false); }}><Text style={styles.orderOptionTitle}>{order.poNumber}</Text><Text style={styles.orderOptionSub}>{order.supplier?.name || 'Supplier'} • {order.items?.[0]?.name || 'Garment'}</Text></Pressable>)}</View>}
               <Text style={styles.formLabel}>SAMPLE NAME / GARMENT ITEM *</Text>
-              <TextInput value={requestName} onChangeText={setRequestName} placeholder="e.g. Heavyweight Hoodie" style={styles.formInput} />
+              <TextInput accessibilityLabel="Sample name" value={requestName} onChangeText={setRequestName} placeholder="e.g. Heavyweight Hoodie" style={styles.formInput} />
               <Text style={styles.formLabel}>SAMPLE TYPE *</Text>
               <View style={styles.chipWrap}>{SAMPLE_TYPES.map(type => <Pressable key={type} onPress={() => setRequestType(type)} style={[styles.choiceChip, requestType === type && styles.choiceChipActive]}><Text style={[styles.choiceText, requestType === type && styles.choiceTextActive]}>{type}</Text></Pressable>)}</View>
               <Text style={styles.formLabel}>QUANTITY REQUIRED *</Text>
@@ -563,7 +557,7 @@ export default function BuyerSamplesScreen() {
               </Pressable>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={!!selected} transparent animationType="slide" onRequestClose={() => setSelected(null)}>
@@ -573,7 +567,7 @@ export default function BuyerSamplesScreen() {
             {selected && <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <View style={styles.photoHero}>
                 {localPhotos[activePhotoIndex]?.url ? <Image source={{ uri: absoluteUrl(localPhotos[activePhotoIndex].url) }} style={styles.heroImage} resizeMode="cover" /> : <View style={styles.photoPlaceholder}><MaterialCommunityIcons name="hanger" size={34} color="#A8B1BE" /><Text style={styles.photoPlaceholderTitle}>Sample View (0/0)</Text><Text style={styles.photoPlaceholderText}>Photos pending from supplier</Text></View>}
-                {localPhotos.length > 1 && <><Pressable style={styles.photoPrev} onPress={() => setActivePhotoIndex(index => (index - 1 + localPhotos.length) % localPhotos.length)}><MaterialCommunityIcons name="chevron-left" size={28} color="#fff" /></Pressable><Pressable style={styles.photoNext} onPress={() => setActivePhotoIndex(index => (index + 1) % localPhotos.length)}><MaterialCommunityIcons name="chevron-right" size={28} color="#fff" /></Pressable></>}
+                {localPhotos.length > 1 && <><Pressable style={styles.photoPrev} accessibilityRole="button" accessibilityLabel="Previous sample photo" onPress={() => setActivePhotoIndex(index => (index - 1 + localPhotos.length) % localPhotos.length)}><MaterialCommunityIcons name="chevron-left" size={28} color="#fff" /></Pressable><Pressable style={styles.photoNext} accessibilityRole="button" accessibilityLabel="Next sample photo" onPress={() => setActivePhotoIndex(index => (index + 1) % localPhotos.length)}><MaterialCommunityIcons name="chevron-right" size={28} color="#fff" /></Pressable></>}
                 {localPhotos.length > 0 && <View style={styles.photoCounter}><Text style={styles.photoCounterText}>{localPhotos[activePhotoIndex]?.label || 'Sample View'} ({activePhotoIndex + 1}/{localPhotos.length})</Text></View>}
               </View>
               <View style={styles.detailTitleRow}>
@@ -602,14 +596,14 @@ export default function BuyerSamplesScreen() {
                       <Text style={styles.uploadTitle}>{uploading ? 'Uploading photos...' : 'Choose Photos'}</Text>
                       <Text style={styles.uploadHelp}>Select images from your device</Text>
                     </Pressable>
-                    {localPhotos.length ? <View style={styles.photoGrid}>{localPhotos.map((photo, index) => <Pressable key={photo.url + index} onPress={() => setActivePhotoIndex(index)}><Image source={{ uri: absoluteUrl(photo.url) }} style={[styles.photoThumb, activePhotoIndex === index && styles.photoThumbActive]} /></Pressable>)}</View> : <Text style={styles.emptyUpload}>No photos uploaded yet. Select files above to preview front, back, fabric and close-up angles.</Text>}
+                    {localPhotos.length ? <View style={styles.photoGrid}>{localPhotos.map((photo, index) => <Pressable key={photo.url + index} accessibilityRole="button" accessibilityLabel={`Show sample photo ${index + 1} of ${localPhotos.length}${photo.label ? `, ${photo.label}` : ''}`} accessibilityState={{ selected: activePhotoIndex === index }} onPress={() => setActivePhotoIndex(index)}><Image accessible={false} source={{ uri: absoluteUrl(photo.url) }} style={[styles.photoThumb, activePhotoIndex === index && styles.photoThumbActive]} /></Pressable>)}</View> : <Text style={styles.emptyUpload}>No photos uploaded yet. Select files above to preview front, back, fabric and close-up angles.</Text>}
                     <View style={styles.samplePhotoActions}>
                       <Pressable style={[styles.secondaryButton, { flex: 1 }]} onPress={saveSampleDraft} disabled={submitting || uploading}><Text style={styles.secondaryButtonText}>{submitting ? 'Saving...' : 'Save as Draft'}</Text></Pressable>
                       <Pressable style={[styles.approveButton, { flex: 1 }]} onPress={submitSampleToBuyer} disabled={submitting || uploading}><Text style={styles.approveButtonText}>{submitting ? 'Submitting...' : 'Submit to Buyer'}</Text></Pressable>
                     </View>
                   </> : <>
                     <Text style={styles.sectionLabel}>SAMPLE PHOTOS</Text>
-                    {localPhotos.length ? <View style={styles.photoGrid}>{localPhotos.map((photo, index) => <Pressable key={photo.url + index} onPress={() => setActivePhotoIndex(index)}><Image source={{ uri: absoluteUrl(photo.url) }} style={[styles.photoThumb, activePhotoIndex === index && styles.photoThumbActive]} /></Pressable>)}</View> : <Text style={styles.emptyUpload}>The supplier has not uploaded sample photos yet.</Text>}
+                    {localPhotos.length ? <View style={styles.photoGrid}>{localPhotos.map((photo, index) => <Pressable key={photo.url + index} accessibilityRole="button" accessibilityLabel={`Show sample photo ${index + 1} of ${localPhotos.length}${photo.label ? `, ${photo.label}` : ''}`} accessibilityState={{ selected: activePhotoIndex === index }} onPress={() => setActivePhotoIndex(index)}><Image accessible={false} source={{ uri: absoluteUrl(photo.url) }} style={[styles.photoThumb, activePhotoIndex === index && styles.photoThumbActive]} /></Pressable>)}</View> : <Text style={styles.emptyUpload}>The supplier has not uploaded sample photos yet.</Text>}
                   </>}
                 </View>
               )}
@@ -673,34 +667,34 @@ export default function BuyerSamplesScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#F7F8FC' },
-  header: { minHeight: 58, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E9EAF0', paddingHorizontal: 14, paddingBottom: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  screen: { flex: 1, backgroundColor: ui.canvas },
+  header: { minHeight: 58, backgroundColor: ui.surface, borderBottomWidth: 1, borderBottomColor: '#E9EAF0', paddingHorizontal: 14, paddingBottom: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerIcon: { width: 40, height: 42, alignItems: 'center', justifyContent: 'center' },
   logo: { width: 142, height: 34, flex: 1, marginHorizontal: 5 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerCircle: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#F4F0FC', alignItems: 'center', justifyContent: 'center' },
-  unreadBadge: { position: 'absolute', right: -2, top: -3, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, backgroundColor: '#D62828', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#fff' },
-  unreadBadgeText: { fontSize: 10, fontWeight: '900', color: '#fff' },
-  content: { padding: 16, paddingBottom: 24, gap: 16 },
+  headerCircle: { width: 38, height: 38, borderRadius: 19, backgroundColor: ui.accentSoft, alignItems: 'center', justifyContent: 'center' },
+  unreadBadge: { position: 'absolute', right: -2, top: -3, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, backgroundColor: '#D62828', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: ui.surface },
+  unreadBadgeText: { fontSize: 10, fontWeight: '700', color: ui.surface },
+  content: { padding: 16, paddingBottom: 24, gap: 16, width: '100%', maxWidth: 840, alignSelf: 'center' },
   pageHeading: { gap: 5 },
-  pageTitle: { fontSize: 22, fontWeight: '900', color: '#17202D', lineHeight: 37 },
-  subtitle: { fontSize: 14, color: '#68727F', lineHeight: 22 },
-  primaryButton: { height: 62, backgroundColor: PURPLE, borderRadius: 18, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 12 },
-  primaryButtonText: { fontSize: 16, fontWeight: '900', color: '#fff' },
+  pageTitle: { fontSize: 22, fontWeight: '700', color: ui.ink, lineHeight: 37 },
+  subtitle: { fontSize: 14, color: ui.muted, lineHeight: 22 },
+  primaryButton: { height: 62, backgroundColor: PURPLE, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 12 },
+  primaryButtonText: { fontSize: 16, fontWeight: '700', color: ui.surface },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  searchBox: { flex: 1, minHeight: 54, borderRadius: 17, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E0E4EA', paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  searchBox: { flex: 1, minHeight: 54, borderRadius: 12, backgroundColor: ui.surface, borderWidth: 1, borderColor: ui.border, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 8 },
   searchInput: { flex: 1, minWidth: 0, fontSize: 14, color: '#26313F', paddingVertical: 10 },
-  filterButton: { width: 54, height: 54, borderRadius: 17, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E0E4EA', alignItems: 'center', justifyContent: 'center' },
+  filterButton: { width: 54, height: 54, borderRadius: 12, backgroundColor: ui.surface, borderWidth: 1, borderColor: ui.border, alignItems: 'center', justifyContent: 'center' },
   dropdownRow: { flexDirection: 'row', gap: 10 },
-  dropdown: { flex: 1, minHeight: 54, borderRadius: 16, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E0E4EA', paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 5 },
+  dropdown: { flex: 1, minHeight: 54, borderRadius: 16, backgroundColor: ui.surface, borderWidth: 1, borderColor: ui.border, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 5 },
   dropdownText: { flex: 1, fontSize: 13, color: '#4C5867', fontWeight: '600' },
   statusTabs: { flexDirection: 'row', gap: 7, flexWrap: 'wrap' },
   statusTab: { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#EEF0F5' },
   statusTabActive: { backgroundColor: PURPLE },
-  statusTabText: { fontSize: 11, fontWeight: '700', color: '#68727F' },
-  statusTabTextActive: { color: '#fff' },
-  sampleCard: { backgroundColor: '#fff', borderRadius: 23, borderWidth: 1, borderColor: '#E6E8EE', padding: 18, gap: 13, elevation: 1 },
-  sampleTitle: { fontSize: 19, fontWeight: '900', color: '#17202D', lineHeight: 25 },
+  statusTabText: { fontSize: 12, fontWeight: '700', color: ui.muted },
+  statusTabTextActive: { color: ui.surface },
+  sampleCard: { backgroundColor: ui.surface, borderRadius: 16, borderWidth: 1, borderColor: '#E6E8EE', padding: 18, gap: 13, elevation: 0 },
+  sampleTitle: { fontSize: 19, fontWeight: '700', color: ui.ink, lineHeight: 25 },
   sampleCardHeading: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   sampleIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#F2EAFE', alignItems: 'center', justifyContent: 'center' },
   metaLine: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -711,103 +705,103 @@ const styles = StyleSheet.create({
   infoGrid: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 18, rowGap: 8, paddingTop: 4 },
   infoText: { fontSize: 13, color: '#283342' },
   muted: { color: '#98A2AF' },
-  strong: { fontWeight: '800', color: '#202A37' },
+  strong: { fontWeight: '700', color: '#202A37' },
   cardFooter: { flexDirection: 'row', alignItems: 'center' },
   statusBadge: { alignSelf: 'flex-start', borderRadius: 22, borderWidth: 1, paddingHorizontal: 13, paddingVertical: 8 },
-  statusBadgeText: { fontSize: 13, fontWeight: '800' },
+  statusBadgeText: { fontSize: 13, fontWeight: '700' },
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
-  secondaryButton: { minHeight: 48, borderRadius: 15, borderWidth: 1, borderColor: '#DDE1E7', backgroundColor: '#fff', paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7 },
-  secondaryButtonText: { fontSize: 14, fontWeight: '800', color: '#354151' },
+  secondaryButton: { minHeight: 48, borderRadius: 15, borderWidth: 1, borderColor: '#DDE1E7', backgroundColor: ui.surface, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7 },
+  secondaryButtonText: { fontSize: 14, fontWeight: '700', color: '#354151' },
   approveButton: { minHeight: 48, borderRadius: 15, backgroundColor: PURPLE, paddingHorizontal: 20, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7 },
-  approveButtonText: { fontSize: 14, fontWeight: '900', color: '#fff' },
+  approveButtonText: { fontSize: 14, fontWeight: '700', color: ui.surface },
   changesButton: { alignSelf: 'flex-start', minHeight: 47, borderRadius: 15, borderWidth: 1, borderColor: '#DDE1E7', paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center' },
-  stateCard: { backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: '#E5E7EB', padding: 24, alignItems: 'center', gap: 10, marginTop: 8 },
-  stateTitle: { fontSize: 16, fontWeight: '900', color: '#202633', textAlign: 'center' },
+  stateCard: { backgroundColor: ui.surface, borderRadius: 16, borderWidth: 1, borderColor: ui.border, padding: 24, alignItems: 'center', gap: 10, marginTop: 8 },
+  stateTitle: { fontSize: 16, fontWeight: '700', color: ui.ink, textAlign: 'center' },
   stateText: { fontSize: 13, color: '#737B87', textAlign: 'center', lineHeight: 19 },
-  retryButton: { backgroundColor: '#F0E9FF', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 11, marginTop: 3 },
-  retryText: { fontSize: 13, fontWeight: '800', color: PURPLE },
-  bottomNav: { minHeight: 75, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#E6E8ED', paddingTop: 7, paddingHorizontal: 5, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
+  retryButton: { backgroundColor: ui.accentSoft, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 11, marginTop: 3 },
+  retryText: { fontSize: 13, fontWeight: '700', color: PURPLE },
+  bottomNav: { minHeight: 75, backgroundColor: ui.surface, borderTopWidth: 1, borderTopColor: '#E6E8ED', paddingTop: 7, paddingHorizontal: 5, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
   navItem: { minWidth: 57, minHeight: 58, borderRadius: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, paddingVertical: 4, gap: 2 },
-  navItemActive: { backgroundColor: '#F1EBFB' },
-  navLabel: { fontSize: 10, color: '#687687', fontWeight: '600' },
-  navLabelActive: { color: PURPLE, fontWeight: '900' },
+  navItemActive: { backgroundColor: ui.accentSoft },
+  navLabel: { fontSize: 10, color: ui.muted, fontWeight: '600' },
+  navLabelActive: { color: PURPLE, fontWeight: '700' },
   drawerLayer: { position: 'absolute', left: 0, right: 0, zIndex: 30, flexDirection: 'row', backgroundColor: 'rgba(13,10,22,.38)' },
-  drawer: { width: '68%', maxWidth: 320, backgroundColor: '#fff', paddingTop: 20, paddingHorizontal: 14, elevation: 14 },
+  drawer: { width: '68%', maxWidth: 320, backgroundColor: ui.surface, paddingTop: 20, paddingHorizontal: 14, elevation: 0 },
   drawerBackdrop: { flex: 1 },
   drawerItem: { minHeight: 59, borderRadius: 12, marginBottom: 3, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 14 },
   drawerItemActive: { backgroundColor: PURPLE },
   drawerText: { fontSize: 15, fontWeight: '600', color: '#4B515B' },
-  drawerTextActive: { color: '#fff', fontWeight: '800' },
+  drawerTextActive: { color: ui.surface, fontWeight: '700' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(13,18,30,.48)', justifyContent: 'center', padding: 14 },
-  sheet: { maxHeight: '90%', backgroundColor: '#fff', borderRadius: 24, padding: 18 },
-  formSheet: { maxHeight: '92%', backgroundColor: '#fff', borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 20, marginTop: 'auto' },
-  detailsSheet: { height: '94%', backgroundColor: '#fff', borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 18, marginTop: 'auto' },
+  sheet: { maxHeight: '90%', backgroundColor: ui.surface, borderRadius: 20, padding: 18 },
+  formSheet: { maxHeight: '92%', backgroundColor: ui.surface, borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 20, marginTop: 'auto' },
+  detailsSheet: { height: '94%', backgroundColor: ui.surface, borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 18, marginTop: 'auto' },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   detailBackButton: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  sheetTitle: { fontSize: 20, fontWeight: '900', color: '#17202D' },
-  sectionLabel: { fontSize: 11, fontWeight: '900', letterSpacing: 1, color: '#778291', marginTop: 13, marginBottom: 9 },
+  sheetTitle: { fontSize: 20, fontWeight: '700', color: ui.ink },
+  sectionLabel: { fontSize: 12, fontWeight: '700', letterSpacing: 1, color: '#778291', marginTop: 13, marginBottom: 9 },
   notificationList: { maxHeight: 300 },
   notificationItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 12, borderRadius: 13, marginBottom: 7, backgroundColor: '#F8F9FC' },
-  notificationUnread: { backgroundColor: '#F1EBFB', borderWidth: 1, borderColor: '#E3D7FB' },
-  notificationTitle: { fontSize: 13, fontWeight: '900', color: '#202A37' },
-  notificationBody: { fontSize: 12, color: '#667281', lineHeight: 18, marginTop: 3 },
-  notificationDate: { fontSize: 10, color: '#8993A0', marginTop: 5 },
+  notificationUnread: { backgroundColor: ui.accentSoft, borderWidth: 1, borderColor: '#E3D7FB' },
+  notificationTitle: { fontSize: 13, fontWeight: '700', color: '#202A37' },
+  notificationBody: { fontSize: 13, color: '#667281', lineHeight: 18, marginTop: 3 },
+  notificationDate: { fontSize: 10, color: ui.muted, marginTop: 5 },
   unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: PURPLE, marginTop: 5 },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  choiceChip: { borderRadius: 20, borderWidth: 1, borderColor: '#E1E4EA', paddingHorizontal: 12, paddingVertical: 9, backgroundColor: '#fff' },
-  choiceChipActive: { backgroundColor: '#F0E9FF', borderColor: '#CDB9F6' },
-  choiceText: { fontSize: 12, fontWeight: '700', color: '#596575' },
+  choiceChip: { borderRadius: 20, borderWidth: 1, borderColor: '#E1E4EA', paddingHorizontal: 12, paddingVertical: 9, backgroundColor: ui.surface },
+  choiceChipActive: { backgroundColor: ui.accentSoft, borderColor: '#CDB9F6' },
+  choiceText: { fontSize: 13, fontWeight: '700', color: '#596575' },
   choiceTextActive: { color: PURPLE },
   sheetActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 20 },
-  formLabel: { fontSize: 11, fontWeight: '900', letterSpacing: .8, color: '#596575', marginTop: 12, marginBottom: 7 },
-  formSelect: { height: 48, borderWidth: 1, borderColor: '#E0E4EA', borderRadius: 13, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  formLabel: { fontSize: 12, fontWeight: '700', letterSpacing: .8, color: '#596575', marginTop: 12, marginBottom: 7 },
+  formSelect: { height: 48, borderWidth: 1, borderColor: ui.border, borderRadius: 13, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   formSelectText: { fontSize: 14, color: '#344052', fontWeight: '700' },
-  orderOptions: { borderWidth: 1, borderColor: '#E0E4EA', borderRadius: 13, marginTop: 6, overflow: 'hidden' },
+  orderOptions: { borderWidth: 1, borderColor: ui.border, borderRadius: 13, marginTop: 6, overflow: 'hidden' },
   orderOption: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#EEF0F3' },
-  orderOptionTitle: { fontSize: 13, fontWeight: '900', color: '#253142' },
-  orderOptionSub: { fontSize: 11, color: '#738091', marginTop: 3 },
-  formInput: { minHeight: 47, borderWidth: 1, borderColor: '#E0E4EA', borderRadius: 13, paddingHorizontal: 13, fontSize: 14, color: '#26313F', backgroundColor: '#fff' },
+  orderOptionTitle: { fontSize: 13, fontWeight: '700', color: '#253142' },
+  orderOptionSub: { fontSize: 12, color: '#738091', marginTop: 3 },
+  formInput: { minHeight: 47, borderWidth: 1, borderColor: ui.border, borderRadius: 13, paddingHorizontal: 13, fontSize: 14, color: '#26313F', backgroundColor: ui.surface },
   notesInput: { minHeight: 100, paddingTop: 12, textAlignVertical: 'top' },
-  photoHero: { height: 210, borderRadius: 19, overflow: 'hidden', backgroundColor: '#111827', marginBottom: 17 },
+  photoHero: { height: 210, borderRadius: 19, overflow: 'hidden', backgroundColor: ui.ink, marginBottom: 17 },
   heroImage: { width: '100%', height: '100%' },
   photoPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 7 },
-  photoPlaceholderTitle: { fontSize: 16, fontWeight: '900', color: '#F4F5F7' },
+  photoPlaceholderTitle: { fontSize: 16, fontWeight: '700', color: '#F4F5F7' },
   photoPlaceholderText: { fontSize: 13, color: '#A9B2C0' },
   detailTitleRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
-  detailProductTitle: { flex: 1, fontSize: 23, fontWeight: '900', color: '#17202D', lineHeight: 29 },
+  detailProductTitle: { flex: 1, fontSize: 23, fontWeight: '700', color: ui.ink, lineHeight: 29 },
   detailMeta: { gap: 13, marginTop: 18, marginBottom: 19 },
   detailMetaText: { fontSize: 14, color: '#657181' },
   detailTabs: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, borderBottomWidth: 1, borderBottomColor: '#EEF0F3', paddingBottom: 12 },
   detailTab: { borderRadius: 22, backgroundColor: '#F0F2F6', paddingHorizontal: 13, paddingVertical: 10 },
   detailTabActive: { backgroundColor: PURPLE },
-  detailTabText: { fontSize: 12, fontWeight: '800', color: '#596575' },
-  detailTabTextActive: { color: '#fff' },
+  detailTabText: { fontSize: 13, fontWeight: '700', color: '#596575' },
+  detailTabTextActive: { color: ui.surface },
   tabPanel: { paddingTop: 12, paddingBottom: 16 },
   detailInfoRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#EEF0F3' },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
   photoThumb: { width: 94, height: 94, borderRadius: 12, backgroundColor: '#EEF0F3' },
   photoThumbActive: { borderWidth: 3, borderColor: PURPLE },
-  photoPrev: { position: 'absolute', left: 8, top: '45%', width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(0,0,0,.5)', alignItems: 'center', justifyContent: 'center' },
-  photoNext: { position: 'absolute', right: 8, top: '45%', width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(0,0,0,.5)', alignItems: 'center', justifyContent: 'center' },
+  photoPrev: { position: 'absolute', left: 8, top: '45%', width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(0,0,0,.5)', alignItems: 'center', justifyContent: 'center' },
+  photoNext: { position: 'absolute', right: 8, top: '45%', width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(0,0,0,.5)', alignItems: 'center', justifyContent: 'center' },
   photoCounter: { position: 'absolute', left: 12, right: 12, bottom: 10, borderRadius: 10, backgroundColor: 'rgba(0,0,0,.62)', paddingVertical: 6, paddingHorizontal: 10, alignItems: 'center' },
-  photoCounterText: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  uploadHelp: { fontSize: 13, color: '#68727F', lineHeight: 20, marginBottom: 12 },
+  photoCounterText: { color: ui.surface, fontSize: 13, fontWeight: '700' },
+  uploadHelp: { fontSize: 13, color: ui.muted, lineHeight: 20, marginBottom: 12 },
   uploadDropzone: { minHeight: 190, borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#DCCDF8', borderRadius: 18, alignItems: 'center', justifyContent: 'center', padding: 18, gap: 9, backgroundColor: '#FCFBFF' },
-  uploadTitle: { fontSize: 15, fontWeight: '900', color: '#273244' },
-  emptyUpload: { marginTop: 14, padding: 16, borderRadius: 14, backgroundColor: '#F7F8FA', color: '#68727F', fontSize: 13, lineHeight: 20, textAlign: 'center' },
+  uploadTitle: { fontSize: 15, fontWeight: '700', color: '#273244' },
+  emptyUpload: { marginTop: 14, padding: 16, borderRadius: 14, backgroundColor: ui.canvas, color: ui.muted, fontSize: 13, lineHeight: 20, textAlign: 'center' },
   samplePhotoActions: { flexDirection: 'row', gap: 10, marginTop: 18 },
-  notePanel: { padding: 14, borderRadius: 13, backgroundColor: '#F7F8FA', fontSize: 13, color: '#4B5665', lineHeight: 20 },
+  notePanel: { padding: 14, borderRadius: 13, backgroundColor: ui.canvas, fontSize: 13, color: '#4B5665', lineHeight: 20 },
   feedbackPanel: { padding: 14, borderRadius: 13, backgroundColor: '#FFF3F2', marginTop: 12 },
-  feedbackHeading: { fontSize: 11, fontWeight: '900', color: '#A82B25', marginBottom: 6 },
+  feedbackHeading: { fontSize: 12, fontWeight: '700', color: '#A82B25', marginBottom: 6 },
   feedbackText: { fontSize: 13, color: '#7C2924', lineHeight: 19 },
   fileRow: { flexDirection: 'row', alignItems: 'center', gap: 11, padding: 13, borderWidth: 1, borderColor: '#E7E9EF', borderRadius: 13, marginBottom: 8 },
-  fileName: { fontSize: 13, fontWeight: '800', color: '#273244' },
-  fileSize: { fontSize: 11, color: '#7D8794', marginTop: 4 },
-  emptyText: { fontSize: 13, color: '#7B8491', paddingVertical: 16 },
+  fileName: { fontSize: 13, fontWeight: '700', color: '#273244' },
+  fileSize: { fontSize: 12, color: '#7D8794', marginTop: 4 },
+  emptyText: { fontSize: 13, color: ui.muted, paddingVertical: 16 },
   historyRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 10 },
   historyMarker: { width: 25, height: 25, borderRadius: 13, backgroundColor: '#16A36A', alignItems: 'center', justifyContent: 'center' },
-  historyTitle: { fontSize: 13, fontWeight: '900', color: '#273244' },
-  historyNote: { fontSize: 12, color: '#68727F', marginTop: 3, lineHeight: 18 },
-  historyDate: { fontSize: 11, color: '#8B95A1', marginTop: 5 },
+  historyTitle: { fontSize: 13, fontWeight: '700', color: '#273244' },
+  historyNote: { fontSize: 13, color: ui.muted, marginTop: 3, lineHeight: 18 },
+  historyDate: { fontSize: 12, color: ui.muted, marginTop: 5 },
   supplierActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 9, marginTop: 16, marginBottom: 16 },
 });

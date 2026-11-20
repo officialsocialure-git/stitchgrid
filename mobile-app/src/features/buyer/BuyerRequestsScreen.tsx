@@ -1,6 +1,9 @@
+import { ui } from '@/theme/ui';
+import { SourcingTabs } from '@/components/SourcingTabs';
+import { AppBottomNav } from '@/components/AppBottomNav';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Image, Modal, Pressable, RefreshControl,
+  ActivityIndicator, Alert, FlatList, Image, Modal, Pressable, RefreshControl,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -11,7 +14,7 @@ import { apiGet, apiRequest } from '@/services/api';
 import CreateRfqModal from '@/features/buyer/CreateRfqModal';
 import { AppHeader } from '@/components/AppHeader';
 
-const PURPLE = '#5314E8';
+const PURPLE = ui.accent;
 const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparent.png';
 
 type Rfq = {
@@ -139,16 +142,19 @@ export default function BuyerRequestsScreen() {
         onLayout={event => setHeaderHeight(event.nativeEvent.layout.height)}
       />
 
-      <ScrollView
+      <FlatList
+        data={loading || error ? [] : visible}
+        keyExtractor={rfq => rfq.id}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(true); }} tintColor={PURPLE} />}
-      >
+        ListHeaderComponent={<>
         <View style={styles.titleRow}>
           <Text style={styles.pageTitle}>My Requests</Text>
           <Text style={styles.hubPill}>Buyer Sourcing Hub</Text>
         </View>
         <Text style={styles.subtitle}>Create and manage your production requests (RFQs), compare supplier quotes, and move to order.</Text>
+        <SourcingTabs role="BUYER" active="requests" />
 
         <Pressable style={styles.postButton} onPress={() => setPostModalVisible(true)}>
           <MaterialCommunityIcons name="plus" size={21} color="#FFFFFF" />
@@ -157,7 +163,7 @@ export default function BuyerRequestsScreen() {
 
         <View style={styles.searchBox}>
           <MaterialCommunityIcons name="magnify" size={24} color="#929BA6" />
-          <TextInput value={search} onChangeText={setSearch} placeholder="Search by RFQ ID, title or product..." placeholderTextColor="#9AA1AA" style={styles.searchInput} autoCapitalize="none" />
+          <TextInput value={search} onChangeText={setSearch} placeholder="Search by RFQ ID, title or product..." placeholderTextColor={ui.muted} style={styles.searchInput} autoCapitalize="none" />
           {!!search && <Pressable onPress={() => setSearch('')}><MaterialCommunityIcons name="close-circle" size={19} color="#929BA6" /></Pressable>}
         </View>
 
@@ -173,14 +179,14 @@ export default function BuyerRequestsScreen() {
             <MaterialCommunityIcons name="chevron-down" size={22} color="#929BA6" />
           </Pressable>
         </View>
-
-        {loading ? (
+        </>}
+        ListEmptyComponent=        {loading ? (
           <View style={styles.stateCard}><ActivityIndicator color={PURPLE} /><Text style={styles.stateText}>Loading your requests...</Text></View>
         ) : error ? (
           <View style={styles.stateCard}><MaterialCommunityIcons name="cloud-alert-outline" size={30} color="#8B929C" /><Text style={styles.stateTitle}>Couldn't load requests</Text><Text style={styles.stateText}>{error}</Text><Pressable style={styles.retry} onPress={() => void load()}><Text style={styles.retryText}>Try Again</Text></Pressable></View>
-        ) : visible.length === 0 ? (
-          <View style={styles.stateCard}><MaterialCommunityIcons name="file-document-outline" size={26} color="#9AA1AA" /><Text style={styles.stateTitle}>No requests found</Text><Text style={styles.stateText}>{search || status !== 'ALL' ? 'Try changing your search or filters.' : 'You have not posted any production requests yet.'}</Text></View>
-        ) : visible.map(rfq => {
+        ) : (
+          <View style={styles.stateCard}><MaterialCommunityIcons name="file-document-outline" size={26} color="#9AA1AA" /><Text style={styles.stateTitle}>No requests found</Text><Text style={styles.stateText}>{search || status !== 'ALL' ? 'Try changing your search or filters.' : 'You have not posted any production requests yet.'}</Text></View>)}
+        renderItem={({ item: rfq }) => {
           const label = statusOf(rfq);
           const count = rfq.quotations?.length || 0;
           const awardedTo = rfq.quotations?.find(q => q.status === 'ACCEPTED' || q.status === 'AWARDED')?.supplier?.name;
@@ -191,7 +197,7 @@ export default function BuyerRequestsScreen() {
                   <Text style={styles.rfqPill}>{rfqCode(rfq.id)}</Text>
                   <Text style={[styles.statusPill, (label === 'Awarded' || label === 'Quotes Received') ? styles.greenPill : label === 'Open' ? styles.amberPill : styles.grayPill]}>{label}</Text>
                 </View>
-                <Pressable hitSlop={8} onPress={() => setMenuId(menuId === rfq.id ? null : rfq.id)}><MaterialCommunityIcons name="dots-vertical" size={23} color="#929BA6" /></Pressable>
+                <Pressable style={{ minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel={`More actions for ${rfq.title}`} accessibilityState={{ expanded: menuId === rfq.id }} onPress={() => setMenuId(menuId === rfq.id ? null : rfq.id)}><MaterialCommunityIcons name="dots-vertical" size={23} color="#929BA6" /></Pressable>
               </View>
               {menuId === rfq.id && (
                 <View style={styles.menuPopup}>
@@ -227,21 +233,10 @@ export default function BuyerRequestsScreen() {
               </View>
             </View>
           );
-        })}
-      </ScrollView>
+        }}
+      />
 
-      <View onLayout={event => setBottomNavHeight(event.nativeEvent.layout.height)} style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 7) }]}>
-        {[
-          { label: 'Dashboard', icon: 'view-dashboard', section: 'home' },
-          { label: 'Requests', icon: 'file-document-outline', section: 'requests' },
-          { label: 'Orders', icon: 'archive-outline', section: 'orders' },
-          { label: 'Chat', icon: 'message-text-outline', section: 'chat' },
-          { label: 'Settings', icon: 'cog-outline', section: 'organization-settings' },
-        ].map(item => {
-          const active = item.label === 'Requests';
-          return <Pressable key={item.label} onPress={() => navigate(item.section)} style={[styles.navItem, active && styles.navItemActive]}><MaterialCommunityIcons name={item.icon as any} size={21} color={active ? PURPLE : '#687687'} /><Text style={[styles.navLabel, active && styles.navLabelActive]}>{item.label}</Text></Pressable>;
-        })}
-      </View>
+      <AppBottomNav role="BUYER" activeSection="requests" onNavigate={navigate} onLayout={event => setBottomNavHeight(event.nativeEvent.layout.height)} />
 
       <CreateRfqModal
         visible={postModalVisible}
@@ -289,89 +284,89 @@ export default function BuyerRequestsScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen:{flex:1,backgroundColor:'#F7F8FC'},
-  header:{minHeight:58,backgroundColor:'#fff',borderBottomWidth:1,borderBottomColor:'#ECEEF2',paddingHorizontal:14,paddingBottom:5,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:6},
+  screen:{flex:1,backgroundColor:ui.canvas},
+  header:{minHeight:58,backgroundColor:ui.surface,borderBottomWidth:1,borderBottomColor:ui.border,paddingHorizontal:14,paddingBottom:5,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:6},
   headerIcon:{width:30,alignItems:'flex-start',justifyContent:'center'},
   logo:{height:34,width:170,flexShrink:1},
   headerActions:{flexDirection:'row',alignItems:'center',gap:9},
-  headerCircle:{width:38,height:38,borderRadius:19,backgroundColor:'#F4F0FC',alignItems:'center',justifyContent:'center',position:'relative'},
-  badge:{position:'absolute',right:-1,top:-4,width:22,height:22,borderRadius:11,backgroundColor:'#D62828',alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:'#fff'},
-  badgeText:{fontSize:11,fontWeight:'800',color:'#fff'},
-  content:{paddingHorizontal:15,paddingTop:18,paddingBottom:18,gap:15},
+  headerCircle:{width:38,height:38,borderRadius:19,backgroundColor:ui.accentSoft,alignItems:'center',justifyContent:'center',position:'relative'},
+  badge:{position:'absolute',right:-1,top:-4,width:22,height:22,borderRadius:11,backgroundColor:'#D62828',alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:ui.surface},
+  badgeText:{fontSize: 12,fontWeight: '700',color:ui.surface},
+  content:{paddingHorizontal:16,paddingTop:16,paddingBottom:20,gap:16,width:'100%',maxWidth:840,alignSelf:'center'},
   titleRow:{flexDirection:'row',alignItems:'center',flexWrap:'wrap',gap:9},
-  pageTitle:{fontSize:22,fontWeight:'900',color:'#111827',letterSpacing:-.7},
-  hubPill:{fontSize:12,fontWeight:'800',color:'#5B13EC',backgroundColor:'#F3EDFF',paddingHorizontal:11,paddingVertical:6,borderRadius:15,overflow:'hidden'},
+  pageTitle:{fontSize:22,fontWeight: '700',color:ui.ink,letterSpacing:-.7},
+  hubPill:{fontSize: 13,fontWeight: '700',color:ui.accent,backgroundColor:'#F3EDFF',paddingHorizontal:11,paddingVertical:6,borderRadius:15,overflow:'hidden'},
   subtitle:{fontSize:14,lineHeight:21,color:'#707986',marginTop:-8},
-  postButton:{alignSelf:'flex-start',minHeight:49,paddingHorizontal:17,borderRadius:14,backgroundColor:PURPLE,flexDirection:'row',alignItems:'center',gap:8,marginTop:1,marginBottom:5,elevation:2},
-  postButtonText:{fontSize:15,fontWeight:'800',color:'#fff'},
-  searchBox:{minHeight:53,backgroundColor:'#fff',borderWidth:1,borderColor:'#E4E6EB',borderRadius:17,paddingHorizontal:14,flexDirection:'row',alignItems:'center',gap:9},
+  postButton:{alignSelf:'flex-start',minHeight:49,paddingHorizontal:17,borderRadius:14,backgroundColor:PURPLE,flexDirection:'row',alignItems:'center',gap:8,marginTop:1,marginBottom:5,elevation: 0},
+  postButtonText:{fontSize:15,fontWeight: '700',color:ui.surface},
+  searchBox:{minHeight:53,backgroundColor:ui.surface,borderWidth:1,borderColor:'#E4E6EB',borderRadius:12,paddingHorizontal:14,flexDirection:'row',alignItems:'center',gap:9},
   searchInput:{flex:1,minWidth:0,fontSize:14,color:'#252B35',paddingVertical:10},
   filtersRow:{flexDirection:'row',gap:9},
-  filterButton:{flex:1,minWidth:0,minHeight:51,backgroundColor:'#fff',borderWidth:1,borderColor:'#E4E6EB',borderRadius:15,paddingHorizontal:10,flexDirection:'row',alignItems:'center',gap:6},
-  filterText:{flex:1,minWidth:0,fontSize:12,fontWeight:'700',color:'#303744'},
-  rfqCard:{backgroundColor:'#fff',borderRadius:21,borderWidth:1,borderColor:'#E5E7EB',padding:15,gap:12,shadowColor:'#111827',shadowOpacity:.04,shadowRadius:6,shadowOffset:{width:0,height:2},elevation:1},
+  filterButton:{flex:1,minWidth:0,minHeight:51,backgroundColor:ui.surface,borderWidth:1,borderColor:'#E4E6EB',borderRadius:12,paddingHorizontal:10,flexDirection:'row',alignItems:'center',gap:6},
+  filterText:{flex:1,minWidth:0,fontSize: 13,fontWeight:'700',color:'#303744'},
+  rfqCard:{backgroundColor:ui.surface,borderRadius:16,borderWidth:1,borderColor:ui.border,padding:15,gap:12,shadowColor:ui.ink,shadowOpacity: 0,shadowRadius:6,shadowOffset:{width:0,height:2},elevation: 0},
   cardTop:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8},
   pillsRow:{flexDirection:'row',alignItems:'center',flexWrap:'wrap',gap:7,flex:1},
-  rfqPill:{fontSize:12,fontWeight:'800',color:PURPLE,backgroundColor:'#F5F0FF',paddingHorizontal:10,paddingVertical:6,borderRadius:15,overflow:'hidden'},
-  statusPill:{fontSize:11,fontWeight:'800',paddingHorizontal:10,paddingVertical:6,borderRadius:15,overflow:'hidden'},
+  rfqPill:{fontSize: 13,fontWeight: '700',color:PURPLE,backgroundColor:'#F5F0FF',paddingHorizontal:10,paddingVertical:6,borderRadius:15,overflow:'hidden'},
+  statusPill:{fontSize: 12,fontWeight: '700',paddingHorizontal:10,paddingVertical:6,borderRadius:15,overflow:'hidden'},
   greenPill:{color:'#16804A',backgroundColor:'#E9FAF1'},
   amberPill:{color:'#9A5B08',backgroundColor:'#FFF7E6'},
   grayPill:{color:'#525B67',backgroundColor:'#F0F1F3'},
-  rfqTitle:{fontSize:18,fontWeight:'900',color:'#151923',marginTop:1},
+  rfqTitle:{fontSize:18,fontWeight: '700',color:'#151923',marginTop:1},
   metaRow:{flexDirection:'row',flexWrap:'wrap',gap:13},
   metaItem:{flexDirection:'row',alignItems:'center',gap:6,flexShrink:1},
   metaText:{fontSize:13,color:'#697381',flexShrink:1},
   cardDivider:{height:1,backgroundColor:'#F0F1F3'},
   bottomInfo:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:12},
-  smallLabel:{fontSize:11,color:'#858D98'},
-  infoStrong:{fontSize:14,fontWeight:'800',color:'#202633',marginTop:3},
+  smallLabel:{fontSize: 12,color:ui.muted},
+  infoStrong:{fontSize:14,fontWeight: '700',color:ui.ink,marginTop:3},
   createdBlock:{alignItems:'flex-end'},
-  quoteCount:{fontSize:20,fontWeight:'900',color:'#202633',marginTop:2},
-  linkText:{fontSize:13,fontWeight:'800',color:PURPLE,marginTop:3},
+  quoteCount:{fontSize:20,fontWeight: '700',color:ui.ink,marginTop:2},
+  linkText:{fontSize:13,fontWeight: '700',color:PURPLE,marginTop:3},
   actionsRow:{flexDirection:'row',gap:9,marginTop:2},
   compareButton:{flex:1,minHeight:48,borderRadius:13,backgroundColor:PURPLE,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7,paddingHorizontal:8},
-  compareText:{fontSize:13,fontWeight:'800',color:'#fff'},
-  detailsButton:{flex:1,minHeight:48,borderRadius:13,borderWidth:1,borderColor:'#E3D9F4',backgroundColor:'#fff',flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7},
-  detailsText:{fontSize:13,fontWeight:'800',color:PURPLE},
-  menuPopup:{alignSelf:'flex-end',backgroundColor:'#fff',borderWidth:1,borderColor:'#E5E7EB',borderRadius:12,padding:5,minWidth:155,elevation:5,zIndex:5},
+  compareText:{fontSize:13,fontWeight: '700',color:ui.surface},
+  detailsButton:{flex:1,minHeight:48,borderRadius:13,borderWidth:1,borderColor:'#E3D9F4',backgroundColor:ui.surface,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7},
+  detailsText:{fontSize:13,fontWeight: '700',color:PURPLE},
+  menuPopup:{alignSelf:'flex-end',backgroundColor:ui.surface,borderWidth:1,borderColor:ui.border,borderRadius:12,padding:5,minWidth:155,elevation: 0,zIndex:5},
   menuAction:{minHeight:39,flexDirection:'row',alignItems:'center',gap:9,paddingHorizontal:8},
   menuText:{fontSize:13,fontWeight:'700',color:'#404854'},
-  stateCard:{backgroundColor:'#fff',borderRadius:18,borderWidth:1,borderColor:'#E5E7EB',padding:24,alignItems:'center',gap:9},
-  stateTitle:{fontSize:16,fontWeight:'900',color:'#202633'},
+  stateCard:{backgroundColor:ui.surface,borderRadius:16,borderWidth:1,borderColor:ui.border,padding:24,alignItems:'center',gap:9},
+  stateTitle:{fontSize:16,fontWeight: '700',color:ui.ink},
   stateText:{fontSize:13,color:'#737B87',textAlign:'center',lineHeight:19},
-  retry:{backgroundColor:'#F0E9FF',paddingHorizontal:18,paddingVertical:10,borderRadius:11,marginTop:3},
-  retryText:{fontSize:13,fontWeight:'800',color:PURPLE},
-  bottomNav:{minHeight:75,backgroundColor:'#fff',borderTopWidth:1,borderTopColor:'#E6E8ED',paddingTop:7,paddingHorizontal:5,flexDirection:'row',alignItems:'center',justifyContent:'space-around'},
+  retry:{backgroundColor:ui.accentSoft,paddingHorizontal:18,paddingVertical:10,borderRadius:11,marginTop:3},
+  retryText:{fontSize:13,fontWeight: '700',color:PURPLE},
+  bottomNav:{minHeight:75,backgroundColor:ui.surface,borderTopWidth:1,borderTopColor:'#E6E8ED',paddingTop:7,paddingHorizontal:5,flexDirection:'row',alignItems:'center',justifyContent:'space-around'},
   navItem:{minWidth:57,minHeight:58,borderRadius:16,alignItems:'center',justifyContent:'center',paddingHorizontal:6,paddingVertical:4,gap:2},
-  navItemActive:{backgroundColor:'#F1EBFB'},
-  navLabel:{fontSize:10,color:'#687687',fontWeight:'600'},
-  navLabelActive:{color:PURPLE,fontWeight:'900'},
+  navItemActive:{backgroundColor:ui.accentSoft},
+  navLabel:{fontSize:10,color:ui.muted,fontWeight:'600'},
+  navLabelActive:{color:PURPLE,fontWeight: '700'},
   pickerBackdrop:{flex:1,backgroundColor:'rgba(13,10,22,.45)',justifyContent:'flex-end'},
-  pickerSheet:{backgroundColor:'#fff',borderTopLeftRadius:25,borderTopRightRadius:25,paddingHorizontal:20,paddingTop:12,paddingBottom:28},
+  pickerSheet:{backgroundColor:ui.surface,borderTopLeftRadius:25,borderTopRightRadius:25,paddingHorizontal:20,paddingTop:12,paddingBottom:28},
   dragHandle:{width:45,height:5,borderRadius:3,backgroundColor:'#D1D5DB',alignSelf:'center',marginBottom:17},
   pickerHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
-  pickerTitle:{fontSize:18,fontWeight:'900',color:'#202633'},
+  pickerTitle:{fontSize:18,fontWeight: '700',color:ui.ink},
   optionRow:{minHeight:51,flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderBottomWidth:1,borderBottomColor:'#F0F1F3'},
   optionText:{fontSize:14,color:'#4B5563'},
-  optionActive:{color:PURPLE,fontWeight:'800'},
+  optionActive:{color:PURPLE,fontWeight: '700'},
   detailBackdrop:{flex:1,backgroundColor:'rgba(0,0,0,.5)',justifyContent:'center',padding:12},
-  detailSheet:{maxHeight:'92%',backgroundColor:'#fff',borderRadius:23,padding:16,overflow:'hidden'},
-  detailTitle:{fontSize:18,fontWeight:'900',color:'#171B25'},
-  detailSubtitle:{fontSize:11,color:'#7C8490',marginTop:4},
+  detailSheet:{maxHeight:'92%',backgroundColor:ui.surface,borderRadius:20,padding:16,overflow:'hidden'},
+  detailTitle:{fontSize:18,fontWeight: '700',color:'#171B25'},
+  detailSubtitle:{fontSize: 12,color:ui.muted,marginTop:4},
   detailStatus:{flexDirection:'row',gap:8,alignItems:'center'},
   detailGrid:{flexDirection:'row',gap:9},
-  detailStat:{flex:1,backgroundColor:'#F7F8FA',borderRadius:12,padding:11},
-  detailLabel:{fontSize:11,fontWeight:'900',color:'#7B8490',letterSpacing:.4},
+  detailStat:{flex:1,backgroundColor:ui.canvas,borderRadius:12,padding:11},
+  detailLabel:{fontSize: 12,fontWeight: '700',color:ui.muted,letterSpacing:.4},
   detailValue:{fontSize:13,color:'#303744',lineHeight:19,marginTop:6,backgroundColor:'#F8F9FB',borderRadius:11,padding:11},
   itemRow:{padding:11,borderWidth:1,borderColor:'#E8E9ED',borderRadius:11,marginTop:7,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10},
   detailFooter:{flexDirection:'row',gap:9,paddingTop:12,borderTopWidth:1,borderTopColor:'#F0F1F3',marginTop:10},
   closeDetail:{minHeight:45,paddingHorizontal:18,borderRadius:12,backgroundColor:'#F1F2F4',alignItems:'center',justifyContent:'center'},
-  closeDetailText:{fontSize:13,fontWeight:'800',color:'#505966'},
+  closeDetailText:{fontSize:13,fontWeight: '700',color:'#505966'},
   drawerLayer:{position:'absolute',left:0,right:0,zIndex:30,flexDirection:'row'},
-  drawer:{width:'68%',maxWidth:320,backgroundColor:'#fff',paddingTop:18,paddingHorizontal:14,elevation:14,shadowColor:'#000',shadowOpacity:.16,shadowRadius:12,shadowOffset:{width:3,height:0}},
+  drawer:{width:'68%',maxWidth:320,backgroundColor:ui.surface,paddingTop:18,paddingHorizontal:14,elevation: 0,shadowColor:'#000',shadowOpacity: 0,shadowRadius:12,shadowOffset:{width:3,height:0}},
   drawerBackdrop:{flex:1,backgroundColor:'rgba(13,10,22,.38)'},
   drawerItem:{minHeight:49,borderRadius:12,marginBottom:3,paddingHorizontal:12,flexDirection:'row',alignItems:'center',gap:14},
   drawerItemActive:{backgroundColor:PURPLE},
   drawerText:{fontSize:15,fontWeight:'600',color:'#4B515B'},
-  drawerTextActive:{color:'#FFFFFF',fontWeight:'800'},
+  drawerTextActive:{color:ui.surface,fontWeight: '700'},
 });

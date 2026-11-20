@@ -1,3 +1,5 @@
+import { ui } from '@/theme/ui';
+import { STITCHGRID_LOGO } from '@/theme/assets';
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   Alert,
@@ -5,6 +7,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -16,8 +19,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import { apiGet } from '@/services/api';
 
-export const HEADER_PURPLE = '#5B13EC';
-export const HEADER_LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparent.png';
+export const HEADER_PURPLE = ui.accent;
+
 
 export type AppHeaderProps = {
   role?: 'BUYER' | 'SUPPLIER';
@@ -181,6 +184,7 @@ export function AppHeader({
           styles.headerContainer,
           {
             paddingTop: Math.max(insets.top, 8),
+            minHeight: Math.max(insets.top, 8) + 56,
           },
         ]}
       >
@@ -193,7 +197,7 @@ export function AppHeader({
               style={styles.iconButton}
               accessibilityLabel="Back"
             >
-              <MaterialCommunityIcons name="arrow-left" size={22} color="#5314E8" />
+              <MaterialCommunityIcons name="arrow-left" size={22} color={ui.accent} />
             </Pressable>
           ) : (
             <Pressable
@@ -215,7 +219,7 @@ export function AppHeader({
         <View style={styles.centerContainer}>
           {showLogo ? (
             <Image
-              source={{ uri: HEADER_LOGO_URI }}
+              source={STITCHGRID_LOGO}
               style={styles.logo}
               resizeMode="contain"
               accessibilityLabel="STITCHGRID"
@@ -237,8 +241,9 @@ export function AppHeader({
               <Pressable
                 onPress={handleNotificationPress}
                 hitSlop={8}
-                style={styles.circleButton}
-                accessibilityLabel="Notifications"
+                style={({ pressed }) => [styles.circleButton, pressed && styles.pressed]}
+                accessibilityRole="button"
+                accessibilityLabel={displayUnread > 0 ? `Notifications, ${displayUnread} unread` : 'Notifications'}
               >
                 <MaterialCommunityIcons name="bell-outline" size={20} color={HEADER_PURPLE} />
                 {displayUnread > 0 && (
@@ -254,7 +259,8 @@ export function AppHeader({
               <Pressable
                 onPress={handleProfilePress}
                 hitSlop={8}
-                style={styles.circleButton}
+                style={({ pressed }) => [styles.circleButton, pressed && styles.pressed]}
+                accessibilityRole="button"
                 accessibilityLabel="Profile and Settings"
               >
                 <MaterialCommunityIcons name="account-outline" size={20} color={HEADER_PURPLE} />
@@ -309,13 +315,14 @@ export function AppHeader({
                 <Text style={styles.drawerRoleTitle}>
                   {role === 'SUPPLIER' ? 'Manufacturer Workspace' : 'Buyer Brand Workspace'}
                 </Text>
-                <Pressable onPress={closeMenu} hitSlop={10}>
+                <Pressable onPress={closeMenu} accessibilityRole="button" accessibilityLabel="Close navigation menu" style={styles.drawerClose}>
                   <MaterialCommunityIcons name="close" size={20} color="#68727F" />
                 </Pressable>
               </View>
 
               <View style={styles.drawerDivider} />
 
+              <ScrollView style={styles.drawerScroll} showsVerticalScrollIndicator={false}>
               {menuItems.map(([label, sectionKey, iconName]) => {
                 const isActive = activeSection === sectionKey;
                 return (
@@ -349,6 +356,7 @@ export function AppHeader({
                   </Pressable>
                 );
               })}
+              </ScrollView>
             </View>
           </View>
         </Modal>
@@ -359,12 +367,10 @@ export function AppHeader({
 
 const styles = StyleSheet.create({
   headerContainer: {
-    minHeight: 58,
-    maxHeight: 64,
-    height: 60,
-    backgroundColor: '#FFFFFF',
+    minHeight: 56,
+    backgroundColor: ui.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#ECEEF2',
+    borderBottomColor: ui.border,
     paddingHorizontal: 15,
     paddingBottom: 6,
     flexDirection: 'row',
@@ -375,22 +381,21 @@ const styles = StyleSheet.create({
       ios: {
         shadowColor: '#000000',
         shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.04,
+        shadowOpacity: 0,
         shadowRadius: 3,
       },
       android: {
-        elevation: 2,
+        elevation: 0,
       },
     }),
   },
   leftContainer: {
-    width: 44,
+    width: 48,
     alignItems: 'flex-start',
     justifyContent: 'center',
   },
   iconButton: {
-    width: 38,
-    height: 38,
+    width: 48, height: 48,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 10,
@@ -402,12 +407,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   logo: {
-    width: 145,
+    width: '100%',
+    maxWidth: 145,
     height: 35,
   },
   titleText: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#1C2430',
   },
   rightContainer: {
@@ -416,10 +422,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   circleButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#F5F0FF',
+    width: 48, height: 48,
+    borderRadius: 22,
+    backgroundColor: ui.accentSoft,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -430,32 +435,32 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -3,
     right: -3,
-    minWidth: 17,
-    height: 17,
-    borderRadius: 8.5,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: '#E11D48',
     paddingHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: '#FFFFFF',
+    borderColor: ui.surface,
   },
   badgeText: {
-    color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: '900',
+    color: ui.surface,
+    fontSize: 11,
+    fontWeight: '700',
     textAlign: 'center',
   },
   accountMenuRoot: { flex: 1 },
   accountMenuBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'transparent' },
   accountMenu: {
-    position: 'absolute', right: 14, width: 250, backgroundColor: '#FFFFFF',
-    borderRadius: 18, borderWidth: 1, borderColor: '#E9EBF0', paddingVertical: 8,
+    position: 'absolute', right: 14, width: 250, backgroundColor: ui.surface,
+    borderRadius: 20, borderWidth: 1, borderColor: '#E9EBF0', paddingVertical: 8,
     paddingHorizontal: 8, shadowColor: '#1E1B4B', shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.16, shadowRadius: 18, elevation: 10,
+    shadowOpacity: 0, shadowRadius: 18, elevation: 0,
   },
   accountMenuItem: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 12 },
-  accountMenuText: { color: '#202633', fontSize: 15, fontWeight: '600' },
+  accountMenuText: { color: ui.ink, fontSize: 15, fontWeight: '600' },
   accountMenuLogout: { color: '#DC2626' },
   accountMenuDivider: { height: 1, backgroundColor: '#EEF0F3', marginHorizontal: 8 },
   modalOverlay: {
@@ -473,7 +478,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 14,
     width: 275,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: ui.surface,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: '#E9EBF0',
@@ -481,10 +486,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     shadowColor: '#1E1B4B',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0,
     shadowRadius: 20,
-    elevation: 8,
+    elevation: 0,
   },
+  pressed: { opacity: 0.68 },
+  drawerScroll: { flexShrink: 1 },
+  drawerClose: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   drawerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -494,7 +502,7 @@ const styles = StyleSheet.create({
   },
   drawerRoleTitle: {
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '700',
     color: HEADER_PURPLE,
     letterSpacing: 0.4,
   },
@@ -511,6 +519,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 12,
     marginVertical: 2,
+    minHeight: 48,
   },
   drawerItemActive: {
     backgroundColor: HEADER_PURPLE,
@@ -521,7 +530,7 @@ const styles = StyleSheet.create({
     color: '#384250',
   },
   drawerItemTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '800',
+    color: ui.surface,
+    fontWeight: '700',
   },
 });

@@ -1,0 +1,31 @@
+// STITCHGRID's single mobile visual vocabulary. Business status colors remain separate.
+export const ui = {
+  accent: '#5B13EC',
+  accentPressed: '#4610B6',
+  accentSoft: '#F3EEFF',
+  canvas: '#F6F7FA',
+  surface: '#FFFFFF',
+  surfaceMuted: '#F9FAFC',
+  ink: '#182332',
+  body: '#48586C',
+  muted: '#637184',
+  border: '#E2E6ED',
+  borderStrong: '#C9D1DD',
+  success: '#087653',
+  warning: '#8A5700',
+  danger: '#B42318',
+  radius: {
+    control: 12,
+    card: 16,
+    sheet: 20,
+    pill: 999,
+  },
+  space: {
+    xs: 4,
+    sm: 8,
+    md: 12,
+    lg: 16,
+    xl: 24,
+    xxl: 32,
+  },
+} as const;

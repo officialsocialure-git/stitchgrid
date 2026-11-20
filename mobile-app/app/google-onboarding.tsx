@@ -1,3 +1,5 @@
+import { ui } from '@/theme/ui';
+import { STITCHGRID_LOGO } from '@/theme/assets';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -16,8 +18,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { completeGoogleOnboarding } from '@/services/auth';
 
-const PURPLE = '#8124CF';
-const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparent.png';
+const PURPLE = ui.accent;
+
 const CATEGORIES = [
   'T-Shirts', 'Shirts', 'Hoodies', 'Activewear', 'Polo Shirts', 'Denim & Jeans',
   'Trousers', 'Dresses', 'Kids Wear', 'Knitwear', 'Woven Fabric',
@@ -97,7 +99,7 @@ export default function GoogleOnboardingScreen() {
       >
         <View style={styles.card}>
           <Image
-            source={{ uri: LOGO_URI }}
+            source={STITCHGRID_LOGO}
             style={styles.logo}
             resizeMode="contain"
             accessibilityLabel="STITCHGRID - The Garment Manufacturing Network"
@@ -146,7 +148,7 @@ export default function GoogleOnboardingScreen() {
             value={organizationName}
             onChangeText={setOrganizationName}
             placeholder="Your company or brand name"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={ui.muted}
             autoCapitalize="words"
             maxLength={150}
             returnKeyType="next"
@@ -158,7 +160,7 @@ export default function GoogleOnboardingScreen() {
             value={city}
             onChangeText={setCity}
             placeholder="e.g. Noida"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={ui.muted}
             maxLength={100}
             style={styles.input}
           />
@@ -170,7 +172,7 @@ export default function GoogleOnboardingScreen() {
                 value={taxId}
                 onChangeText={setTaxId}
                 placeholder="GSTIN"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={ui.muted}
                 maxLength={30}
                 autoCapitalize="characters"
                 style={styles.input}
@@ -199,7 +201,7 @@ export default function GoogleOnboardingScreen() {
                 value={description}
                 onChangeText={setDescription}
                 placeholder="Tell buyers about your manufacturing capabilities"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={ui.muted}
                 multiline
                 maxLength={2000}
                 numberOfLines={4}
@@ -227,45 +229,45 @@ export default function GoogleOnboardingScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#FFFFFF' },
+  screen: { flex: 1, backgroundColor: ui.surface },
   content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 28 },
   card: {
     width: '100%',
     maxWidth: 560,
     alignSelf: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 26,
+    backgroundColor: ui.surface,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#EEE5F6',
     padding: 22,
     shadowColor: '#6D28D9',
-    shadowOpacity: 0.1,
+    shadowOpacity: 0,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
+    elevation: 0,
   },
   logo: { width: 220, height: 50, alignSelf: 'center' },
-  brandSubtitle: { color: '#64748B', fontSize: 12, fontWeight: '500', textAlign: 'center', marginTop: 5, marginBottom: 24 },
-  title: { color: '#0F172A', fontSize: 25, lineHeight: 32, fontWeight: '800' },
-  subtitle: { color: '#64748B', fontSize: 13, lineHeight: 20, marginTop: 7, marginBottom: 20 },
-  label: { color: '#334155', fontSize: 11, fontWeight: '800', letterSpacing: 0.35, marginTop: 16, marginBottom: 8 },
+  brandSubtitle: { color: ui.muted, fontSize: 13, fontWeight: '500', textAlign: 'center', marginTop: 5, marginBottom: 24 },
+  title: { color: ui.ink, fontSize: 25, lineHeight: 32, fontWeight: '700' },
+  subtitle: { color: ui.muted, fontSize: 13, lineHeight: 20, marginTop: 7, marginBottom: 20 },
+  label: { color: '#334155', fontSize: 12, fontWeight: '700', letterSpacing: 0.35, marginTop: 16, marginBottom: 8 },
   choiceRow: { flexDirection: 'row', gap: 10 },
-  choice: { flex: 1, minHeight: 94, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 13, padding: 12, justifyContent: 'center' },
-  choiceActive: { borderColor: PURPLE, backgroundColor: '#F7F0FE', borderWidth: 1.5 },
-  choiceTitle: { color: '#0F172A', fontSize: 13, lineHeight: 18, fontWeight: '700' },
+  choice: { flex: 1, minHeight: 94, borderWidth: 1, borderColor: ui.border, borderRadius: 12, padding: 12, justifyContent: 'center' },
+  choiceActive: { borderColor: PURPLE, backgroundColor: ui.accentSoft, borderWidth: 1.5 },
+  choiceTitle: { color: ui.ink, fontSize: 13, lineHeight: 18, fontWeight: '700' },
   choiceTitleActive: { color: '#5B159A' },
-  choiceDescription: { color: '#64748B', fontSize: 11, lineHeight: 16, marginTop: 5 },
+  choiceDescription: { color: ui.muted, fontSize: 12, lineHeight: 16, marginTop: 5 },
   choiceDescriptionActive: { color: '#6B3A91' },
-  input: { minHeight: 49, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 13, color: '#0F172A', fontSize: 14, backgroundColor: '#FFFFFF' },
+  input: { minHeight: 49, borderWidth: 1, borderColor: ui.border, borderRadius: 12, paddingHorizontal: 13, color: ui.ink, fontSize: 14, backgroundColor: ui.surface },
   categoryWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  categoryChip: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 22, paddingHorizontal: 12, paddingVertical: 8 },
+  categoryChip: { borderWidth: 1, borderColor: ui.border, borderRadius: 22, paddingHorizontal: 12, paddingVertical: 8 },
   categoryChipSelected: { borderColor: PURPLE, backgroundColor: '#F1E7FC' },
-  categoryText: { color: '#475569', fontSize: 11, fontWeight: '600' },
+  categoryText: { color: '#475569', fontSize: 12, fontWeight: '600' },
   categoryTextSelected: { color: '#5B159A' },
   descriptionInput: { minHeight: 92, paddingTop: 12 },
   errorBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFF1F2', borderWidth: 1, borderColor: '#FECDD3', borderRadius: 12, padding: 11, marginBottom: 8 },
-  errorText: { flex: 1, color: '#BE123C', fontSize: 12, lineHeight: 17 },
-  continueButton: { minHeight: 52, borderRadius: 13, backgroundColor: PURPLE, marginTop: 24, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
-  continueText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800', textAlign: 'center' },
+  errorText: { flex: 1, color: '#BE123C', fontSize: 13, lineHeight: 17 },
+  continueButton: { minHeight: 52, borderRadius: 12, backgroundColor: PURPLE, marginTop: 24, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  continueText: { color: ui.surface, fontSize: 14, fontWeight: '700', textAlign: 'center' },
   disabled: { opacity: 0.7 },
 });

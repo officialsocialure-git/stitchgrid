@@ -1,3 +1,4 @@
+import { ui } from '@/theme/ui';
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
@@ -27,8 +28,8 @@ export default function WorkspaceScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FBFBFE', alignItems: 'center', justifyContent: 'center', padding: 28 },
-  brand: { color: '#7620C2', fontSize: 21, fontWeight: '900', letterSpacing: 1 },
+  container: { flex: 1, backgroundColor: ui.canvas, alignItems: 'center', justifyContent: 'center', padding: 28 },
+  brand: { color: ui.accent, fontSize: 21, fontWeight: '700', letterSpacing: 1 },
   title: { marginTop: 22, color: '#24212A', fontSize: 21, fontWeight: '700' },
   subtitle: { marginTop: 10, color: '#6B6472', fontSize: 15 },
   note: { marginTop: 20, color: '#77717D', fontSize: 13, textAlign: 'center', lineHeight: 20 },

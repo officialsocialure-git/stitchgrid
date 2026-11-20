@@ -1,6 +1,8 @@
+import { ui } from '@/theme/ui';
+import { AppBottomNav } from '@/components/AppBottomNav';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Image, Modal, Pressable, RefreshControl, ScrollView,
+  ActivityIndicator, FlatList, Image, Modal, Pressable, RefreshControl, ScrollView,
   StyleSheet, Text, TextInput, View, Alert,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -10,7 +12,7 @@ import * as SecureStore from 'expo-secure-store';
 import { apiGet, apiRequest } from '@/services/api';
 import { AppHeader } from '@/components/AppHeader';
 
-const PURPLE = '#5314E8';
+const PURPLE = ui.accent;
 const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparent.png';
 
 type OrderItem = { id: string; name: string; quantity: number; unitPrice?: number | string };
@@ -191,13 +193,19 @@ export default function SupplierMyOrdersScreen() {
         onLayout={event => setHeaderHeight(event.nativeEvent.layout.height)}
       />
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void loadOrders(true); }} tintColor={PURPLE} />}>
+      <FlatList
+        data={loading || error ? [] : filteredOrders}
+        keyExtractor={order => order.id}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void loadOrders(true); }} tintColor={PURPLE} />}
+        extraData={updatingId}
+        ListHeaderComponent={<>
         <Text style={styles.pageTitle}>Purchase Orders (POs)</Text>
         <View style={styles.searchRow}>
           <View style={styles.searchBox}>
             <MaterialCommunityIcons name="magnify" size={24} color="#68727F" />
-            <TextInput value={search} onChangeText={setSearch} placeholder="Search by PO ID, product or buyer..." placeholderTextColor="#8A929D" style={styles.searchInput} returnKeyType="search" />
+            <TextInput value={search} onChangeText={setSearch} placeholder="Search by PO ID, product or buyer..." placeholderTextColor={ui.muted} style={styles.searchInput} returnKeyType="search" />
             {!!search && <Pressable onPress={() => setSearch('')}><MaterialCommunityIcons name="close-circle" size={18} color="#9299A3" /></Pressable>}
           </View>
           <Pressable style={styles.filterButton} onPress={() => setFilterOpen(true)}>
@@ -206,11 +214,11 @@ export default function SupplierMyOrdersScreen() {
             <MaterialCommunityIcons name="chevron-down" size={22} color="#4E5967" />
           </Pressable>
         </View>
-
-        {loading ? <View style={styles.stateCard}><ActivityIndicator size="large" color={PURPLE} /><Text style={styles.stateText}>Loading purchase orders...</Text></View>
+        </>}
+        ListEmptyComponent=        {loading ? <View style={styles.stateCard}><ActivityIndicator size="large" color={PURPLE} /><Text style={styles.stateText}>Loading purchase orders...</Text></View>
         : error ? <View style={styles.stateCard}><MaterialCommunityIcons name="cloud-alert-outline" size={32} color="#8B929C" /><Text style={styles.stateTitle}>Couldn't load orders</Text><Text style={styles.stateText}>{error}</Text><Pressable style={styles.retryButton} onPress={() => void loadOrders()}><Text style={styles.retryText}>Try Again</Text></Pressable></View>
-        : filteredOrders.length === 0 ? <View style={styles.stateCard}><MaterialCommunityIcons name="archive-outline" size={36} color="#A0A6B0" /><Text style={styles.stateTitle}>{orders.length ? 'No matching orders' : 'No purchase orders found'}</Text><Text style={styles.stateText}>{orders.length ? 'Try another search term or status filter.' : 'Purchase orders created when a buyer accepts your quotation will appear here.'}</Text>{(search || filter !== 'ALL') && <Pressable style={styles.retryButton} onPress={() => { setSearch(''); setFilter('ALL'); }}><Text style={styles.retryText}>Clear Search & Filter</Text></Pressable>}</View>
-        : filteredOrders.map(order => {
+        : <View style={styles.stateCard}><MaterialCommunityIcons name="archive-outline" size={36} color="#A0A6B0" /><Text style={styles.stateTitle}>{orders.length ? 'No matching orders' : 'No purchase orders found'}</Text><Text style={styles.stateText}>{orders.length ? 'Try another search term or status filter.' : 'Purchase orders created when a buyer accepts your quotation will appear here.'}</Text>{(search || filter !== 'ALL') && <Pressable style={styles.retryButton} onPress={() => { setSearch(''); setFilter('ALL'); }}><Text style={styles.retryText}>Clear Search & Filter</Text></Pressable>}</View>}
+        renderItem={({ item: order }) => {
           const progress = progressFor(order.status);
           const color = statusColors(order.status);
           const itemText = order.items?.length
@@ -264,21 +272,10 @@ export default function SupplierMyOrdersScreen() {
               </View>
             </View>
           );
-        })}
-      </ScrollView>
+        }}
+      />
 
-      <View onLayout={event => setBottomHeight(event.nativeEvent.layout.height)} style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 7) }]}>
-        {[
-          { label: 'Home', icon: 'home-outline', section: 'home' },
-          { label: 'Buyer Requests', icon: 'format-list-bulleted', section: 'requests' },
-          { label: 'My Orders', icon: 'archive-outline', section: 'orders' },
-          { label: 'Messages', icon: 'message-text-outline', section: 'chat' },
-          { label: 'Profile', icon: 'account-outline', section: 'profile' },
-        ].map(item => <Pressable key={item.section} onPress={() => navigate(item.section)} style={[styles.navItem, item.section === 'orders' && styles.navItemActive]}>
-          <MaterialCommunityIcons name={item.icon as any} size={25} color={item.section === 'orders' ? PURPLE : '#687687'} />
-          <Text style={[styles.navLabel, item.section === 'orders' && styles.navLabelActive]}>{item.label}</Text>
-        </Pressable>)}
-      </View>
+      <AppBottomNav role="SUPPLIER" activeSection="orders" onNavigate={(section) => navigate(section)} onLayout={event => setBottomHeight(event.nativeEvent.layout.height)} />
 
 
 
@@ -301,75 +298,75 @@ export default function SupplierMyOrdersScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#F7F8FC' },
-  header: { minHeight: 58, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E9EAF0', paddingHorizontal: 14, paddingBottom: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  screen: { flex: 1, backgroundColor: ui.canvas },
+  header: { minHeight: 58, backgroundColor: ui.surface, borderBottomWidth: 1, borderBottomColor: '#E9EAF0', paddingHorizontal: 14, paddingBottom: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerButton: { width: 37, height: 42, alignItems: 'center', justifyContent: 'center' },
   logo: { width: 142, height: 34, flex: 1, marginHorizontal: 10 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 9 },
   headerCircle: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#F3EEFF', alignItems: 'center', justifyContent: 'center' },
-  content: { paddingHorizontal: 20, paddingTop: 28, paddingBottom: 25, flexGrow: 1 },
-  pageTitle: { fontSize: 22, lineHeight: 29, fontWeight: '900', color: '#102033', marginBottom: 23, paddingBottom: 17, borderBottomWidth: 1, borderBottomColor: '#E0E4EA' },
-  searchRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
-  searchBox: { flex: 1, minWidth: 0, height: 57, backgroundColor: '#FFFFFF', borderRadius: 22, borderWidth: 1, borderColor: '#E0E3E9', paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 9, elevation: 1 },
-  searchInput: { flex: 1, minWidth: 0, fontSize: 14, color: '#202633', paddingVertical: 0 },
-  filterButton: { width: 132, height: 57, backgroundColor: '#FFFFFF', borderRadius: 22, borderWidth: 1, borderColor: '#E0E3E9', paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 1 },
-  filterText: { fontSize: 15, fontWeight: '800', color: '#202633' },
-  orderCard: { backgroundColor: '#FFFFFF', borderRadius: 27, borderWidth: 1, borderColor: '#E5E7EB', padding: 20, marginBottom: 18, elevation: 1 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 9, marginBottom: 12 },
-  poNumber: { color: '#5314B8', fontSize: 15, fontWeight: '900', letterSpacing: 0.2 },
+  content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 20, flexGrow: 1, width: '100%', maxWidth: 840, alignSelf: 'center' },
+  pageTitle: { fontSize: 22, lineHeight: 29, fontWeight: '700', color: ui.ink, marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: ui.border },
+  searchRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  searchBox: { flex: 1, minWidth: 0, height: 57, backgroundColor: ui.surface, borderRadius: 12, borderWidth: 1, borderColor: '#E0E3E9', paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 9, elevation: 0 },
+  searchInput: { flex: 1, minWidth: 0, fontSize: 14, color: ui.ink, paddingVertical: 0 },
+  filterButton: { width: 132, height: 57, backgroundColor: ui.surface, borderRadius: 12, borderWidth: 1, borderColor: '#E0E3E9', paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 0 },
+  filterText: { fontSize: 15, fontWeight: '700', color: ui.ink },
+  orderCard: { backgroundColor: ui.surface, borderRadius: 16, borderWidth: 1, borderColor: ui.border, padding: 16, marginBottom: 12 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  poNumber: { color: '#5314B8', fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
   statusPill: { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
-  statusText: { fontSize: 11, fontWeight: '900', letterSpacing: 0.3 },
-  orderTitle: { fontSize: 20, lineHeight: 26, fontWeight: '900', color: '#142033', marginBottom: 8 },
-  buyerLine: { color: '#6C7480', fontSize: 15, marginBottom: 22 },
-  buyerName: { color: '#17202D', fontWeight: '900' },
-  amountRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 19 },
-  amount: { color: '#5314B8', fontSize: 29, fontWeight: '900', letterSpacing: 0.2 },
+  statusText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.3 },
+  orderTitle: { fontSize: 20, lineHeight: 26, fontWeight: '700', color: '#142033', marginBottom: 8 },
+  buyerLine: { color: '#6C7480', fontSize: 15, marginBottom: 12 },
+  buyerName: { color: ui.ink, fontWeight: '700' },
+  amountRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  amount: { color: '#5314B8', fontSize: 29, fontWeight: '700', letterSpacing: 0.2 },
   targetDate: { color: '#69717D', fontSize: 13, fontWeight: '600', flexShrink: 0 },
-  progressPanel: { backgroundColor: '#F6F2FF', borderRadius: 22, padding: 17, marginBottom: 17 },
+  progressPanel: { backgroundColor: '#F6F2FF', borderRadius: 16, padding: 14, marginBottom: 12 },
   progressTextRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 },
-  currentMilestone: { flex: 1, color: '#5314B8', fontSize: 14, lineHeight: 21, fontWeight: '900' },
+  currentMilestone: { flex: 1, color: '#5314B8', fontSize: 14, lineHeight: 21, fontWeight: '700' },
   progressPercent: { color: '#68717E', fontSize: 13, lineHeight: 20, textAlign: 'right', fontWeight: '600' },
   progressTrack: { height: 9, backgroundColor: '#DCE8FF', borderRadius: 8, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: '#5314B8', borderRadius: 8 },
   supplierActionRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 9, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#E9EBEF' },
   supplierActionLabel: { color: '#69717D', fontSize: 13, fontWeight: '600' },
-  acceptButton: { minHeight: 47, borderRadius: 13, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, elevation: 2 },
-  acceptButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
+  acceptButton: { minHeight: 47, borderRadius: 13, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, elevation: 0 },
+  acceptButtonText: { color: ui.surface, fontSize: 14, fontWeight: '700' },
   updatingRow: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#E9EBEF' },
   updatingText: { color: '#68717E', fontSize: 13, fontWeight: '700' },
   completedNotice: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#E9EBEF' },
-  completedText: { color: '#087653', fontSize: 13, fontWeight: '800' },
+  completedText: { color: '#087653', fontSize: 13, fontWeight: '700' },
   cancelledNotice: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#E9EBEF' },
-  cancelledText: { color: '#B42318', fontSize: 13, fontWeight: '800' },
+  cancelledText: { color: '#B42318', fontSize: 13, fontWeight: '700' },
   cardDivider: { height: 1, backgroundColor: '#E9EBEF', marginVertical: 13 },
   actionsRow: { flexDirection: 'row', alignItems: 'stretch', justifyContent: 'space-between', gap: 5 },
-  actionItem: { flex: 1, minHeight: 74, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, paddingHorizontal: 2 },
-  actionItemActive: { flex: 1, minHeight: 74, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, borderWidth: 1, borderColor: '#D8DCE2', paddingHorizontal: 2 },
-  actionLabel: { fontSize: 11, fontWeight: '800', color: '#17202D', textAlign: 'center' },
-  stateCard: { backgroundColor: '#FFFFFF', borderRadius: 18, borderWidth: 1, borderColor: '#E5E7EB', padding: 24, alignItems: 'center', gap: 9, marginTop: 12 },
-  stateTitle: { fontSize: 16, fontWeight: '900', color: '#202633', textAlign: 'center' },
+  actionItem: { flex: 1, minHeight: 68, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, paddingHorizontal: 2 },
+  actionItemActive: { flex: 1, minHeight: 68, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, borderWidth: 1, borderColor: '#D8DCE2', paddingHorizontal: 2 },
+  actionLabel: { fontSize: 12, fontWeight: '700', color: ui.ink, textAlign: 'center' },
+  stateCard: { backgroundColor: ui.surface, borderRadius: 16, borderWidth: 1, borderColor: ui.border, padding: 24, alignItems: 'center', gap: 9, marginTop: 12 },
+  stateTitle: { fontSize: 16, fontWeight: '700', color: ui.ink, textAlign: 'center' },
   stateText: { fontSize: 13, color: '#737B87', textAlign: 'center', lineHeight: 19 },
-  retryButton: { backgroundColor: '#F0E9FF', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 11, marginTop: 3 },
-  retryText: { fontSize: 13, fontWeight: '800', color: PURPLE },
-  bottomNav: { minHeight: 75, backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#E6E8ED', paddingTop: 7, paddingHorizontal: 5, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
+  retryButton: { backgroundColor: ui.accentSoft, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 11, marginTop: 3 },
+  retryText: { fontSize: 13, fontWeight: '700', color: PURPLE },
+  bottomNav: { minHeight: 75, backgroundColor: ui.surface, borderTopWidth: 1, borderTopColor: '#E6E8ED', paddingTop: 7, paddingHorizontal: 5, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
   navItem: { minWidth: 57, minHeight: 58, borderRadius: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5, paddingVertical: 4, gap: 2 },
-  navItemActive: { backgroundColor: '#F1EBFB' },
-  navLabel: { fontSize: 10, color: '#687687', fontWeight: '600' },
-  navLabelActive: { color: PURPLE, fontWeight: '900' },
+  navItemActive: { backgroundColor: ui.accentSoft },
+  navLabel: { fontSize: 10, color: ui.muted, fontWeight: '600' },
+  navLabelActive: { color: PURPLE, fontWeight: '700' },
   drawerLayer: { position: 'absolute', left: 0, right: 0, zIndex: 30, flexDirection: 'row' },
-  drawer: { width: '68%', maxWidth: 320, backgroundColor: '#FFFFFF', paddingTop: 18, paddingHorizontal: 14, elevation: 14, shadowColor: '#000', shadowOpacity: 0.16, shadowRadius: 12, shadowOffset: { width: 3, height: 0 } },
+  drawer: { width: '68%', maxWidth: 320, backgroundColor: ui.surface, paddingTop: 18, paddingHorizontal: 14, elevation: 0, shadowColor: '#000', shadowOpacity: 0, shadowRadius: 12, shadowOffset: { width: 3, height: 0 } },
   drawerBackdrop: { flex: 1, backgroundColor: 'rgba(13,10,22,.38)' },
   drawerItem: { minHeight: 49, borderRadius: 12, marginBottom: 3, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 14 },
   drawerItemActive: { backgroundColor: PURPLE },
   drawerText: { fontSize: 15, fontWeight: '600', color: '#4B515B' },
-  drawerTextActive: { color: '#FFFFFF', fontWeight: '800' },
+  drawerTextActive: { color: ui.surface, fontWeight: '700' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(13,10,22,.45)', justifyContent: 'flex-end' },
-  filterSheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 25, borderTopRightRadius: 25, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 28, maxHeight: '78%' },
+  filterSheet: { backgroundColor: ui.surface, borderTopLeftRadius: 25, borderTopRightRadius: 25, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 28, maxHeight: '78%' },
   sheetHandle: { width: 45, height: 5, borderRadius: 3, backgroundColor: '#D1D5DB', alignSelf: 'center', marginBottom: 17 },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  sheetTitle: { fontSize: 19, fontWeight: '900', color: '#202633' },
+  sheetTitle: { fontSize: 19, fontWeight: '700', color: ui.ink },
   filterOptions: { flexGrow: 0 },
   filterOption: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#F0F1F3' },
   filterOptionText: { color: '#47505D', fontSize: 14, fontWeight: '600' },
-  filterOptionActive: { color: PURPLE, fontWeight: '900' },
+  filterOptionActive: { color: PURPLE, fontWeight: '700' },
 });
