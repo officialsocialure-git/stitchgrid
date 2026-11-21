@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../config/prisma";
 import { AppError, sendOk } from "../utils/http";
 import { audit } from "../services/audit";
+import { emitToOrg, emitToRole } from "../services/realtime";
 
 const pageQuery = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -276,7 +277,7 @@ export async function adminOrderDetails(req: Request, res: Response, next: NextF
 export async function adminPayments(req: Request, res: Response, next: NextFunction) {
   try {
     const parsed = pageQuery.extend({
-      type: z.enum(["ALL", "COLLECTIONS", "MILESTONES", "PAYOUTS", "FAILED"]).default("ALL"),
+      type: z.enum(["ALL", "COLLECTIONS", "MILESTONES", "PAYOUTS", "REFUNDS", "FAILED"]).default("ALL"),
       dateRange: z.enum(["ALL", "7D", "30D", "90D"]).default("ALL")
     }).parse(req.query);
     const where: any = {};
@@ -298,6 +299,7 @@ export async function adminPayments(req: Request, res: Response, next: NextFunct
     }
     if (parsed.type === "MILESTONES") where.paymentMilestoneId = { not: null };
     if (parsed.type === "PAYOUTS") where.transferId = { not: null };
+    if (parsed.type === "REFUNDS") where.refunds = { some: {} };
     if (parsed.type === "FAILED") where.status = "FAILED";
     if (parsed.dateRange !== "ALL") {
       const days = parsed.dateRange === "7D" ? 7 : parsed.dateRange === "30D" ? 30 : 90;
@@ -339,12 +341,76 @@ export async function adminPayments(req: Request, res: Response, next: NextFunct
 export async function adminSupplierPaymentSetups(_req: Request, res: Response, next: NextFunction) {
   try {
     const items = await prisma.supplierPaymentProfile.findMany({
-      include: { organization: { select: { id: true, name: true, legalName: true, taxId: true, country: true } } },
+      select: {
+        id: true,
+        organizationId: true,
+        status: true,
+        kycStatus: true,
+        settlementStatus: true,
+        accountHolderName: true,
+        bankName: true,
+        bankAccountLast4: true,
+        ifscMasked: true,
+        rejectionReason: true,
+        submittedAt: true,
+        verifiedAt: true,
+        updatedAt: true,
+        organization: { select: { id: true, name: true, legalName: true, country: true } }
+      },
       orderBy: { updatedAt: "desc" },
       take: 200
     });
     return sendOk(res, { items });
   } catch (e) { next(e); }
+}
+
+export async function adminReviewSupplierPaymentSetup(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = z.object({
+      decision: z.enum(["APPROVE", "REJECT"]),
+      reason: z.string().trim().max(2000).optional()
+    }).parse(req.body);
+    if (input.decision === "REJECT" && !input.reason) {
+      throw new AppError(400, "A rejection reason is required.");
+    }
+
+    const profileId = String(req.params.profileId);
+    const profile = await prisma.supplierPaymentProfile.findUnique({
+      where: { id: profileId },
+      include: { organization: { select: { id: true, name: true } } }
+    });
+    if (!profile) throw new AppError(404, "Supplier payment setup not found.");
+    if (profile.status !== "PENDING") {
+      throw new AppError(409, "Only a newly submitted supplier payment setup can be reviewed.");
+    }
+
+    const updated = await prisma.$transaction(async tx => {
+      const reviewResult = await tx.supplierPaymentProfile.updateMany({
+        where: { id: profile.id, status: "PENDING" },
+        data: input.decision === "APPROVE"
+          ? { status: "VERIFIED", settlementStatus: "PENDING_PROVIDER_SETUP", rejectionReason: null, verifiedAt: new Date() }
+          : { status: "REJECTED", settlementStatus: "NOT_STARTED", rejectionReason: input.reason, verifiedAt: null }
+      });
+      if (reviewResult.count !== 1) throw new AppError(409, "This supplier payment setup was already reviewed.");
+      const reviewed = await tx.supplierPaymentProfile.findUniqueOrThrow({ where: { id: profile.id } });
+      await tx.auditLog.create({
+        data: {
+          action: input.decision === "APPROVE" ? "ADMIN_SUPPLIER_PAYMENT_SETUP_APPROVED" : "ADMIN_SUPPLIER_PAYMENT_SETUP_REJECTED",
+          entityType: "SupplierPaymentProfile",
+          entityId: profile.id,
+          actorUserId: req.auth!.userId,
+          organizationId: profile.organizationId,
+          metadata: { decision: input.decision, reason: input.reason || null }
+        }
+      });
+      return reviewed;
+    });
+
+    emitToOrg(profile.organizationId, "payment:setup_updated", { organizationId: profile.organizationId, status: updated.status });
+    emitToRole("ADMIN", "payment:setup_updated", { organizationId: profile.organizationId, status: updated.status });
+
+    return sendOk(res, updated);
+  } catch (error) { next(error); }
 }
 
 export async function adminDisputes(req: Request, res: Response, next: NextFunction) {

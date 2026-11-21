@@ -271,7 +271,8 @@ export async function adminListPaymentRefunds(_req: Request, res: Response, next
 
 export async function adminProcessPaymentRefund(req: Request, res: Response, next: NextFunction) {
   try {
-    const input = z.object({ decision: z.enum(["APPROVE", "REJECT"]), note: z.string().max(2000).optional() }).parse(req.body);
+    const input = z.object({ decision: z.enum(["APPROVE", "REJECT"]), note: z.string().trim().max(2000).optional() }).parse(req.body);
+    if (input.decision === "REJECT" && !input.note) throw new AppError(400, "A rejection note is required.");
     const refund = await prisma.paymentRefund.findUnique({ where: { id: String(req.params.refundId) }, include: { paymentTransaction: { include: { purchaseOrder: true, paymentMilestone: true } } } });
     if (!refund) throw new AppError(404, "Refund request not found.");
     if (refund.status !== "REQUESTED") throw new AppError(409, "This refund request has already been processed.");
@@ -284,6 +285,11 @@ export async function adminProcessPaymentRefund(req: Request, res: Response, nex
     }
     const transaction = refund.paymentTransaction;
     if (!transaction.razorpayPaymentId || transaction.provider !== "RAZORPAY") throw new AppError(409, "The transaction is not eligible for a Razorpay refund.");
+    const claimed = await prisma.paymentRefund.updateMany({
+      where: { id: refund.id, status: "REQUESTED" },
+      data: { status: "PROCESSING" }
+    });
+    if (claimed.count !== 1) throw new AppError(409, "This refund request is already being processed.");
     try {
       const providerRefund = await createRazorpayRefund(transaction.razorpayPaymentId, Number(refund.amount), { stitchgridRefundId: refund.id, purchaseOrderId: transaction.purchaseOrderId });
       const status = providerRefund.status === "processed" ? "PROCESSED" : providerRefund.status === "failed" ? "FAILED" : "PROCESSING";
@@ -293,9 +299,18 @@ export async function adminProcessPaymentRefund(req: Request, res: Response, nex
           await tx.paymentTransaction.update({ where: { id: transaction.id }, data: { status: "REFUNDED" } });
           if (transaction.paymentMilestoneId) await tx.paymentMilestone.update({ where: { id: transaction.paymentMilestoneId }, data: { status: "REFUNDED" } });
         }
+        await tx.auditLog.create({
+          data: {
+            action: "PAYMENT_REFUND_APPROVED",
+            entityType: "PaymentRefund",
+            entityId: refund.id,
+            actorUserId: req.auth!.userId,
+            organizationId: transaction.purchaseOrder.buyerOrgId,
+            metadata: { providerRefundId: providerRefund.id, status }
+          }
+        });
         return result;
       });
-      await audit("PAYMENT_REFUND_APPROVED", "PaymentRefund", refund.id, req.auth!.userId, undefined, { providerRefundId: providerRefund.id, status });
       emitToRole("ADMIN", "payment:refund_updated", { refundId: refund.id, status });
       emitToOrg(transaction.purchaseOrder.buyerOrgId, "payment:refund_updated", { refundId: refund.id, status });
       emitToOrg(transaction.purchaseOrder.supplierOrgId, "payment:refund_updated", { refundId: refund.id, status });
@@ -344,10 +359,18 @@ export async function razorpayWebhook(req: Request, res: Response, next: NextFun
       }
     } else if (eventType === "refund.processed" || eventType === "refund.failed") {
       const entity = payload?.payload?.refund?.entity;
-      const refund = entity?.id ? await prisma.paymentRefund.findUnique({ where: { providerRefundId: entity.id }, include: { paymentTransaction: { include: { purchaseOrder: true } } } }) : null;
+      const refund = entity?.id ? await prisma.paymentRefund.findFirst({
+        where: {
+          OR: [
+            { providerRefundId: entity.id },
+            ...(entity.notes?.stitchgridRefundId ? [{ id: String(entity.notes.stitchgridRefundId) }] : [])
+          ]
+        },
+        include: { paymentTransaction: { include: { purchaseOrder: true } } }
+      }) : null;
       if (refund) {
         const status = eventType === "refund.processed" ? "PROCESSED" : "FAILED";
-        await prisma.paymentRefund.update({ where: { id: refund.id }, data: { status } });
+        await prisma.paymentRefund.update({ where: { id: refund.id }, data: { providerRefundId: entity.id, status } });
         if (status === "PROCESSED") {
           await prisma.paymentTransaction.update({ where: { id: refund.paymentTransactionId }, data: { status: "REFUNDED" } });
           if (refund.paymentTransaction.paymentMilestoneId) await prisma.paymentMilestone.update({ where: { id: refund.paymentTransaction.paymentMilestoneId }, data: { status: "REFUNDED" } });
