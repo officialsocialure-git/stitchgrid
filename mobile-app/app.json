@@ -4,6 +4,7 @@
     "slug": "stitchgrid-mobile-app",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/stitchgrid-app-icon.png",
     "userInterfaceStyle": "light",
     "scheme": "stitchgridapp",
     "plugins": [
@@ -22,6 +23,10 @@
       "typedRoutes": true
     },
     "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/stitchgrid-app-icon.png",
+        "backgroundColor": "#FFFFFF"
+      },
       "package": "com.stitchgrid.mobileapp",
       "permissions": [
         "android.permission.RECORD_AUDIO"
