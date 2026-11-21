@@ -72,7 +72,7 @@ export async function paymentDashboard(req: Request, res: Response, next: NextFu
       paymentMode: env.MOCK_PAYMENTS_ENABLED ? "MOCK_TEST" : "DISABLED",
       mockPaymentsEnabled: Boolean(env.MOCK_PAYMENTS_ENABLED),
       checkoutConfigured: false,
-      razorpayKeyId: getRazorpayPublicKey(),
+      razorpayKeyId: env.MOCK_PAYMENTS_ENABLED ? null : getRazorpayPublicKey(),
       supplierSetup: profile || { status: "NOT_STARTED", kycStatus: "NOT_STARTED", settlementStatus: "NOT_STARTED" },
       orders
     });
@@ -113,7 +113,13 @@ export async function createMockMilestonePayment(req: Request, res: Response, ne
     if (existingPending && input.outcome !== "PENDING") {
       const status = input.outcome === "SUCCESS" ? "PAID" : "FAILED";
       const updated = await prisma.$transaction(async tx => {
-        const payment = await tx.paymentTransaction.update({ where: { id: existingPending.id }, data: { status, capturedAt: status === "PAID" ? new Date() : null } });
+        const claimed = await tx.paymentTransaction.updateMany({
+          where: { id: existingPending.id, provider: "MOCK_TEST", status: "PENDING" },
+          data: { status, capturedAt: status === "PAID" ? new Date() : null }
+        });
+        if (claimed.count !== 1) throw new AppError(409, "This pending test payment has already been resolved.");
+        const payment = await tx.paymentTransaction.findUnique({ where: { id: existingPending.id } });
+        if (!payment) throw new AppError(404, "Pending test payment not found.");
         await tx.paymentMilestone.update({ where: { id: milestone.id }, data: { status } });
         if (status === "PAID") {
           const members = await tx.organizationMember.findMany({ where: { organizationId: order.supplierOrgId, role: "SUPPLIER", isActive: true }, select: { userId: true } });
@@ -129,7 +135,15 @@ export async function createMockMilestonePayment(req: Request, res: Response, ne
     }
     if (!["DUE", "APPROVED", "FAILED"].includes(milestone.status)) throw new AppError(409, "This milestone is not currently due for payment.");
     const status = input.outcome === "SUCCESS" ? "PAID" : input.outcome === "FAILED" ? "FAILED" : "PENDING";
+    const milestoneStatus = status === "PENDING" ? "PAYMENT_PENDING" : status;
     const created = await prisma.$transaction(async tx => {
+      // Atomically claim the eligible milestone to prevent competing payment attempts.
+      const claimed = await tx.paymentMilestone.updateMany({
+        where: { id: milestone.id, status: { in: ["DUE", "APPROVED", "FAILED"] } },
+        data: { status: milestoneStatus }
+      });
+      if (claimed.count !== 1) throw new AppError(409, "This milestone already has a payment attempt or is no longer eligible.");
+
       const payment = await tx.paymentTransaction.create({
         data: {
           purchaseOrderId: order.id, paymentMilestoneId: milestone.id, provider: "MOCK_TEST",
@@ -138,7 +152,6 @@ export async function createMockMilestonePayment(req: Request, res: Response, ne
           paymentMethod: "TEST_SIMULATOR", capturedAt: status === "PAID" ? new Date() : null
         }
       });
-      await tx.paymentMilestone.update({ where: { id: milestone.id }, data: { status } });
       if (status === "PAID") {
         const members = await tx.organizationMember.findMany({ where: { organizationId: order.supplierOrgId, role: "SUPPLIER", isActive: true }, select: { userId: true } });
         if (members.length) await tx.notification.createMany({ data: members.map(member => ({ userId: member.userId, title: "Test payment received", body: "A simulated test payment for " + milestone.title + " on PO #" + order.poNumber + " was marked successful. No money was collected." })) });
@@ -156,6 +169,7 @@ export async function createMockMilestonePayment(req: Request, res: Response, ne
 
 export async function createMilestoneCheckout(req: Request, res: Response, next: NextFunction) {
   try {
+    if (env.MOCK_PAYMENTS_ENABLED) throw new AppError(403, "Razorpay checkout is disabled while MOCK_TEST payments are enabled.");
     const milestoneId = String(req.params.milestoneId);
     const milestone = await prisma.paymentMilestone.findUnique({
       where: { id: milestoneId },
@@ -206,6 +220,7 @@ export async function createMilestoneCheckout(req: Request, res: Response, next:
 
 export async function verifyMilestonePayment(req: Request, res: Response, next: NextFunction) {
   try {
+    if (env.MOCK_PAYMENTS_ENABLED) throw new AppError(403, "Razorpay verification is disabled while MOCK_TEST payments are enabled.");
     const input = z.object({
       razorpay_order_id: z.string().min(1),
       razorpay_payment_id: z.string().min(1),
@@ -321,7 +336,18 @@ export async function requestPaymentRefund(req: Request, res: Response, next: Ne
     if (!buyer) throw new AppError(403, "Only the buyer can request a refund.");
     if (payment.status !== "PAID" || (payment.provider === "RAZORPAY" && !payment.razorpayPaymentId) || (payment.provider === "MOCK_TEST" && !env.MOCK_PAYMENTS_ENABLED)) throw new AppError(409, "Only an eligible paid transaction can be refunded.");
     if (payment.refunds.some(r => ["REQUESTED", "PROCESSING", "PROCESSED"].includes(r.status))) throw new AppError(409, "A refund request already exists for this transaction.");
-    const refund = await prisma.paymentRefund.create({ data: { paymentTransactionId: payment.id, amount: payment.amount, status: "REQUESTED", reason: input.reason } });
+    const refund = await prisma.$transaction(async tx => {
+      // Reserve the paid transaction before creating a refund request. This makes
+      // simultaneous Buyer taps idempotent and prevents multiple active refunds.
+      const claimed = await tx.paymentTransaction.updateMany({
+        where: { id: payment.id, status: "PAID" },
+        data: { status: "REFUND_REQUESTED" }
+      });
+      if (claimed.count !== 1) throw new AppError(409, "A refund request already exists or this payment is no longer eligible.");
+      return tx.paymentRefund.create({
+        data: { paymentTransactionId: payment.id, amount: payment.amount, status: "REQUESTED", reason: input.reason }
+      });
+    });
     await audit("PAYMENT_REFUND_REQUESTED", "PaymentRefund", refund.id, req.auth!.userId, payment.purchaseOrder.buyerOrgId, { paymentTransactionId: payment.id });
     emitToRole("ADMIN", "payment:refund_updated", { refundId: refund.id, status: refund.status });
     emitToOrg(payment.purchaseOrder.buyerOrgId, "payment:refund_updated", { refundId: refund.id, status: refund.status });
@@ -347,7 +373,18 @@ export async function adminProcessPaymentRefund(req: Request, res: Response, nex
     if (!refund) throw new AppError(404, "Refund request not found.");
     if (refund.status !== "REQUESTED") throw new AppError(409, "This refund request has already been processed.");
     if (input.decision === "REJECT") {
-      const rejected = await prisma.paymentRefund.update({ where: { id: refund.id }, data: { status: "REJECTED", reason: input.note ? `${refund.reason || ""}\nAdmin: ${input.note}` : refund.reason } });
+      const rejected = await prisma.$transaction(async tx => {
+        const claimed = await tx.paymentRefund.updateMany({
+          where: { id: refund.id, status: "REQUESTED" },
+          data: { status: "REJECTED", reason: (refund.reason || "") + "\nAdmin: " + input.note }
+        });
+        if (claimed.count !== 1) throw new AppError(409, "This refund request has already been processed.");
+        await tx.paymentTransaction.updateMany({
+          where: { id: refund.paymentTransaction.id, status: "REFUND_REQUESTED" },
+          data: { status: "PAID" }
+        });
+        return tx.paymentRefund.findUniqueOrThrow({ where: { id: refund.id } });
+      });
       await audit("PAYMENT_REFUND_REJECTED", "PaymentRefund", refund.id, req.auth!.userId);
       emitToRole("ADMIN", "payment:refund_updated", { refundId: refund.id, status: rejected.status });
       emitToOrg(refund.paymentTransaction.purchaseOrder.buyerOrgId, "payment:refund_updated", { refundId: refund.id, status: rejected.status });
@@ -360,11 +397,17 @@ export async function adminProcessPaymentRefund(req: Request, res: Response, nex
       const claimed = await prisma.paymentRefund.updateMany({ where: { id: refund.id, status: "REQUESTED" }, data: { status: "PROCESSING" } });
       if (claimed.count !== 1) throw new AppError(409, "This refund request is already being processed.");
       const updated = await prisma.$transaction(async tx => {
-        const result = await tx.paymentRefund.update({ where: { id: refund.id }, data: { status: "PROCESSED", reason: (refund.reason || "") + "\\nAdmin: Simulated test refund approved." } });
+        const result = await tx.paymentRefund.update({ where: { id: refund.id }, data: { status: "PROCESSED", reason: (refund.reason || "") + "\nAdmin: Simulated test refund approved." } });
         await tx.paymentTransaction.update({ where: { id: transaction.id }, data: { status: "REFUNDED" } });
         if (transaction.paymentMilestoneId) await tx.paymentMilestone.update({ where: { id: transaction.paymentMilestoneId }, data: { status: "REFUNDED" } });
         await tx.auditLog.create({ data: { action: "MOCK_PAYMENT_REFUND_PROCESSED", entityType: "PaymentRefund", entityId: refund.id, actorUserId: req.auth!.userId, organizationId: transaction.purchaseOrder.buyerOrgId, metadata: { mode: "MOCK_TEST" } } });
         return result;
+      }).catch(async error => {
+        await prisma.$transaction([
+          prisma.paymentRefund.updateMany({ where: { id: refund.id, status: "PROCESSING" }, data: { status: "FAILED" } }),
+          prisma.paymentTransaction.updateMany({ where: { id: transaction.id, status: "REFUND_REQUESTED" }, data: { status: "PAID" } })
+        ]);
+        throw error;
       });
       emitToRole("ADMIN", "payment:refund_updated", { refundId: refund.id, status: updated.status, mode: "MOCK_TEST" });
       emitToOrg(transaction.purchaseOrder.buyerOrgId, "payment:refund_updated", { refundId: refund.id, status: updated.status, mode: "MOCK_TEST" });
@@ -385,6 +428,8 @@ export async function adminProcessPaymentRefund(req: Request, res: Response, nex
         if (status === "PROCESSED") {
           await tx.paymentTransaction.update({ where: { id: transaction.id }, data: { status: "REFUNDED" } });
           if (transaction.paymentMilestoneId) await tx.paymentMilestone.update({ where: { id: transaction.paymentMilestoneId }, data: { status: "REFUNDED" } });
+        } else if (status === "FAILED") {
+          await tx.paymentTransaction.updateMany({ where: { id: transaction.id, status: "REFUND_REQUESTED" }, data: { status: "PAID" } });
         }
         await tx.auditLog.create({
           data: {
@@ -403,7 +448,10 @@ export async function adminProcessPaymentRefund(req: Request, res: Response, nex
       emitToOrg(transaction.purchaseOrder.supplierOrgId, "payment:refund_updated", { refundId: refund.id, status });
       return sendOk(res, updated);
     } catch (error) {
-      await prisma.paymentRefund.update({ where: { id: refund.id }, data: { status: "FAILED" } });
+      await prisma.$transaction([
+        prisma.paymentRefund.update({ where: { id: refund.id }, data: { status: "FAILED" } }),
+        prisma.paymentTransaction.updateMany({ where: { id: transaction.id, status: "REFUND_REQUESTED" }, data: { status: "PAID" } })
+      ]);
       throw error;
     }
   } catch (e) { next(e); }
@@ -461,6 +509,8 @@ export async function razorpayWebhook(req: Request, res: Response, next: NextFun
         if (status === "PROCESSED") {
           await prisma.paymentTransaction.update({ where: { id: refund.paymentTransactionId }, data: { status: "REFUNDED" } });
           if (refund.paymentTransaction.paymentMilestoneId) await prisma.paymentMilestone.update({ where: { id: refund.paymentTransaction.paymentMilestoneId }, data: { status: "REFUNDED" } });
+        } else {
+          await prisma.paymentTransaction.updateMany({ where: { id: refund.paymentTransactionId, status: "REFUND_REQUESTED" }, data: { status: "PAID" } });
         }
         emitToOrg(refund.paymentTransaction.purchaseOrder.buyerOrgId, "payment:refund_updated", { refundId: refund.id, status });
         emitToOrg(refund.paymentTransaction.purchaseOrder.supplierOrgId, "payment:refund_updated", { refundId: refund.id, status });
