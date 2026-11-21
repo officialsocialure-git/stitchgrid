@@ -293,8 +293,10 @@ export async function adminPayments(req: Request, res: Response, next: NextFunct
     }
     if (parsed.status && parsed.status !== "ALL") where.status = parsed.status;
     if (parsed.type === "COLLECTIONS") {
-      where.provider = "RAZORPAY";
-      where.signatureVerified = true;
+      where.AND = [
+        { provider: { in: ["RAZORPAY", "MOCK_TEST"] } },
+        { OR: [{ signatureVerified: true }, { provider: "MOCK_TEST" }] }
+      ];
       where.status = parsed.status && parsed.status !== "ALL" ? parsed.status : "PAID";
     }
     if (parsed.type === "MILESTONES") where.paymentMilestoneId = { not: null };
@@ -320,8 +322,8 @@ export async function adminPayments(req: Request, res: Response, next: NextFunct
       }),
       prisma.paymentTransaction.count({ where }),
       prisma.paymentTransaction.aggregate({ where: { provider: "RAZORPAY", status: "PAID", signatureVerified: true }, _sum: { amount: true }, _count: { _all: true } }),
-      prisma.paymentTransaction.aggregate({ where: { provider: "RAZORPAY", status: "PENDING" }, _sum: { amount: true }, _count: { _all: true } }),
-      prisma.paymentTransaction.aggregate({ where: { provider: "RAZORPAY", status: "FAILED" }, _sum: { amount: true }, _count: { _all: true } }),
+      prisma.paymentTransaction.aggregate({ where: { provider: { in: ["RAZORPAY", "MOCK_TEST"] }, status: "PENDING" }, _sum: { amount: true }, _count: { _all: true } }),
+      prisma.paymentTransaction.aggregate({ where: { provider: { in: ["RAZORPAY", "MOCK_TEST"] }, status: "FAILED" }, _sum: { amount: true }, _count: { _all: true } }),
       prisma.paymentRefund.aggregate({ where: { status: { in: ["REQUESTED", "PROCESSING", "PROCESSED"] } }, _sum: { amount: true }, _count: { _all: true } }),
       prisma.paymentTransaction.count({ where: { transferId: { not: null } } })
     ]);

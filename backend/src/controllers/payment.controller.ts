@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { prisma } from "../config/prisma";
+import { env } from "../config/env";
 import { AppError, sendOk } from "../utils/http";
 import { audit } from "../services/audit";
 import { emitToOrg, emitToRole } from "../services/realtime";
@@ -62,13 +63,15 @@ export async function paymentDashboard(req: Request, res: Response, next: NextFu
         buyer: { select: { id: true, name: true } },
         supplier: { select: { id: true, name: true } },
         paymentPlan: { include: { milestones: { orderBy: { sequence: "asc" } } } },
-        paymentTransactions: { where: { provider: "RAZORPAY" }, include: { refunds: true }, orderBy: { createdAt: "desc" } }
+        paymentTransactions: { where: { provider: { in: ["RAZORPAY", "MOCK_TEST"] } }, include: { refunds: true }, orderBy: { createdAt: "desc" } }
       },
       orderBy: { createdAt: "desc" }
     });
     return sendOk(res, {
-      provider: "RAZORPAY",
-      checkoutConfigured: isRazorpayConfigured(),
+      provider: env.MOCK_PAYMENTS_ENABLED ? "MOCK_TEST" : "NONE",
+      paymentMode: env.MOCK_PAYMENTS_ENABLED ? "MOCK_TEST" : "DISABLED",
+      mockPaymentsEnabled: Boolean(env.MOCK_PAYMENTS_ENABLED),
+      checkoutConfigured: false,
       razorpayKeyId: getRazorpayPublicKey(),
       supplierSetup: profile || { status: "NOT_STARTED", kycStatus: "NOT_STARTED", settlementStatus: "NOT_STARTED" },
       orders
@@ -82,6 +85,72 @@ export async function getOrCreatePaymentPlan(req: Request, res: Response, next: 
     if (membership.role !== "BUYER" || membership.organizationId !== order.buyerOrgId) throw new AppError(403, "Only the buyer can set the payment plan.");
     const plan = await ensurePaymentPlan(order.id);
     return sendOk(res, plan);
+  } catch (e) { next(e); }
+}
+
+export async function createMockMilestonePayment(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!env.MOCK_PAYMENTS_ENABLED) throw new AppError(403, "Test payments are disabled. Enable MOCK_PAYMENTS_ENABLED only in the test environment.");
+    const input = z.object({ outcome: z.enum(["SUCCESS", "FAILED", "PENDING"]) }).parse(req.body);
+    const milestone = await prisma.paymentMilestone.findUnique({
+      where: { id: String(req.params.milestoneId) },
+      include: { paymentPlan: { include: { purchaseOrder: true } }, transactions: { orderBy: { createdAt: "desc" } } }
+    });
+    if (!milestone) throw new AppError(404, "Payment milestone not found.");
+    const order = milestone.paymentPlan.purchaseOrder;
+    const buyer = await prisma.organizationMember.findFirst({
+      where: { userId: req.auth!.userId, organizationId: order.buyerOrgId, role: "BUYER", isActive: true }
+    });
+    if (!buyer) throw new AppError(403, "Only the buyer can run a test payment.");
+    if (order.currency !== "INR") throw new AppError(400, "Test payment currently supports INR orders only.");
+    if (["PENDING_ACCEPTANCE", "PO_CREATED", "CANCELLED"].includes(order.status)) {
+      throw new AppError(409, "The supplier must accept the purchase order before payment can begin.");
+    }
+    const existingPending = milestone.transactions.find(t => t.provider === "MOCK_TEST" && t.status === "PENDING");
+    if (existingPending && input.outcome === "PENDING") {
+      return sendOk(res, { payment: existingPending, mode: "MOCK_TEST", message: "This test payment is already pending." });
+    }
+    if (existingPending && input.outcome !== "PENDING") {
+      const status = input.outcome === "SUCCESS" ? "PAID" : "FAILED";
+      const updated = await prisma.$transaction(async tx => {
+        const payment = await tx.paymentTransaction.update({ where: { id: existingPending.id }, data: { status, capturedAt: status === "PAID" ? new Date() : null } });
+        await tx.paymentMilestone.update({ where: { id: milestone.id }, data: { status } });
+        if (status === "PAID") {
+          const members = await tx.organizationMember.findMany({ where: { organizationId: order.supplierOrgId, role: "SUPPLIER", isActive: true }, select: { userId: true } });
+          if (members.length) await tx.notification.createMany({ data: members.map(member => ({ userId: member.userId, title: "Test payment received", body: "A simulated test payment for " + milestone.title + " on PO #" + order.poNumber + " was marked successful. No money was collected." })) });
+        }
+        return payment;
+      });
+      await audit("MOCK_PAYMENT_" + input.outcome, "PaymentTransaction", updated.id, req.auth!.userId, order.buyerOrgId, { mode: "MOCK_TEST", milestoneId: milestone.id });
+      emitToOrg(order.buyerOrgId, "payment:updated", { orderId: order.id, milestoneId: milestone.id, paymentId: updated.id, status, mode: "MOCK_TEST" });
+      emitToOrg(order.supplierOrgId, "payment:updated", { orderId: order.id, milestoneId: milestone.id, paymentId: updated.id, status, mode: "MOCK_TEST" });
+      emitToRole("ADMIN", "payment:updated", { orderId: order.id, milestoneId: milestone.id, paymentId: updated.id, status, mode: "MOCK_TEST" });
+      return sendOk(res, { payment: updated, mode: "MOCK_TEST", message: status === "PAID" ? "Test payment successful. No money was collected." : "Test payment failed. No money was collected." });
+    }
+    if (!["DUE", "APPROVED", "FAILED"].includes(milestone.status)) throw new AppError(409, "This milestone is not currently due for payment.");
+    const status = input.outcome === "SUCCESS" ? "PAID" : input.outcome === "FAILED" ? "FAILED" : "PENDING";
+    const created = await prisma.$transaction(async tx => {
+      const payment = await tx.paymentTransaction.create({
+        data: {
+          purchaseOrderId: order.id, paymentMilestoneId: milestone.id, provider: "MOCK_TEST",
+          providerRef: "MOCK-" + Date.now() + "-" + milestone.id.slice(-8),
+          amount: milestone.amount, currency: order.currency, status, signatureVerified: false,
+          paymentMethod: "TEST_SIMULATOR", capturedAt: status === "PAID" ? new Date() : null
+        }
+      });
+      await tx.paymentMilestone.update({ where: { id: milestone.id }, data: { status } });
+      if (status === "PAID") {
+        const members = await tx.organizationMember.findMany({ where: { organizationId: order.supplierOrgId, role: "SUPPLIER", isActive: true }, select: { userId: true } });
+        if (members.length) await tx.notification.createMany({ data: members.map(member => ({ userId: member.userId, title: "Test payment received", body: "A simulated test payment for " + milestone.title + " on PO #" + order.poNumber + " was marked successful. No money was collected." })) });
+      }
+      return payment;
+    });
+    await audit("MOCK_PAYMENT_" + input.outcome, "PaymentTransaction", created.id, req.auth!.userId, order.buyerOrgId, { mode: "MOCK_TEST", milestoneId: milestone.id });
+    emitToOrg(order.buyerOrgId, "payment:updated", { orderId: order.id, milestoneId: milestone.id, paymentId: created.id, status, mode: "MOCK_TEST" });
+    emitToOrg(order.supplierOrgId, "payment:updated", { orderId: order.id, milestoneId: milestone.id, paymentId: created.id, status, mode: "MOCK_TEST" });
+    emitToRole("ADMIN", "payment:updated", { orderId: order.id, milestoneId: milestone.id, paymentId: created.id, status, mode: "MOCK_TEST" });
+    const message = input.outcome === "SUCCESS" ? "Test payment successful. No money was collected." : input.outcome === "FAILED" ? "Test payment failed. No money was collected." : "Test payment is pending. You can simulate its final result later.";
+    return sendOk(res, { payment: created, mode: "MOCK_TEST", message }, 201);
   } catch (e) { next(e); }
 }
 
@@ -246,10 +315,11 @@ export async function requestPaymentRefund(req: Request, res: Response, next: Ne
   try {
     const input = z.object({ reason: z.string().min(5).max(2000) }).parse(req.body);
     const payment = await prisma.paymentTransaction.findUnique({ where: { id: String(req.params.transactionId) }, include: { purchaseOrder: true, refunds: true } });
-    if (!payment || payment.provider !== "RAZORPAY") throw new AppError(404, "Verified Razorpay transaction not found.");
+    if (!payment || !["RAZORPAY", "MOCK_TEST"].includes(payment.provider)) throw new AppError(404, "Verified payment transaction not found.");
+    if (env.MOCK_PAYMENTS_ENABLED && payment.provider !== "MOCK_TEST") throw new AppError(403, "External provider refunds are disabled while STITCHGRID test mode is active.");
     const buyer = await prisma.organizationMember.findFirst({ where: { userId: req.auth!.userId, organizationId: payment.purchaseOrder.buyerOrgId, role: "BUYER", isActive: true } });
     if (!buyer) throw new AppError(403, "Only the buyer can request a refund.");
-    if (payment.status !== "PAID" || !payment.razorpayPaymentId) throw new AppError(409, "Only a verified paid transaction can be refunded.");
+    if (payment.status !== "PAID" || (payment.provider === "RAZORPAY" && !payment.razorpayPaymentId) || (payment.provider === "MOCK_TEST" && !env.MOCK_PAYMENTS_ENABLED)) throw new AppError(409, "Only an eligible paid transaction can be refunded.");
     if (payment.refunds.some(r => ["REQUESTED", "PROCESSING", "PROCESSED"].includes(r.status))) throw new AppError(409, "A refund request already exists for this transaction.");
     const refund = await prisma.paymentRefund.create({ data: { paymentTransactionId: payment.id, amount: payment.amount, status: "REQUESTED", reason: input.reason } });
     await audit("PAYMENT_REFUND_REQUESTED", "PaymentRefund", refund.id, req.auth!.userId, payment.purchaseOrder.buyerOrgId, { paymentTransactionId: payment.id });
@@ -284,7 +354,24 @@ export async function adminProcessPaymentRefund(req: Request, res: Response, nex
       return sendOk(res, rejected);
     }
     const transaction = refund.paymentTransaction;
-    if (!transaction.razorpayPaymentId || transaction.provider !== "RAZORPAY") throw new AppError(409, "The transaction is not eligible for a Razorpay refund.");
+    if (env.MOCK_PAYMENTS_ENABLED && transaction.provider !== "MOCK_TEST") throw new AppError(403, "External provider refunds are disabled while STITCHGRID test mode is active.");
+    if (transaction.provider === "MOCK_TEST") {
+      if (!env.MOCK_PAYMENTS_ENABLED) throw new AppError(403, "Test refunds are disabled.");
+      const claimed = await prisma.paymentRefund.updateMany({ where: { id: refund.id, status: "REQUESTED" }, data: { status: "PROCESSING" } });
+      if (claimed.count !== 1) throw new AppError(409, "This refund request is already being processed.");
+      const updated = await prisma.$transaction(async tx => {
+        const result = await tx.paymentRefund.update({ where: { id: refund.id }, data: { status: "PROCESSED", reason: (refund.reason || "") + "\\nAdmin: Simulated test refund approved." } });
+        await tx.paymentTransaction.update({ where: { id: transaction.id }, data: { status: "REFUNDED" } });
+        if (transaction.paymentMilestoneId) await tx.paymentMilestone.update({ where: { id: transaction.paymentMilestoneId }, data: { status: "REFUNDED" } });
+        await tx.auditLog.create({ data: { action: "MOCK_PAYMENT_REFUND_PROCESSED", entityType: "PaymentRefund", entityId: refund.id, actorUserId: req.auth!.userId, organizationId: transaction.purchaseOrder.buyerOrgId, metadata: { mode: "MOCK_TEST" } } });
+        return result;
+      });
+      emitToRole("ADMIN", "payment:refund_updated", { refundId: refund.id, status: updated.status, mode: "MOCK_TEST" });
+      emitToOrg(transaction.purchaseOrder.buyerOrgId, "payment:refund_updated", { refundId: refund.id, status: updated.status, mode: "MOCK_TEST" });
+      emitToOrg(transaction.purchaseOrder.supplierOrgId, "payment:refund_updated", { refundId: refund.id, status: updated.status, mode: "MOCK_TEST" });
+      return sendOk(res, updated);
+    }
+    if (!transaction.razorpayPaymentId || transaction.provider !== "RAZORPAY") throw new AppError(409, "The transaction is not eligible for a provider refund.");
     const claimed = await prisma.paymentRefund.updateMany({
       where: { id: refund.id, status: "REQUESTED" },
       data: { status: "PROCESSING" }

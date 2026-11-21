@@ -37,6 +37,7 @@ const schema = z.object({
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
-  RAZORPAY_ROUTE_ENABLED: z.string().optional().transform(v => v === "true" || v === "1")
+  RAZORPAY_ROUTE_ENABLED: z.string().optional().transform(v => v === "true" || v === "1"),
+  MOCK_PAYMENTS_ENABLED: z.string().optional().transform(v => v === "true" || v === "1")
 });
 export const env = schema.parse(process.env);
