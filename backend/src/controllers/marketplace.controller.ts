@@ -939,10 +939,8 @@ export async function createPurchaseOrder(req: Request, res: Response, next: Nex
               currency: quote.currency,
               milestones: {
                 create: [
-                  { title: "Order Confirmation", sequence: 1, percentage: 20, amount: Number(quote.totalAmount) * 0.20, status: "DUE" },
-                  { title: "Sample Approval", sequence: 2, percentage: 20, amount: Number(quote.totalAmount) * 0.20, status: "UPCOMING" },
-                  { title: "Production Completion", sequence: 3, percentage: 40, amount: Number(quote.totalAmount) * 0.40, status: "UPCOMING" },
-                  { title: "QC & Dispatch", sequence: 4, percentage: 20, amount: Number(quote.totalAmount) - Number(quote.totalAmount) * 0.80, status: "UPCOMING" }
+                  { title: "Production Payment", sequence: 1, percentage: 0, amount: 0, status: "UPCOMING" },
+                  { title: "Final Payment", sequence: 2, percentage: 100, amount: quote.totalAmount, status: "UPCOMING" }
                 ]
               }
             }
@@ -950,7 +948,12 @@ export async function createPurchaseOrder(req: Request, res: Response, next: Nex
           samples: {
             create: {
               status: "REQUESTED",
-              notes: `Pre-Production (PP) Sample for ${quote.items[0]?.description || garmentTitle}`
+              notes: JSON.stringify({
+                description: `Pre-Production (PP) Sample for ${quote.items[0]?.description || garmentTitle}`,
+                samplePrice: Number(quote.sampleCost || 0) > 0 ? Number(quote.sampleCost) : undefined,
+                samplePriceCurrency: quote.currency,
+                sampleLeadDays: quote.sampleLeadDays ?? undefined
+              })
             }
           }
         }

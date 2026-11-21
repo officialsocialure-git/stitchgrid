@@ -25,8 +25,30 @@ async function orderMembership(orderId: string, userId: string) {
 async function ensurePaymentPlan(orderId: string) {
   const order = await prisma.purchaseOrder.findUnique({ where: { id: orderId }, include: { paymentPlan: { include: { milestones: { orderBy: { sequence: "asc" } } } } } });
   if (!order) throw new AppError(404, "Order not found");
-  if (order.paymentPlan) return order.paymentPlan;
+  const legacyTitles = new Set(["Order Confirmation", "Sample Approval", "Production Completion", "QC & Dispatch"]);
+  const isLegacyPlan = Boolean(order.paymentPlan?.milestones.some(item => legacyTitles.has(item.title)));
+  if (order.paymentPlan && !isLegacyPlan) return order.paymentPlan;
+
   const total = Number(order.totalAmount);
+  if (order.paymentPlan) {
+    // Preserve old test transactions as history; deleting their milestone rows
+    // nulls the optional milestone reference without deleting the transaction.
+    return prisma.$transaction(async tx => {
+      await tx.paymentMilestone.deleteMany({ where: { paymentPlanId: order.paymentPlan!.id } });
+      return tx.paymentPlan.update({
+        where: { id: order.paymentPlan!.id },
+        data: {
+          totalAmount: order.totalAmount,
+          currency: order.currency,
+          milestones: { create: [
+            { title: "Production Payment", sequence: 1, percentage: 0, amount: 0, status: "UPCOMING" },
+            { title: "Final Payment", sequence: 2, percentage: 100, amount: total, status: "UPCOMING" }
+          ] }
+        },
+        include: { milestones: { orderBy: { sequence: "asc" } } }
+      });
+    });
+  }
   return prisma.paymentPlan.create({
     data: {
       purchaseOrderId: order.id,
@@ -65,6 +87,12 @@ export async function paymentDashboard(req: Request, res: Response, next: NextFu
       },
       orderBy: { createdAt: "desc" }
     });
+    // Normalize older 20/20/40/20 plans to the current supplier-set production/final flow.
+    for (const order of orders) {
+      if (order.paymentPlan?.milestones.some(item => ["Order Confirmation", "Sample Approval", "Production Completion", "QC & Dispatch"].includes(item.title))) {
+        order.paymentPlan = await ensurePaymentPlan(order.id);
+      }
+    }
     return sendOk(res, {
       provider: env.MOCK_PAYMENTS_ENABLED ? "MOCK_TEST" : isRazorpayConfigured() ? "RAZORPAY" : "NONE",
       paymentMode: env.MOCK_PAYMENTS_ENABLED ? "MOCK_TEST" : isRazorpayConfigured() ? "RAZORPAY" : "DISABLED",
@@ -136,7 +164,7 @@ export async function createMockSamplePayment(req: Request, res: Response, next:
   try {
     if (!env.MOCK_PAYMENTS_ENABLED) throw new AppError(403, "Mock sample payments are disabled.");
     const input = z.object({ outcome: z.enum(["SUCCESS", "FAILED", "PENDING"]) }).parse(req.body);
-    const sample = await prisma.sample.findUnique({ where: { id: String(req.params.sampleId) }, include: { purchaseOrder: true } });
+    const sample = await prisma.sample.findUnique({ where: { id: String(req.params.sampleId) }, include: { purchaseOrder: { include: { quotation: { select: { sampleCost: true, currency: true } } } } } });
     if (!sample) throw new AppError(404, "Sample not found.");
     const buyer = await prisma.organizationMember.findFirst({ where: { userId: req.auth!.userId, organizationId: sample.purchaseOrder.buyerOrgId, role: "BUYER", isActive: true } });
     if (!buyer) throw new AppError(403, "Only the buyer can pay the sample amount.");
@@ -144,7 +172,7 @@ export async function createMockSamplePayment(req: Request, res: Response, next:
     if (sample.purchaseOrder.currency !== "INR") throw new AppError(400, "Mock sample payments currently support INR only.");
     let meta: any = {};
     try { meta = sample.notes ? JSON.parse(sample.notes) : {}; } catch { meta = {}; }
-    const samplePrice = Number(meta.samplePrice || 0);
+    const samplePrice = Number(meta.samplePrice || sample.purchaseOrder.quotation?.sampleCost || 0);
     if (!Number.isFinite(samplePrice) || samplePrice <= 0) throw new AppError(409, "The supplier has not set the sample price yet.");
     if (meta.samplePaymentStatus === "PAID") throw new AppError(409, "The sample has already been paid.");
     const pendingId = meta.samplePaymentTransactionId as string | undefined;

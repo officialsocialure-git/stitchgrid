@@ -577,7 +577,8 @@ export async function listSamples(req: Request, res: Response, next: NextFunctio
           include: {
             buyer: { select: { id: true, name: true } },
             supplier: { select: { id: true, name: true, city: true } },
-            items: true
+            items: true,
+            quotation: { select: { sampleCost: true, sampleLeadDays: true, currency: true } }
           }
         }
       },
@@ -599,6 +600,13 @@ export async function listSamples(req: Request, res: Response, next: NextFunctio
         }
       }
       parsedMeta = parsedMeta || {};
+      // Legacy purchase orders may have the sample cost saved on the accepted quotation
+      // but not copied into the sample metadata. Reuse that agreed quote value.
+      if (!(Number(parsedMeta.samplePrice) > 0) && Number(s.purchaseOrder.quotation?.sampleCost) > 0) {
+        parsedMeta.samplePrice = Number(s.purchaseOrder.quotation.sampleCost);
+        parsedMeta.samplePriceCurrency = s.purchaseOrder.quotation.currency || s.purchaseOrder.currency;
+        parsedMeta.sampleLeadDays = s.purchaseOrder.quotation.sampleLeadDays ?? undefined;
+      }
       const photos = Array.isArray(parsedMeta.photos) ? parsedMeta.photos : [];
       const files = Array.isArray(parsedMeta.files) ? parsedMeta.files : [];
       return {

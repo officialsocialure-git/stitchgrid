@@ -270,6 +270,7 @@ model Quotation {
   rfq            Rfq @relation(fields: [rfqId], references: [id], onDelete: Cascade)
   supplier       Organization @relation(fields: [supplierOrgId], references: [id])
   items          QuotationItem[]
+  purchaseOrder  PurchaseOrder?
   @@index([rfqId, supplierOrgId])
   @@index([buyerOrgId, status])
 }
@@ -302,6 +303,7 @@ model PurchaseOrder {
   updatedAt      DateTime @updatedAt
   buyer          Organization @relation("BuyerOrganization", fields: [buyerOrgId], references: [id])
   supplier       Organization @relation("SupplierOrganization", fields: [supplierOrgId], references: [id])
+  quotation      Quotation @relation(fields: [quotationId], references: [id])
   items          PurchaseOrderItem[]
   milestones     OrderMilestone[]
   paymentPlan    PaymentPlan?
