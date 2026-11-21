@@ -96,6 +96,7 @@ export function AdminPaymentRefunds() {
                 <div className="min-w-0">
                   <p className="font-semibold text-slate-900">{item.paymentTransaction?.purchaseOrder?.poNumber || "Order"} · {item.paymentTransaction?.purchaseOrder?.buyer?.name || "Buyer"}</p>
                   <p className="mt-1 text-xs text-slate-500">Supplier: {item.paymentTransaction?.purchaseOrder?.supplier?.name || "—"}</p>
+                  <p className={item.paymentTransaction?.provider === "MOCK_TEST" ? "mt-1 text-xs font-bold text-amber-700" : "mt-1 text-xs text-slate-500"}>{item.paymentTransaction?.provider === "MOCK_TEST" ? "MOCK_TEST · TEST SIMULATOR · NO REAL MONEY" : item.paymentTransaction?.provider || "PAYMENT PROVIDER"}</p>
                   <p className="mt-1 text-xs text-slate-600">{item.reason || "No reason supplied"}</p>
                   <p className="mt-1 break-all text-xs text-slate-400">{item.providerRefundId || item.id} · {new Date(item.createdAt).toLocaleString()}</p>
                 </div>
