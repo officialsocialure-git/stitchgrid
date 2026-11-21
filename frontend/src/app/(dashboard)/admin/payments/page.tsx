@@ -227,17 +227,14 @@ export default function PaymentsPage() {
             Payments & Payouts
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Review collections, milestone payments, supplier setup submissions and refunds. Payout execution is not enabled in the current payment integration.
+            Review test transactions, milestone progress, supplier setup submissions and simulated refunds. No real payment gateway or bank transfer is active.
           </p>
         </div>
 
         <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => setShowOnboardingModal(true)}
-            className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200/90 bg-white px-4 text-xs font-bold text-slate-700 shadow-xs hover:bg-slate-50 transition"
-          >
-            <UserCheck size={16} /> Supplier Onboarding
-          </button>
+          <span className="inline-flex h-10 items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 text-xs font-bold text-amber-800">
+            <UserCheck size={16} /> Supplier payouts paused in test mode
+          </span>
           <button
             onClick={exportCsv}
             disabled={!data.items.length}
@@ -246,6 +243,10 @@ export default function PaymentsPage() {
             <Download size={15} /> Export
           </button>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <strong>TEST PAYMENT MODE</strong> · Transactions marked MOCK_TEST are simulated records only. They do not represent money collected, settled or transferred.
       </div>
 
       {/* 4 KPI Summary Cards */}
@@ -494,7 +495,7 @@ export default function PaymentsPage() {
                       {/* Transaction ID */}
                       <td className="px-4 py-3.5">
                         <p className="font-bold font-mono text-slate-900">{shortTxId(payment)}</p>
-                        <p className="text-[11px] text-slate-400">{payment.provider || "Razorpay"}</p>
+                        <p className={payment.provider === "MOCK_TEST" ? "text-[11px] font-bold text-amber-700" : "text-[11px] text-slate-400"}>{payment.provider === "MOCK_TEST" ? "TEST SIMULATOR · NO REAL MONEY" : payment.provider || "Payment provider"}</p>
                       </td>
 
                       {/* Order ID */}
@@ -548,7 +549,7 @@ export default function PaymentsPage() {
                       <td className="px-4 py-3.5">
                         {isPaid ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 border border-emerald-200/60">
-                            <CheckCircle2 size={11} /> Verified
+                            <CheckCircle2 size={11} /> {payment.provider === "MOCK_TEST" ? "Test successful" : "Verified"}
                           </span>
                         ) : isPending ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-800 border border-amber-200/60">
@@ -691,13 +692,13 @@ export default function PaymentsPage() {
             <div className="mt-5 space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4">
                 <div>
-                  <span className="text-slate-400 font-semibold uppercase">Provider</span>
-                  <p className="font-bold text-slate-900 mt-0.5">{activePayment.provider}</p>
+                  <span className="text-slate-400 font-semibold uppercase">Payment Type</span>
+                  <p className="font-bold text-slate-900 mt-0.5">{activePayment.provider === "MOCK_TEST" ? "TEST SIMULATOR · NO REAL MONEY" : activePayment.provider}</p>
                 </div>
                 <div>
-                  <span className="text-slate-400 font-semibold uppercase">Razorpay Payment ID</span>
+                  <span className="text-slate-400 font-semibold uppercase">Provider Reference</span>
                   <p className="font-bold font-mono text-slate-900 mt-0.5">
-                    {activePayment.razorpayPaymentId || "—"}
+                    {activePayment.razorpayPaymentId || activePayment.providerRef || "—"}
                   </p>
                 </div>
                 <div>
@@ -717,9 +718,9 @@ export default function PaymentsPage() {
                   </p>
                 </div>
                 <div>
-                  <span className="text-slate-400 font-semibold uppercase">Signature Verified</span>
+                  <span className="text-slate-400 font-semibold uppercase">Verification</span>
                   <p className="font-bold text-slate-900 mt-0.5">
-                    {activePayment.signatureVerified ? "Yes" : "Pending / N/A"}
+                    {activePayment.provider === "MOCK_TEST" ? "Simulated result (not a real provider verification)" : activePayment.signatureVerified ? "Yes" : "Pending / N/A"}
                   </p>
                 </div>
               </div>

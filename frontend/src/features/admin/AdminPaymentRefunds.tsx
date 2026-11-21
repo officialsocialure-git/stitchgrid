@@ -12,6 +12,7 @@ type RefundItem = {
   providerRefundId?: string | null;
   createdAt: string;
   paymentTransaction?: {
+    provider?: string;
     currency?: string;
     razorpayPaymentId?: string | null;
     purchaseOrder?: {
@@ -56,8 +57,9 @@ export function AdminPaymentRefunds() {
       setError("Enter a rejection note of at least 5 characters.");
       return;
     }
+    const isTest = item.paymentTransaction?.provider === "MOCK_TEST";
     const message = decision === "APPROVE"
-      ? "Approve this refund and send it to Razorpay for processing?"
+      ? isTest ? "Approve this simulated test refund? No money will be returned or moved." : "Approve this refund and send it to the payment provider?"
       : "Reject this refund request?";
     if (!window.confirm(message)) return;
 
@@ -66,7 +68,7 @@ export function AdminPaymentRefunds() {
     setNotice("");
     try {
       await adminService.processRefund(item.id, decision, note || undefined);
-      setNotice(decision === "APPROVE" ? "Refund sent to Razorpay. Its provider status will update separately." : "Refund request rejected.");
+      setNotice(decision === "APPROVE" ? (isTest ? "Simulated test refund completed. No money was moved." : "Refund sent to the payment provider. Its provider status will update separately.") : "Refund request rejected.");
       setNotes(current => ({ ...current, [item.id]: "" }));
       await load();
     } catch (e) {
@@ -80,7 +82,7 @@ export function AdminPaymentRefunds() {
     <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
       <div>
         <h2 className="text-lg font-bold text-slate-900">Refund Requests</h2>
-        <p className="text-sm text-slate-500">Review Buyer requests. Approval sends a refund request to Razorpay; the provider may return processing, processed or failed.</p>
+        <p className="text-sm text-slate-500">Review refund requests. MOCK_TEST refunds are simulated; no real money is returned. External provider refunds are not enabled in the current test workflow.</p>
       </div>
       {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
       {notice && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">{notice}</p>}
@@ -111,7 +113,7 @@ export function AdminPaymentRefunds() {
                     className="h-10 min-w-0 flex-1 rounded-lg border border-slate-200 px-3 text-xs outline-none focus:border-violet-500"
                   />
                   <div className="flex gap-2">
-                    <button disabled={busy === item.id} onClick={() => void process(item, "APPROVE")} className="rounded-lg bg-violet-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Approve & Send</button>
+                    <button disabled={busy === item.id} onClick={() => void process(item, "APPROVE")} className="rounded-lg bg-violet-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{item.paymentTransaction?.provider === "MOCK_TEST" ? "Approve test refund" : "Approve provider refund"}</button>
                     <button disabled={busy === item.id} onClick={() => void process(item, "REJECT")} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50">Reject</button>
                   </div>
                 </div>
