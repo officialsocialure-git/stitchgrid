@@ -22,6 +22,7 @@ export const adminService = {
   order: (id: string) => api.get<any>(`/admin/orders/${id}`),
   payments: (params: URLSearchParams) => api.get<AdminPageResult & { stats?: any }>(`/admin/payments?${params.toString()}`),
   paymentSetups: () => api.get<{ items: any[] }>("/admin/payment-setups"),
+  reviewPaymentSetup: (id: string, decision: "APPROVE" | "REJECT", reason?: string) => api.patch(`/admin/payment-setups/${id}/review`, { decision, reason }),
   refunds: () => api.get<{ items: any[] }>("/admin/refunds"),
   processRefund: (id: string, decision: "APPROVE" | "REJECT", note?: string) => api.patch(`/admin/refunds/${id}`, { decision, note }),
   disputes: (params: URLSearchParams) => api.get<AdminPageResult>(`/admin/disputes?${params.toString()}`),

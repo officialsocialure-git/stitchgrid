@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Coins, Clock3, Landmark, RotateCcw, Search, RefreshCw, Download,
   ChevronLeft, ChevronRight, Eye, MoreHorizontal, X, LoaderCircle,
-  ArrowUp, CheckSquare, Square, CheckCircle2, UserCheck, AlertTriangle,
+  CheckSquare, Square, CheckCircle2, UserCheck, AlertTriangle,
   Flag, ArrowLeftRight, FileSpreadsheet
 } from "lucide-react";
 import { adminService } from "@/features/admin/admin.service";
@@ -165,7 +165,7 @@ export default function PaymentsPage() {
       { value: "ALL", label: "All Transactions", count: data.total, icon: ArrowLeftRight },
       { value: "COLLECTIONS", label: "Collections", count: data.stats.verifiedCollectionCount, icon: Download },
       { value: "MILESTONES", label: "Milestone Payments", count: undefined, icon: Flag },
-      { value: "PAYOUTS", label: "Supplier Payouts", count: data.stats.supplierTransferRefs, icon: Landmark },
+      { value: "PAYOUTS", label: "Recorded Transfers", count: data.stats.supplierTransferRefs, icon: Landmark },
       { value: "REFUNDS", label: "Refunds", count: data.stats.refundCount, icon: RotateCcw },
       { value: "FAILED", label: "Failed Payments", count: data.stats.failedCount, icon: AlertTriangle },
       { value: "RECONCILIATION", label: "Reconciliation", count: undefined, icon: FileSpreadsheet },
@@ -227,7 +227,7 @@ export default function PaymentsPage() {
             Payments & Payouts
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Manage collections, milestone payments, supplier payouts and refunds.
+            Review collections, milestone payments, supplier setup submissions and refunds. Payout execution is not enabled in the current payment integration.
           </p>
         </div>
 
@@ -261,9 +261,7 @@ export default function PaymentsPage() {
               <span className="text-2xl font-black font-mono text-slate-900">
                 {loading ? "—" : formatMoney(data.stats.verifiedCollections)}
               </span>
-              <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
-                <ArrowUp size={11} /> +18%
-              </span>
+              
             </div>
             <p className="mt-1 text-xs text-slate-400">Verified payments</p>
           </div>
@@ -293,16 +291,13 @@ export default function PaymentsPage() {
             <Landmark size={22} />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Supplier Payouts</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Recorded Transfers</p>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="text-2xl font-black font-mono text-slate-900">
-                {loading ? "—" : formatMoney(data.stats.verifiedCollections * 0.85)}
-              </span>
-              <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
-                <ArrowUp size={11} /> +12%
+                {loading ? "—" : data.stats.supplierTransferRefs}
               </span>
             </div>
-            <p className="mt-1 text-xs text-slate-400">Released to suppliers</p>
+            <p className="mt-1 text-xs text-slate-400">Provider transfer references recorded</p>
           </div>
         </div>
 
@@ -667,6 +662,9 @@ export default function PaymentsPage() {
         </div>
       </div>
 
+      {/* Admin refund review queue */}
+      <AdminPaymentRefunds />
+
       {/* Transaction Details Modal */}
       {activePayment && (
         <div
@@ -751,9 +749,9 @@ export default function PaymentsPage() {
           >
             <div className="flex items-start justify-between border-b border-slate-100 pb-4">
               <div>
-                <h2 className="text-lg font-bold text-slate-950">Supplier Payout & Bank Onboarding</h2>
+                <h2 className="text-lg font-bold text-slate-950">Supplier Settlement Setup Review</h2>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  Verify linked commercial bank accounts for milestone escrow disbursements
+                  Review supplier-submitted masked bank details and payment setup status
                 </p>
               </div>
               <button
