@@ -1,12 +1,12 @@
 import { ui } from '@/theme/ui';
 import { AppBottomNav } from '@/components/AppBottomNav';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, RefreshControl,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import * as ImagePicker from 'expo-image-picker';
@@ -85,9 +85,11 @@ const statusColors = (status: string) => {
 
 export default function BuyerSamplesScreen() {
   const router = useRouter();
+  const { orderId: routeOrderId } = useLocalSearchParams<{ orderId?: string }>();
   const insets = useSafeAreaInsets();
   const [membership, setMembership] = useState<Membership | null>(null);
   const [samples, setSamples] = useState<Sample[]>([]);
+  const [mockPaymentsEnabled, setMockPaymentsEnabled] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -117,26 +119,49 @@ export default function BuyerSamplesScreen() {
   const [requestQuantity, setRequestQuantity] = useState('5 pcs');
   const [requestNotes, setRequestNotes] = useState('');
   const [feedback, setFeedback] = useState('');
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackAction, setFeedbackAction] = useState<'REJECTED' | 'REVISION_REQUIRED' | null>(null);
   const [supplierNoteDraft, setSupplierNoteDraft] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
 
+  const [samplePriceDraft, setSamplePriceDraft] = useState('');
+  const promptedSamplePaymentIds = useRef<Set<string>>(new Set());
   const isSupplier = membership?.role === 'SUPPLIER';
   const unreadCount = notifications.filter(item => !item.readAt).length;
+
+  useEffect(() => {
+    if (!membership || isSupplier || !mockPaymentsEnabled) return;
+    const dueSample = samples.find(sample => Number(sample.parsedMeta?.samplePrice || 0) > 0 && sample.parsedMeta?.samplePaymentStatus !== 'PAID' && !promptedSamplePaymentIds.current.has(sample.id));
+    if (!dueSample) return;
+    promptedSamplePaymentIds.current.add(dueSample.id);
+    Alert.alert(
+      'Sample payment due',
+      `Supplier set the sample price to ₹${Number(dueSample.parsedMeta?.samplePrice).toLocaleString('en-IN')} for ${dueSample.purchaseOrder?.poNumber || 'your order'}. Pay the sample amount to proceed.`,
+      [
+        { text: 'Later', style: 'cancel' },
+        { text: 'Pay now', onPress: () => Alert.alert('Choose test result', 'Select the mock sandbox outcome. No real money will be collected.', [
+          { text: 'Success', onPress: () => void runSamplePayment(dueSample, 'SUCCESS') },
+          { text: 'Failed', onPress: () => void runSamplePayment(dueSample, 'FAILED') },
+          { text: 'Pending', onPress: () => void runSamplePayment(dueSample, 'PENDING') },
+        ]) },
+      ]
+    );
+  }, [samples, isSupplier, mockPaymentsEnabled, membership]);
 
   const loadData = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
     setError('');
     try {
-      const [sampleData, orderData, notificationData] = await Promise.all([
+      const [sampleData, orderData, notificationData, paymentDashboard] = await Promise.all([
         apiGet<Sample[]>('/samples'),
         apiGet<Order[]>('/purchase-orders'),
         apiGet<NotificationItem[]>('/notifications'),
+        apiGet<{ mockPaymentsEnabled?: boolean }>('/payments/dashboard'),
       ]);
       setSamples(Array.isArray(sampleData) ? sampleData : []);
       setOrders(Array.isArray(orderData) ? orderData : []);
       setNotifications(Array.isArray(notificationData) ? notificationData : []);
+      setMockPaymentsEnabled(Boolean(paymentDashboard?.mockPaymentsEnabled));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to load samples.');
     } finally {
@@ -183,9 +208,17 @@ export default function BuyerSamplesScreen() {
     setLocalPhotos([...(sample.photos || [])]);
     setActivePhotoIndex(0);
     setFeedback('');
-    setFeedbackOpen(false);
+    setFeedbackAction(null);
     setSupplierNoteDraft(sample.supplierNote || '');
+    setSamplePriceDraft(String(sample.parsedMeta?.samplePrice ?? ''));
   };
+
+  useEffect(() => {
+    const targetOrderId = Array.isArray(routeOrderId) ? routeOrderId[0] : routeOrderId;
+    if (!isSupplier || !targetOrderId) return;
+    const targetSample = samples.find(sample => sample.purchaseOrderId === targetOrderId);
+    if (targetSample && selected?.id !== targetSample.id) openDetails(targetSample);
+  }, [routeOrderId, samples, isSupplier]);
 
   const performSampleAction = async (sample: Sample, status: string, extra: Record<string, unknown> = {}) => {
     try {
@@ -197,11 +230,46 @@ export default function BuyerSamplesScreen() {
       setSamples(refreshed);
       if (updated) setSelected(updated);
       else setSelected(null);
-      setFeedbackOpen(false);
+      setFeedbackAction(null);
       setFeedback('');
       Alert.alert('Updated', status === 'APPROVED' ? 'Sample approved successfully.' : status === 'REVISION_REQUIRED' ? 'Revision request sent to supplier.' : 'Sample status updated.');
     } catch (e) {
       Alert.alert('Unable to update sample', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const runSamplePayment = async (sample: Sample, outcome: 'SUCCESS' | 'FAILED' | 'PENDING') => {
+    try {
+      setSubmitting(true);
+      const result = await apiPost<{ message?: string }>(`/payments/samples/${sample.id}/test-payment`, { outcome });
+      await loadData(true);
+      Alert.alert(outcome === 'SUCCESS' ? 'Sample payment successful' : outcome === 'FAILED' ? 'Sample payment failed' : 'Sample payment pending', result?.message || 'This was a simulated test payment. No money was collected.');
+    } catch (e) {
+      Alert.alert('Sample payment could not be completed', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const saveSamplePrice = async () => {
+    if (!selected) return;
+    const price = Number(samplePriceDraft);
+    if (!Number.isFinite(price) || price <= 0) {
+      Alert.alert('Valid sample price required', 'Enter a sample price greater than zero.');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      await apiPatch(`/samples/${selected.id}`, { samplePrice: price });
+      await loadData(true);
+      const refreshed = await apiGet<Sample[]>('/samples');
+      setSamples(refreshed);
+      setSelected(refreshed.find(item => item.id === selected.id) || null);
+      Alert.alert('Sample price saved', 'The buyer has been notified that the sample payment is due.');
+    } catch (e) {
+      Alert.alert('Unable to set sample price', e instanceof Error ? e.message : 'Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -458,7 +526,7 @@ export default function BuyerSamplesScreen() {
               </View>
               <View style={styles.actionRow}>
                 <Pressable style={[styles.secondaryButton, { flex: 1 }]} onPress={() => openDetails(sample)}><Text style={styles.secondaryButtonText}>View Details</Text></Pressable>
-                {!isSupplier && sample.status !== 'APPROVED' && (
+                {!isSupplier && sample.status === 'DISPATCHED' && (
                   <Pressable style={[styles.approveButton, { flex: 1 }]} onPress={() => performSampleAction(sample, 'APPROVED', { feedback: 'Sample approved by buyer.' })} disabled={submitting}>
                     <Text style={styles.approveButtonText}>Approve</Text>
                   </Pressable>
@@ -477,8 +545,8 @@ export default function BuyerSamplesScreen() {
                   </Pressable>
                 )}
               </View>
-              {!isSupplier && sample.status !== 'APPROVED' && (
-                <Pressable style={styles.changesButton} onPress={() => { openDetails(sample); setFeedbackOpen(true); }}>
+              {!isSupplier && sample.status === 'DISPATCHED' && (
+                <Pressable style={styles.changesButton} onPress={() => { openDetails(sample); setFeedbackAction('REVISION_REQUIRED'); }}>
                   <Text style={styles.secondaryButtonText}>Ask for Changes</Text>
                 </Pressable>
               )}
@@ -619,6 +687,31 @@ export default function BuyerSamplesScreen() {
                   <View style={styles.detailInfoRow}><Text style={styles.muted}>Order ID</Text><Text style={styles.strong}>{selected.purchaseOrder?.poNumber || orderNumber(selected)}</Text></View>
                   <View style={styles.detailInfoRow}><Text style={styles.muted}>Sample Type</Text><Text style={styles.strong}>{selected.sampleType || 'Final Sample'}</Text></View>
                   <View style={styles.detailInfoRow}><Text style={styles.muted}>Due Date</Text><Text style={styles.strong}>{dateLabel(selected.parsedMeta?.dueDate || selected.purchaseOrder?.expectedDate)}</Text></View>
+                  {isSupplier && selected.status !== 'APPROVED' && Number(selected.parsedMeta?.samplePrice || 0) > 0 ? (
+                    <View style={{ gap: 9, marginTop: 14 }}>
+                      <Text style={styles.sectionLabel}>SAMPLE PRICE FROM ACCEPTED QUOTATION</Text>
+                      <View style={styles.detailInfoRow}>
+                        <Text style={styles.muted}>Agreed sample price</Text>
+                        <Text style={styles.strong}>₹{Number(selected.parsedMeta?.samplePrice ?? 0).toLocaleString('en-IN')}</Text>
+                      </View>
+                      <Text style={styles.uploadHelp}>This price was already submitted with your quotation and is shared with the buyer. You do not need to enter it again.</Text>
+                    </View>
+                  ) : isSupplier && selected.status !== 'APPROVED' ? (
+                    <View style={{ gap: 9, marginTop: 14 }}>
+                      <Text style={styles.sectionLabel}>SAMPLE PRICE (INR)</Text>
+                      <TextInput value={samplePriceDraft} onChangeText={setSamplePriceDraft} placeholder="Enter sample amount" keyboardType="decimal-pad" style={styles.formInput} />
+                      <Pressable style={styles.approveButton} onPress={saveSamplePrice} disabled={submitting}><Text style={styles.approveButtonText}>{submitting ? 'Saving...' : 'Set Sample Price'}</Text></Pressable>
+                    </View>
+                  ) : null}
+                  {!isSupplier && selected.parsedMeta?.samplePrice ? <View style={styles.detailInfoRow}><Text style={styles.muted}>Sample price</Text><Text style={styles.strong}>₹{Number(selected.parsedMeta.samplePrice).toLocaleString('en-IN')}</Text></View> : null}
+                  {selected.parsedMeta?.samplePaymentStatus ? <View style={styles.detailInfoRow}><Text style={styles.muted}>Sample payment</Text><Text style={styles.strong}>{String(selected.parsedMeta.samplePaymentStatus).replaceAll('_', ' ')}</Text></View> : null}
+                  {!isSupplier && Number(selected.parsedMeta?.samplePrice || 0) > 0 && selected.parsedMeta?.samplePaymentStatus !== 'PAID' && (
+                    <Pressable style={styles.approveButton} onPress={() => Alert.alert('Choose test result', 'Simulate the sample payment. No real money will be collected.', [
+                      { text: 'Success', onPress: () => void runSamplePayment(selected, 'SUCCESS') },
+                      { text: 'Failed', onPress: () => void runSamplePayment(selected, 'FAILED') },
+                      { text: 'Pending', onPress: () => void runSamplePayment(selected, 'PENDING') },
+                    ])} disabled={submitting}><Text style={styles.approveButtonText}>Pay Sample Amount</Text></Pressable>
+                  )}
                 </View>
               )}
               {detailsTab === (isSupplier ? 'Buyer Note' : 'Supplier Note') && (
@@ -647,15 +740,20 @@ export default function BuyerSamplesScreen() {
                   {(selected.history || []).length === 0 ? <Text style={styles.emptyText}>No sample history has been recorded yet.</Text> : [...(selected.history || [])].reverse().map((entry, index) => <View key={String(entry.createdAt) + index} style={styles.historyRow}><View style={styles.historyMarker}><MaterialCommunityIcons name="check" size={14} color="#fff" /></View><View style={{ flex: 1 }}><Text style={styles.historyTitle}>{entry.action || entry.status || 'Sample updated'}</Text>{!!entry.note && <Text style={styles.historyNote}>{entry.note}</Text>}<Text style={styles.historyDate}>{dateLabel(entry.createdAt)} {entry.actorRole ? `• ${entry.actorRole}` : ''}</Text></View></View>)}
                 </View>
               )}
-              {!isSupplier && selected.status !== 'APPROVED' && (
+              {!isSupplier && selected.status === 'DISPATCHED' && (
                 <View style={styles.supplierActions}>
-                  {feedbackOpen && <View style={{ width: '100%', gap: 8 }}><Text style={styles.formLabel}>SPECIFY REQUIRED CHANGES</Text><TextInput value={feedback} onChangeText={setFeedback} placeholder="Describe the changes required from the supplier..." multiline textAlignVertical="top" style={[styles.formInput, styles.notesInput]} /></View>}
+                  {feedbackAction && <View style={{ width: '100%', gap: 8, padding: 13, borderRadius: 14, backgroundColor: '#F8F6FC', borderWidth: 1, borderColor: '#E6DDF5' }}><Text style={styles.formLabel}>{feedbackAction === 'REJECTED' ? 'REASON FOR REJECTION' : 'CHANGES REQUIRED FROM SUPPLIER'}</Text><Text style={styles.muted}>{feedbackAction === 'REJECTED' ? 'Explain why this sample does not meet your requirements.' : 'Tell the supplier exactly what needs correction.'}</Text><TextInput value={feedback} onChangeText={setFeedback} placeholder={feedbackAction === 'REJECTED' ? 'e.g. Fabric quality is below approved standard...' : 'e.g. Please correct sleeve length and stitching...'} multiline textAlignVertical="top" style={[styles.formInput, styles.notesInput]} maxLength={5000} /><Text style={styles.muted}>{feedback.trim().length}/5000 characters · Minimum 5 characters</Text><Pressable style={[feedbackAction === 'REJECTED' ? { backgroundColor: '#B42318' } : { backgroundColor: PURPLE }, { minHeight: 46, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }]} disabled={submitting || feedback.trim().length < 5} onPress={() => void performSampleAction(selected, feedbackAction, { feedback: feedback.trim() })}>{submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.approveButtonText}>{feedbackAction === 'REJECTED' ? 'Submit Rejection' : 'Send Revision Request'}</Text>}</Pressable><Pressable onPress={() => { setFeedbackAction(null); setFeedback(''); }}><Text style={{ textAlign: 'center', color: ui.muted, fontWeight: '600', padding: 6 }}>Cancel</Text></Pressable></View>}
                   <Pressable style={[styles.approveButton, { flex: 1 }]} onPress={() => performSampleAction(selected, 'APPROVED', { feedback: 'Sample approved by buyer.' })} disabled={submitting}><Text style={styles.approveButtonText}>{submitting ? 'Saving...' : 'Approve'}</Text></Pressable>
                   <Pressable style={[styles.secondaryButton, { flex: 1 }]} onPress={() => {
-                    if (!feedbackOpen) { setFeedbackOpen(true); return; }
+                    if (feedbackAction !== 'REVISION_REQUIRED') { setFeedback(''); setFeedbackAction('REVISION_REQUIRED'); return; }
                     if (!feedback.trim()) { Alert.alert('Feedback required', 'Please describe the changes required.'); return; }
                     void performSampleAction(selected, 'REVISION_REQUIRED', { feedback: feedback.trim() });
-                  }} disabled={submitting}><Text style={styles.secondaryButtonText}>{feedbackOpen ? 'Send Changes' : 'Ask for Changes'}</Text></Pressable>
+                  }} disabled={submitting}><Text style={styles.secondaryButtonText}>{feedbackAction ? 'Send Changes' : 'Ask for Changes'}</Text></Pressable>
+                  <Pressable style={[styles.secondaryButton, { flex: 1 }]} onPress={() => {
+                    if (feedbackAction !== 'REJECTED') { setFeedback(''); setFeedbackAction('REJECTED'); return; }
+                    if (!feedback.trim()) { Alert.alert('Reason required', 'Please explain why the sample is rejected.'); return; }
+                    void performSampleAction(selected, 'REJECTED', { feedback: feedback.trim() });
+                  }} disabled={submitting}><Text style={styles.secondaryButtonText}>{feedbackAction ? 'Confirm Reject' : 'Reject'}</Text></Pressable>
                 </View>
               )}
             </ScrollView>}

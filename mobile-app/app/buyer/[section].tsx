@@ -8,6 +8,8 @@ import BuyerRequestsScreen from '@/features/buyer/BuyerRequestsScreen';
 import BuyerMyOffersScreen from '@/features/buyer/BuyerMyOffersScreen';
 import BuyerMyOrdersScreen from '@/features/buyer/BuyerMyOrdersScreen';
 import BuyerOrderTrackingScreen from '@/features/buyer/BuyerOrderTrackingScreen';
+import BuyerPaymentsScreen from '@/features/buyer/BuyerPaymentsScreen';
+import BuyerPaymentHistoryScreen from '@/features/buyer/BuyerPaymentHistoryScreen';
 import BuyerSamplesScreen from '@/features/buyer/BuyerSamplesScreen';
 import BuyerNotificationsScreen from '@/features/buyer/BuyerNotificationsScreen';
 import BuyerChatScreen from '@/features/buyer/BuyerChatScreen';
@@ -21,7 +23,9 @@ const SECTIONS: Record<string, { title: string; icon: string; description: strin
   tracking: { title: 'Order Tracking', icon: 'factory', description: 'Follow production milestones, quality checks and dispatch progress.' },
   samples: { title: 'Samples', icon: 'hanger', description: 'Review samples, supplier updates and approval status.' },
   chat: { title: 'Chat', icon: 'message-text-outline', description: 'Continue conversations with your suppliers.' },
-  payments: { title: 'Payments', icon: 'wallet-outline', description: 'View payment milestones and transaction information.' },
+  payments: { title: 'Payments', icon: 'wallet-outline', description: 'View payment milestones and supplier proof approvals.' },
+  'payment-history': { title: 'Payment History', icon: 'receipt-text-outline', description: 'View verified payments, failed attempts and refund updates.' },
+
   'organization-settings': { title: 'Organization Settings', icon: 'cog-outline', description: 'Manage your organization profile and business details.' },
   'account-settings': { title: 'Account Settings', icon: 'account-cog-outline', description: 'Manage your account and organization details.' },
 };
@@ -36,6 +40,8 @@ export default function BuyerSectionScreen() {
   if (String(section) === 'offers') return <BuyerMyOffersScreen />;
   if (String(section) === 'orders') return <BuyerMyOrdersScreen />;
   if (String(section) === 'tracking') return <BuyerOrderTrackingScreen />;
+  if (String(section) === 'payments') return <BuyerPaymentsScreen />;
+  if (String(section) === 'payment-history') return <BuyerPaymentHistoryScreen />;
   if (String(section) === 'samples') return <BuyerSamplesScreen />;
   if (String(section) === 'notifications') return <BuyerNotificationsScreen />;
   if (String(section) === 'chat') return <BuyerChatScreen />;

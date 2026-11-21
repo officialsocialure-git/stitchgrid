@@ -205,7 +205,7 @@ export async function updateSample(req: Request, res: Response, next: NextFuncti
       files: z.array(fileSchema).max(30).optional(),
       supplierNote: z.string().max(5000).optional(),
       samplePrice: z.coerce.number().positive().max(9999999).optional(),
-      feedback: z.string().max(5000).optional()
+      feedback: z.string().trim().min(5).max(5000).optional()
     }).parse(req.body);
 
     const sample = await prisma.sample.findUnique({
@@ -259,6 +259,9 @@ export async function updateSample(req: Request, res: Response, next: NextFuncti
     }
     if (buyer && ["APPROVED", "REJECTED", "REVISION_REQUIRED"].includes(newStatus) && sample.status !== "DISPATCHED") {
       throw new AppError(409, "The supplier must submit the sample before the buyer can review it.");
+    }
+    if (buyer && ["REJECTED", "REVISION_REQUIRED"].includes(newStatus) && (input.feedback || "").trim().length < 5) {
+      throw new AppError(400, "Please provide at least 5 characters explaining the rejection or requested changes.");
     }
     const updatedMeta: any = {
       ...existingMeta,
@@ -334,7 +337,7 @@ export async function updateSample(req: Request, res: Response, next: NextFuncti
           : statusChanged
             ? `Supplier updated the sample for order ${sample.purchaseOrder.poNumber}: ${newStatus.replaceAll("_", " ").toLowerCase()}.`
             : `Supplier added sample photos or notes for order ${sample.purchaseOrder.poNumber}.`)
-        : `Buyer updated the sample for order ${sample.purchaseOrder.poNumber}: ${newStatus.replaceAll("_", " ").toLowerCase()}.`;
+        : `Buyer updated the sample for order ${sample.purchaseOrder.poNumber}: ${newStatus.replaceAll("_", " ").toLowerCase()}.${input.feedback ? ` Buyer feedback: ${input.feedback}` : ""}`;
       if (recipientIds.length) {
         await prisma.notification.createMany({ data: recipientIds.map(userId => ({ userId, title, body })) });
         recipientIds.forEach(userId => emitToUser(userId, "notification:new", { title, orderId: sample.purchaseOrderId, sampleId: sample.id }));

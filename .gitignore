@@ -136,11 +136,21 @@ p.$disconnect*
 ADMIN_PANEL_IMPLEMENTATION.md
 
 # ------------------------------------------------------------------------------
+# Local backups and temporary editor copies
+# ------------------------------------------------------------------------------
+.safety-backup/
+**/.safety-backup/
+*.bak
+*.backup
+*.old
+
+# ------------------------------------------------------------------------------
 # Expo / React Native (mobile-app)
 # ------------------------------------------------------------------------------
 .expo/
 **/.expo/
 .expo-shared/
+mobile-app/.safety-backup/
 web-build/
 **/web-build/
 android/.gradle/

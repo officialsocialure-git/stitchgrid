@@ -118,6 +118,19 @@ export function AppHeader({
     };
   }, [propUnread]);
 
+  // Refresh unread badge periodically so new server-side notifications appear without reopening the screen.
+  useEffect(() => {
+    if (propUnread !== undefined) return;
+    const timer = setInterval(() => {
+      apiGet<any[]>('/notifications')
+        .then(data => {
+          if (Array.isArray(data)) setDetectedUnread(data.filter(item => !item.readAt).length);
+        })
+        .catch(() => {});
+    }, 25000);
+    return () => clearInterval(timer);
+  }, [propUnread]);
+
   const displayUnread = propUnread !== undefined ? propUnread : detectedUnread;
 
   const handleNotificationPress = () => {

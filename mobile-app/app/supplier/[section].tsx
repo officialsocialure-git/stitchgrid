@@ -12,6 +12,7 @@ import BuyerNotificationsScreen from '@/features/buyer/BuyerNotificationsScreen'
 import BuyerChatScreen from '@/features/buyer/BuyerChatScreen';
 import OrganizationSettingsScreen from '@/features/shared/OrganizationSettingsScreen';
 import SupplierAccountSettingsScreen from '@/features/supplier/SupplierAccountSettingsScreen';
+import SupplierPaymentsScreen from '@/features/supplier/SupplierPaymentsScreen';
 import { AppHeader } from '@/components/AppHeader';
 
 const labels: Record<string, string> = {
@@ -36,6 +37,7 @@ export default function SupplierSectionScreen() {
   if (section === 'orders') return <SupplierMyOrdersScreen />;
   if (section === 'tracking') return <BuyerOrderTrackingScreen />;
   if (section === 'samples') return <BuyerSamplesScreen />;
+  if (section === 'payments' || section === 'payment-history') return <SupplierPaymentsScreen />;
 
   const title = labels[section] || 'Supplier Workspace';
   return (

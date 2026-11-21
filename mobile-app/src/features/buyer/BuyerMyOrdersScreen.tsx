@@ -17,14 +17,23 @@ const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparen
 
 type Milestone = { id: string; title: string; status: string; dueDate?: string | null; completedAt?: string | null };
 type OrderItem = { id: string; name: string; quantity: number; unitPrice?: number | string };
+type SamplePaymentInfo = {
+  id: string; status: string; sampleName?: string; sampleType?: string;
+  parsedMeta?: { samplePrice?: number | string; samplePaymentStatus?: string };
+};
 type Order = {
-  id: string; poNumber: string; status: string; totalAmount: number | string; currency?: string;
+  id: string; poNumber: string; status: string; totalAmount: number | string; currency?: string; qcNotes?: string | null;
   expectedDate?: string | null; createdAt: string; buyerOrgId: string; supplierOrgId: string;
   buyer?: { id: string; name: string; city?: string | null };
   supplier?: { id: string; name: string; city?: string | null };
   items?: OrderItem[]; milestones?: Milestone[]; samples?: { id: string; status: string }[];
 };
 type Membership = { organizationId?: string; organization?: { id?: string }; role?: string };
+type PaymentSummary = {
+  id: string;
+  buyerOrgId: string;
+  paymentPlan?: { totalAmount: number | string; currency: string; milestones: { id: string; title: string; sequence: number; percentage: number | string; amount: number | string; status: string }[] } | null;
+};
 
 const money = (value: number | string | null | undefined, currency = 'INR') => {
   const amount = Number(value || 0);
@@ -82,6 +91,13 @@ export default function BuyerMyOrdersScreen() {
   const [reviewBusy, setReviewBusy] = useState(false);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [reviewedOrderIds, setReviewedOrderIds] = useState<string[]>([]);
+  const [paymentSummaries, setPaymentSummaries] = useState<Record<string, PaymentSummary['paymentPlan']>>({});
+  const [samplesByOrder, setSamplesByOrder] = useState<Record<string, SamplePaymentInfo[]>>({});
+  const [samplePaymentOpen, setSamplePaymentOpen] = useState<{ order: Order; sample: SamplePaymentInfo } | null>(null);
+  const [samplePaymentBusy, setSamplePaymentBusy] = useState(false);
+  const [qcReviewOrder, setQcReviewOrder] = useState<Order | null>(null);
+  const [qcFeedback, setQcFeedback] = useState('');
+
 
   const loadOrders = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -92,11 +108,32 @@ export default function BuyerMyOrdersScreen() {
       setMembership(member);
       const orgId = member?.organizationId || member?.organization?.id;
       if (!orgId) throw new Error('Buyer organization membership was not found. Please sign in again.');
-      const data = await apiGet<Order[]>('/purchase-orders');
+      const [data, sampleData] = await Promise.all([apiGet<Order[]>('/purchase-orders'), apiGet<SamplePaymentInfo[]>('/samples').catch(() => [] as SamplePaymentInfo[])]);
       const list = Array.isArray(data) ? data : [];
       // The shared endpoint returns orders for every active organization membership.
       // My Orders must show only POs where the signed-in organization is the buyer.
-      setOrders(list.filter(order => order.buyerOrgId === orgId));
+      const buyerOrders = list.filter(order => order.buyerOrgId === orgId);
+      setOrders(buyerOrders);
+      const sampleMap: Record<string, SamplePaymentInfo[]> = {};
+      (Array.isArray(sampleData) ? sampleData : []).forEach(sample => {
+        const sampleOrderId = (sample as SamplePaymentInfo & { purchaseOrderId?: string }).purchaseOrderId;
+        if (sampleOrderId) sampleMap[sampleOrderId] = [...(sampleMap[sampleOrderId] || []), sample];
+      });
+      setSamplesByOrder(sampleMap);
+      try {
+        let paymentDashboard = await apiGet<{ orders: PaymentSummary[] }>('/payments/dashboard');
+        let paymentOrders = (paymentDashboard.orders || []).filter(order => order.buyerOrgId === orgId);
+        const missingPlans = paymentOrders.filter(order => !order.paymentPlan);
+        await Promise.all(missingPlans.map(order => apiPost(`/payments/orders/${order.id}/plan`, {})));
+        if (missingPlans.length) {
+          paymentDashboard = await apiGet<{ orders: PaymentSummary[] }>('/payments/dashboard');
+          paymentOrders = (paymentDashboard.orders || []).filter(order => order.buyerOrgId === orgId);
+        }
+        setPaymentSummaries(Object.fromEntries(paymentOrders.map(order => [order.id, order.paymentPlan || null])));
+      } catch {
+        // Keep order tracking available if payment services are temporarily unavailable.
+        setPaymentSummaries({});
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to load your purchase orders.');
     } finally {
@@ -136,6 +173,58 @@ export default function BuyerMyOrdersScreen() {
         }
       },
     ]);
+  };
+
+  const reviewQualityCheck = async (decision: 'APPROVE' | 'REJECT') => {
+    if (!qcReviewOrder) return;
+    if (decision === 'REJECT' && qcFeedback.trim().length < 5) {
+      Alert.alert('Reason required', 'Please explain the QC issue in at least 5 characters.');
+      return;
+    }
+    const order = qcReviewOrder;
+    try {
+      setUpdatingOrderId(order.id);
+      const status = decision === 'APPROVE' ? 'READY_TO_DISPATCH' : 'IN_PRODUCTION';
+      await apiRequest(`/purchase-orders/${order.id}/status`, {
+        method: 'PATCH',
+        body: {
+          status,
+          qcNotes: decision === 'APPROVE'
+            ? `BUYER APPROVED QC: ${qcFeedback.trim() || 'Quality inspection approved'}`
+            : `BUYER REJECTED QC: ${qcFeedback.trim()}`,
+          note: decision === 'APPROVE'
+            ? 'Buyer reviewed and approved the supplier quality inspection. Order is ready for dispatch.'
+            : `Buyer requested QC rework: ${qcFeedback.trim()}`,
+        },
+      });
+      setQcReviewOrder(null);
+      setQcFeedback('');
+      await loadOrders(true);
+      Alert.alert(decision === 'APPROVE' ? 'Quality check approved' : 'Recheck requested',
+        decision === 'APPROVE' ? 'Supplier can now proceed to dispatch.' : 'Supplier has been asked to correct the QC issues and resubmit for buyer review.');
+    } catch (e) {
+      Alert.alert('Unable to update quality check', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
+
+  const runSamplePayment = async (outcome: 'SUCCESS' | 'FAILED' | 'PENDING') => {
+    if (!samplePaymentOpen) return;
+    try {
+      setSamplePaymentBusy(true);
+      const result = await apiPost<{ message?: string }>(`/payments/samples/${samplePaymentOpen.sample.id}/test-payment`, { outcome });
+      setSamplePaymentOpen(null);
+      await loadOrders(true);
+      Alert.alert(
+        outcome === 'SUCCESS' ? 'Sample payment successful' : outcome === 'FAILED' ? 'Sample payment failed' : 'Sample payment pending',
+        result?.message || 'This is a simulated test payment. No real money was collected.',
+      );
+    } catch (e) {
+      Alert.alert('Sample payment could not be completed', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
+      setSamplePaymentBusy(false);
+    }
   };
 
   const submitReview = async () => {
@@ -211,6 +300,12 @@ export default function BuyerMyOrdersScreen() {
               : 'Garment Production Order';
             const buyerName = order.buyer?.name || 'Your Organization';
             const canReview = ['DELIVERED', 'COMPLETED'].includes(order.status) && !reviewedOrderIds.includes(order.id);
+            const paymentPlan = paymentSummaries[order.id];
+            const paymentMilestones = [...(paymentPlan?.milestones || [])].sort((a, b) => a.sequence - b.sequence);
+            const paymentPaid = paymentMilestones.filter(item => ['PAID', 'RELEASED'].includes(item.status)).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+            const paymentTotal = Number(paymentPlan?.totalAmount || order.totalAmount || 0);
+            const paymentPercent = paymentTotal > 0 ? Math.min(100, Math.round(paymentPaid / paymentTotal * 100)) : 0;
+            const paidCount = paymentMilestones.filter(item => ['PAID', 'RELEASED'].includes(item.status)).length;
             return (
               <View key={order.id} style={styles.orderCard}>
                 <View style={styles.orderMeta}>
@@ -229,6 +324,26 @@ export default function BuyerMyOrdersScreen() {
                     <Text style={styles.progressPercent}>{progress}%{'\n'}{progress === 100 ? 'Completed' : order.status === 'CANCELLED' ? 'Cancelled' : 'In Progress'}</Text>
                   </View>
                   <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${progress}%` }]} /></View>
+                {!!paymentMilestones.length && (
+                    <View style={styles.paymentProgressPanel}>
+                      <View style={styles.paymentProgressHeader}>
+                        <Text style={styles.paymentProgressTitle}>Payment Milestones</Text>
+                        <Text style={styles.paymentProgressCount}>{paidCount} of {paymentMilestones.length} paid</Text>
+                      </View>
+                      <View style={styles.paymentSegments}>
+                        {paymentMilestones.map(item => <View key={item.id} style={[styles.paymentSegment, ['PAID', 'RELEASED'].includes(item.status) && styles.paymentSegmentPaid]} />)}
+                      </View>
+                      <View style={styles.paymentProgressFooter}>
+                        <View><Text style={styles.paymentCaption}>Verified payment</Text><Text style={styles.paymentValue}>{money(paymentPaid, paymentPlan?.currency || order.currency)}</Text></View>
+                        <View style={{ alignItems: 'flex-end' }}><Text style={styles.paymentCaption}>Payment progress</Text><Text style={styles.paymentValue}>{paymentPercent}%</Text></View>
+                      </View>
+                      <Pressable style={styles.paymentDetailsButton} onPress={() => router.push({ pathname: '/buyer/[section]', params: { section: 'payments', orderId: order.id } } as any)}>
+                        <MaterialCommunityIcons name="wallet-outline" size={18} color={PURPLE} />
+                        <Text style={styles.paymentDetailsText}>View {paymentMilestones.length} payment milestones</Text>
+                        <MaterialCommunityIcons name="chevron-right" size={20} color={PURPLE} />
+                      </Pressable>
+                    </View>
+                  )}
                 </View>
                 {updatingOrderId === order.id ? (
                   <View style={styles.inlineStatus}><ActivityIndicator color={PURPLE} /><Text style={styles.inlineStatusText}>Updating order...</Text></View>
@@ -238,11 +353,24 @@ export default function BuyerMyOrdersScreen() {
                   <View style={[styles.inlineStatus, { backgroundColor: '#E9FBF2', borderColor: '#B7EED4' }]}><MaterialCommunityIcons name="check-circle" size={17} color="#087653" /><Text style={[styles.inlineStatusText, { color: '#087653' }]}>Order Accepted by Supplier • PP Sample in Progress</Text></View>
                 ) : order.status === 'SAMPLE_PENDING' ? (
                   <Pressable style={styles.buyerActionButton} onPress={() => updateOrderStatus(order, 'SAMPLE_APPROVED')}><MaterialCommunityIcons name="check-circle" size={19} color="#fff" /><Text style={styles.buyerActionText}>Approve PP Sample</Text></Pressable>
+                ) : order.status === 'QC_PENDING' || order.status === 'QC' ? (
+                  <Pressable style={styles.buyerActionButton} onPress={() => { setQcReviewOrder(order); setQcFeedback(''); }}>
+                    <MaterialCommunityIcons name="clipboard-check-outline" size={19} color="#fff" />
+                    <Text style={styles.buyerActionText}>Review Quality Check</Text>
+                  </Pressable>
                 ) : order.status === 'DISPATCHED' ? (
                   <Pressable style={styles.buyerActionButton} onPress={() => updateOrderStatus(order, 'DELIVERED')}><MaterialCommunityIcons name="package-variant-closed-check" size={19} color="#fff" /><Text style={styles.buyerActionText}>Confirm Delivery Received</Text></Pressable>
                 ) : order.status === 'DELIVERED' ? (
                   <Pressable style={styles.buyerActionButton} onPress={() => updateOrderStatus(order, 'COMPLETED')}><MaterialCommunityIcons name="cash-check" size={19} color="#fff" /><Text style={styles.buyerActionText}>Release Payment & Complete</Text></Pressable>
                 ) : null}
+                {(samplesByOrder[order.id] || []).filter(sample => Number(sample.parsedMeta?.samplePrice || 0) > 0).slice(0, 1).map(sample => {
+                  const samplePaid = sample.parsedMeta?.samplePaymentStatus === 'PAID';
+                  return <Pressable key={sample.id} style={[styles.samplePaymentButton, samplePaid && styles.samplePaymentPaidButton]} onPress={() => setSamplePaymentOpen({ order, sample })}>
+                    <MaterialCommunityIcons name={samplePaid ? 'check-circle' : 'hanger'} size={19} color={samplePaid ? '#087653' : '#fff'} />
+                    <Text style={[styles.samplePaymentButtonText, samplePaid && styles.samplePaymentPaidText]}>{samplePaid ? 'Sample Paid · View Details' : 'Pay Sample Amount'}</Text>
+                    <Text style={[styles.samplePaymentAmount, samplePaid && styles.samplePaymentPaidText]}>{money(sample.parsedMeta?.samplePrice, order.currency)}</Text>
+                  </Pressable>;
+                })}
                 <View style={styles.cardDivider} />
                 {canReview && (
                   <Pressable style={styles.reviewButton} onPress={() => { setReviewOrder(order); setRating(5); setComment(''); }}>
@@ -310,6 +438,68 @@ export default function BuyerMyOrdersScreen() {
         </Pressable>
       </Modal>
 
+      <Modal visible={!!samplePaymentOpen} transparent animationType="slide" onRequestClose={() => setSamplePaymentOpen(null)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setSamplePaymentOpen(null)}>
+          <Pressable style={styles.samplePaymentSheet} onPress={() => { }}>
+            <View style={styles.dragHandle} />
+            <View style={styles.sheetHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sheetTitle}>Sample Payment</Text>
+                <Text style={styles.sheetSubtitle}>{samplePaymentOpen?.order.poNumber}</Text>
+              </View>
+              <Pressable onPress={() => setSamplePaymentOpen(null)}><MaterialCommunityIcons name="close" size={24} color="#737B87" /></Pressable>
+            </View>
+            <Text style={styles.samplePaymentName}>{samplePaymentOpen?.sample.sampleName || samplePaymentOpen?.sample.sampleType || 'Order Sample'}</Text>
+            <View style={styles.samplePaymentInfoRow}>
+              <Text style={styles.samplePaymentLabel}>Sample amount</Text>
+              <Text style={styles.samplePaymentValue}>{money(samplePaymentOpen?.sample.parsedMeta?.samplePrice, samplePaymentOpen?.order.currency)}</Text>
+            </View>
+            <View style={styles.samplePaymentInfoRow}>
+              <Text style={styles.samplePaymentLabel}>Payment status</Text>
+              <Text style={[styles.samplePaymentValue, { color: samplePaymentOpen?.sample.parsedMeta?.samplePaymentStatus === 'PAID' ? '#087653' : '#9A5B00' }]}>
+                {samplePaymentOpen?.sample.parsedMeta?.samplePaymentStatus === 'PAID' ? 'PAID' : samplePaymentOpen?.sample.parsedMeta?.samplePaymentStatus || 'NOT PAID'}
+              </Text>
+            </View>
+            {samplePaymentOpen?.sample.parsedMeta?.samplePaymentStatus === 'PAID' ? (
+              <View style={styles.samplePaidNotice}><MaterialCommunityIcons name="check-circle" size={20} color="#087653" /><Text style={styles.samplePaidNoticeText}>Sample payment is already completed. You do not need to pay again.</Text></View>
+            ) : (
+              <>
+                <Text style={styles.samplePaymentHint}>This payment is only for the sample. Production and final payments will be handled separately after sample approval.</Text>
+                <Pressable disabled={samplePaymentBusy} style={[styles.samplePayNowButton, samplePaymentBusy && { opacity: 0.6 }]} onPress={() => Alert.alert('Choose test result', 'Select a test outcome. This simulator does not collect real money.', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Success', onPress: () => void runSamplePayment('SUCCESS') },
+                  { text: 'Failed', style: 'destructive', onPress: () => void runSamplePayment('FAILED') },
+                  { text: 'Pending', onPress: () => void runSamplePayment('PENDING') },
+                ])}>
+                  {samplePaymentBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.samplePayNowText}>Pay Sample Amount</Text>}
+                </Pressable>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={!!qcReviewOrder} transparent animationType="slide" onRequestClose={() => setQcReviewOrder(null)}>
+        <KeyboardAvoidingView style={styles.reviewBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <ScrollView contentContainerStyle={styles.reviewScroll} keyboardShouldPersistTaps="handled" bounces={false}>
+            <View style={styles.reviewSheet}>
+              <View style={styles.sheetHeader}>
+                <View style={{ flex: 1 }}><Text style={styles.sheetTitle}>Quality Check Review</Text><Text style={styles.sheetSubtitle}>{qcReviewOrder?.poNumber}</Text></View>
+                <Pressable style={styles.reviewClose} onPress={() => setQcReviewOrder(null)}><MaterialCommunityIcons name="close" size={24} color={ui.muted} /></Pressable>
+              </View>
+              <Text style={styles.ratingPrompt}>Supplier QC report</Text>
+              <Text style={styles.qcReportText}>{qcReviewOrder?.qcNotes?.trim() || 'Supplier has submitted the order for quality inspection. No detailed QC notes were attached.'}</Text>
+              <Text style={styles.ratingPrompt}>Your review note (optional for approval, required for recheck)</Text>
+              <TextInput value={qcFeedback} onChangeText={setQcFeedback} placeholder="Add your QC observations..." placeholderTextColor={ui.muted} multiline style={styles.commentInput} />
+              <Pressable disabled={!!updatingOrderId} onPress={() => Alert.alert('Approve quality check?', 'This will allow the supplier to proceed to dispatch.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Approve QC', onPress: () => void reviewQualityCheck('APPROVE') }])} style={[styles.submitReviewButton, !!updatingOrderId && { opacity: .6 }]}>
+                {updatingOrderId === qcReviewOrder?.id ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitReviewText}>Approve QC</Text>}
+              </Pressable>
+              <Pressable disabled={!!updatingOrderId} onPress={() => void reviewQualityCheck('REJECT')} style={styles.qcRejectButton}><Text style={styles.qcRejectText}>Reject / Request Recheck</Text></Pressable>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+
       <Modal visible={!!reviewOrder} transparent animationType="fade" onRequestClose={() => setReviewOrder(null)}>
         <KeyboardAvoidingView style={styles.reviewBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <ScrollView contentContainerStyle={styles.reviewScroll} keyboardShouldPersistTaps="handled" bounces={false}>
@@ -356,6 +546,18 @@ const styles = StyleSheet.create({
   progressPercent: { fontSize: 13, color: ui.muted, lineHeight: 18, textAlign: 'left', minWidth: 76 },
   progressTrack: { height: 8, borderRadius: 8, backgroundColor: '#E4DDF1', overflow: 'hidden' },
   progressFill: { height: 8, borderRadius: 8, backgroundColor: '#4B00B8' },
+  paymentProgressPanel: { backgroundColor: '#F7F2FE', borderRadius: 14, padding: 12, marginTop: 2, marginBottom: 12, borderWidth: 1, borderColor: '#E9DDFB' },
+  paymentProgressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 9 },
+  paymentProgressTitle: { fontSize: 13, fontWeight: '700', color: '#5314B8' },
+  paymentProgressCount: { fontSize: 12, fontWeight: '700', color: '#5314B8' },
+  paymentSegments: { flexDirection: 'row', gap: 5, marginBottom: 10 },
+  paymentSegment: { flex: 1, height: 7, borderRadius: 6, backgroundColor: '#DED8E8' },
+  paymentSegmentPaid: { backgroundColor: '#4B00B8' },
+  paymentProgressFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  paymentCaption: { fontSize: 11, color: '#6D6679' },
+  paymentValue: { fontSize: 14, fontWeight: '700', color: '#5314B8', marginTop: 2 },
+  paymentDetailsButton: { minHeight: 40, borderWidth: 1, borderColor: '#D9C7F5', borderRadius: 10, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#FFFFFF' },
+  paymentDetailsText: { flex: 1, fontSize: 12, fontWeight: '700', color: '#5314B8' },
   inlineStatus: { minHeight: 42, backgroundColor: '#F5F0FC', borderWidth: 1, borderColor: '#E7DDF8', borderRadius: 12, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
   inlineStatusText: { flex: 1, fontSize: 12, fontWeight: '700', color: '#5314B8', lineHeight: 16 },
   buyerActionButton: { minHeight: 44, alignSelf: 'flex-start', backgroundColor: PURPLE, borderRadius: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 2 },
@@ -398,6 +600,24 @@ const styles = StyleSheet.create({
   milestoneIcon: { width: 35, height: 35, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   milestoneTitle: { fontSize: 13, fontWeight: '700', color: '#303744' },
   milestoneMeta: { fontSize: 12, color: ui.muted, marginTop: 4 },
+  samplePaymentButton: { minHeight: 48, backgroundColor: PURPLE, borderRadius: 12, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 12 },
+  samplePaymentButtonText: { flex: 1, fontSize: 13, fontWeight: '700', color: '#fff' },
+  samplePaymentAmount: { fontSize: 13, fontWeight: '800', color: '#fff' },
+  samplePaymentPaidButton: { backgroundColor: '#E8F8F0', borderWidth: 1, borderColor: '#BDEBD2' },
+  samplePaymentPaidText: { color: '#087653' },
+  samplePaymentSheet: { backgroundColor: ui.surface, borderTopLeftRadius: 25, borderTopRightRadius: 25, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 28 },
+  samplePaymentName: { fontSize: 16, fontWeight: '700', color: ui.ink, marginBottom: 14 },
+  samplePaymentInfoRow: { minHeight: 44, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#EEF0F3' },
+  samplePaymentLabel: { fontSize: 13, color: ui.muted },
+  samplePaymentValue: { fontSize: 14, fontWeight: '700', color: ui.ink },
+  samplePaymentHint: { fontSize: 12, lineHeight: 18, color: ui.muted, marginTop: 14 },
+  samplePaidNotice: { flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: '#E8F8F0', borderRadius: 12, padding: 12, marginTop: 15 },
+  samplePaidNoticeText: { flex: 1, fontSize: 12, color: '#087653', lineHeight: 18, fontWeight: '600' },
+  samplePayNowButton: { minHeight: 49, backgroundColor: PURPLE, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 16 },
+  samplePayNowText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  qcReportText: { fontSize: 13, color: ui.ink, lineHeight: 20, backgroundColor: '#F6F4F9', borderRadius: 12, padding: 12, marginTop: 8 },
+  qcRejectButton: { minHeight: 46, borderWidth: 1, borderColor: '#E6B8B4', borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
+  qcRejectText: { color: '#B42318', fontSize: 13, fontWeight: '700' },
   reviewBackdrop: { flex: 1, backgroundColor: 'rgba(13,10,22,.48)', justifyContent: 'center', padding: 18 },
   reviewSheet: { width: '100%', maxWidth: 480, alignSelf: 'center', backgroundColor: ui.surface, borderRadius: 20, padding: 20 },
   reviewScroll: { flexGrow: 1, justifyContent: 'center' },

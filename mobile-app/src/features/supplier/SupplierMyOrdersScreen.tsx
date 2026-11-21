@@ -17,12 +17,14 @@ const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparen
 
 type OrderItem = { id: string; name: string; quantity: number; unitPrice?: number | string };
 type Milestone = { id: string; title: string; status: string; dueDate?: string | null; completedAt?: string | null };
+type PaymentMilestone = { id: string; title: string; sequence: number; percentage: number; amount: number | string; status: string; rejectionReason?: string | null };
 type PurchaseOrder = {
   id: string; poNumber: string; status: string; totalAmount: number | string; currency?: string;
   expectedDate?: string | null; createdAt: string; buyerOrgId: string; supplierOrgId: string;
   buyer?: { id: string; name: string; city?: string | null };
   supplier?: { id: string; name: string; city?: string | null };
   items?: OrderItem[]; milestones?: Milestone[]; samples?: { id: string; status: string }[];
+  paymentPlan?: { milestones: PaymentMilestone[] } | null;
 };
 type Membership = { organizationId?: string; organization?: { id?: string }; role?: string };
 
@@ -96,6 +98,10 @@ export default function SupplierMyOrdersScreen() {
   const [headerHeight, setHeaderHeight] = useState(0);
   const [bottomHeight, setBottomHeight] = useState(0);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [dispatchOrder, setDispatchOrder] = useState<PurchaseOrder | null>(null);
+  const [trackingNumberDraft, setTrackingNumberDraft] = useState('');
+  const [sampleOrderIds, setSampleOrderIds] = useState<Set<string>>(new Set());
+
 
   const loadOrders = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -108,9 +114,18 @@ export default function SupplierMyOrdersScreen() {
       if (member?.role !== 'SUPPLIER' || !organizationId) {
         throw new Error('Active supplier membership not found. Please sign in again.');
       }
-      const response = await apiGet<PurchaseOrder[]>('/purchase-orders');
+      const [response, paymentDashboard, sampleRows] = await Promise.all([
+        apiGet<PurchaseOrder[]>('/purchase-orders'),
+        apiGet<{ orders?: PurchaseOrder[] }>('/payments/dashboard'),
+        apiGet<Array<{ purchaseOrderId: string }>>('/samples').catch(() => [] as Array<{ purchaseOrderId: string }>),
+      ]);
       const rows = Array.isArray(response) ? response : [];
-      setOrders(rows.filter(order => order.supplierOrgId === organizationId));
+      const paymentByOrder = new Map<string, PurchaseOrder>((paymentDashboard.orders || []).map(order => [order.id, order] as const));
+      setOrders(rows.filter(order => order.supplierOrgId === organizationId).map(order => ({
+        ...order,
+        paymentPlan: paymentByOrder.get(order.id)?.paymentPlan || null,
+      })));
+      setSampleOrderIds(new Set((Array.isArray(sampleRows) ? sampleRows : []).map(sample => sample.purchaseOrderId)));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to load your purchase orders.');
     } finally {
@@ -148,6 +163,27 @@ export default function SupplierMyOrdersScreen() {
   }, [orders, search, filter]);
 
   const updateStatus = (order: PurchaseOrder, nextStatus: string) => {
+    if (nextStatus === 'OPEN_SAMPLES') {
+      navigate('samples', order.id);
+      return;
+    }
+    if (nextStatus === 'DISPATCHED') {
+      void (async () => {
+        try {
+          setUpdatingId(order.id);
+          await apiRequest(`/purchase-orders/${order.id}/status`, {
+            method: 'PATCH',
+            body: { status: 'DISPATCHED', note: 'Supplier dispatched shipment.' },
+          });
+          await loadOrders(true);
+        } catch (e) {
+          Alert.alert('Unable to dispatch shipment', e instanceof Error ? e.message : 'Please try again.');
+        } finally {
+          setUpdatingId(null);
+        }
+      })();
+      return;
+    }
     const actionLabels: Record<string, string> = {
       ACCEPTED: 'accept this purchase order',
       SAMPLE_PENDING: 'mark the PP sample as dispatched for buyer review',
@@ -163,7 +199,13 @@ export default function SupplierMyOrdersScreen() {
           setUpdatingId(order.id);
           await apiRequest(`/purchase-orders/${order.id}/status`, {
             method: 'PATCH',
-            body: { status: nextStatus, note: `Supplier updated order status to ${nextStatus}` },
+            body: {
+              status: nextStatus,
+              ...(nextStatus === 'QC_PENDING' ? { qcNotes: 'Supplier submitted the completed quality inspection for buyer review.' } : {}),
+              note: nextStatus === 'QC_PENDING'
+                ? 'Supplier submitted quality inspection. Awaiting buyer review and approval.'
+                : `Supplier updated order status to ${nextStatus}`,
+            },
           });
           await loadOrders(true);
         } catch (e) {
@@ -175,12 +217,14 @@ export default function SupplierMyOrdersScreen() {
     ]);
   };
 
+
+
   const supplierAction = (order: PurchaseOrder) => {
     if (order.status === 'PO_CREATED' || order.status === 'PENDING_ACCEPTANCE') return { label: 'Accept Order', icon: 'check-decagram', status: 'ACCEPTED', color: '#079669' };
-    if (order.status === 'ACCEPTED') return { label: 'Dispatch PP Sample', icon: 'send', status: 'SAMPLE_PENDING', color: PURPLE };
+
     if (order.status === 'SAMPLE_APPROVED') return { label: 'Start Bulk Production', icon: 'factory', status: 'PRODUCTION_STARTED', color: PURPLE };
     if (order.status === 'PRODUCTION_STARTED' || order.status === 'IN_PRODUCTION') return { label: 'Submit for Quality Inspection', icon: 'clipboard-check', status: 'QC_PENDING', color: PURPLE };
-    if (order.status === 'QC_PENDING' || order.status === 'QC') return { label: 'Quality Check Passed', icon: 'check-decagram', status: 'READY_TO_DISPATCH', color: PURPLE };
+    if (order.status === 'QC_PENDING' || order.status === 'QC') return null;
     if (order.status === 'READY_TO_DISPATCH') return { label: 'Dispatch Shipment', icon: 'truck-delivery', status: 'DISPATCHED', color: PURPLE };
     return null;
   };
@@ -244,6 +288,21 @@ export default function SupplierMyOrdersScreen() {
                 </View>
                 <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${progress}%` }]} /></View>
               </View>
+              {!!order.paymentPlan?.milestones?.length && (() => {
+                const paymentMilestones = [...order.paymentPlan.milestones].sort((a, b) => a.sequence - b.sequence);
+                const paidCount = paymentMilestones.filter(item => ['PAID', 'RELEASED'].includes(item.status)).length;
+                const paymentPercent = Math.round((paidCount / paymentMilestones.length) * 100);
+                return <View style={{ backgroundColor: '#F7F2FF', borderRadius: 12, padding: 12, marginBottom: 12, gap: 8 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ color: '#5314B8', fontSize: 12, fontWeight: '800' }}>Payment Milestones</Text>
+                    <Text style={{ color: '#5314B8', fontSize: 12, fontWeight: '800' }}>{paidCount} of {paymentMilestones.length} paid</Text>
+                  </View>
+                  <View style={{ height: 7, backgroundColor: '#E2D7F5', borderRadius: 8, overflow: 'hidden' }}><View style={{ height: '100%', width: `${paymentPercent}%`, backgroundColor: PURPLE, borderRadius: 8 }} /></View>
+                  <Pressable onPress={() => navigate('payments', order.id)} style={{ alignSelf: 'flex-start', paddingVertical: 5 }}><Text style={{ color: PURPLE, fontSize: 12, fontWeight: '800' }}>View Payment Status & Submit Proof</Text></Pressable>
+                </View>;
+              })()}
+              {order.status === 'ACCEPTED' && !sampleOrderIds.has(order.id) ? <View style={styles.inlineNotice}><MaterialCommunityIcons name="clock-outline" size={18} color="#A66A00" /><Text style={styles.inlineNoticeText}>Awaiting Buyer sample request. You can set the sample price once the request is created.</Text></View> : null}
+              {order.status === 'QC_PENDING' || order.status === 'QC' ? <View style={styles.inlineNotice}><MaterialCommunityIcons name="clock-check-outline" size={18} color="#A66A00" /><Text style={styles.inlineNoticeText}>QC report submitted · Awaiting Buyer approval</Text></View> : null}
               {updatingId === order.id ? <View style={styles.updatingRow}><ActivityIndicator color={PURPLE} /><Text style={styles.updatingText}>Updating order...</Text></View>
               : action ? <View style={styles.supplierActionRow}>
                   <Text style={styles.supplierActionLabel}>Supplier Action:</Text>
@@ -265,7 +324,7 @@ export default function SupplierMyOrdersScreen() {
                   <MaterialCommunityIcons name="hanger" size={27} color="#17202D" />
                   <Text style={styles.actionLabel}>View Samples</Text>
                 </Pressable>
-                <Pressable style={styles.actionItem} onPress={() => navigate('payments')}>
+                <Pressable style={styles.actionItem} onPress={() => navigate('payments', order.id)}>
                   <MaterialCommunityIcons name="wallet-outline" size={27} color="#17202D" />
                   <Text style={styles.actionLabel}>Secure Payment</Text>
                 </Pressable>
@@ -292,6 +351,22 @@ export default function SupplierMyOrdersScreen() {
             </ScrollView>
           </Pressable>
         </Pressable>
+      </Modal>
+
+      <Modal visible={false} transparent animationType="slide" onRequestClose={() => setDispatchOrder(null)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.filterSheet}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}><Text style={styles.sheetTitle}>Confirm Shipment Dispatch</Text><Pressable onPress={() => setDispatchOrder(null)}><MaterialCommunityIcons name="close" size={23} color="#596273" /></Pressable></View>
+            <Text style={styles.stateText}>Enter the courier or shipment tracking number for PO #{dispatchOrder?.poNumber}. The buyer will receive this update.</Text>
+            <View style={styles.searchBox}>
+              <TextInput value={trackingNumberDraft} onChangeText={setTrackingNumberDraft} placeholder="Enter tracking number" placeholderTextColor="#8B929C" style={styles.searchInput} autoCapitalize="characters" />
+            </View>
+            <Pressable style={[styles.acceptButton, { backgroundColor: PURPLE }]} onPress={() => undefined} disabled={!!updatingId}>
+              <Text style={styles.acceptButtonText}>{updatingId === dispatchOrder?.id ? 'Updating...' : 'Confirm Dispatch'}</Text>
+            </Pressable>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -328,6 +403,8 @@ const styles = StyleSheet.create({
   progressPercent: { color: '#68717E', fontSize: 13, lineHeight: 20, textAlign: 'right', fontWeight: '600' },
   progressTrack: { height: 9, backgroundColor: '#DCE8FF', borderRadius: 8, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: '#5314B8', borderRadius: 8 },
+  inlineNotice: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFF7E8', borderColor: '#F4D79B', borderWidth: 1, borderRadius: 11, paddingHorizontal: 11, marginBottom: 13 },
+  inlineNoticeText: { flex: 1, color: '#8A5700', fontSize: 12, fontWeight: '700' },
   supplierActionRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 9, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#E9EBEF' },
   supplierActionLabel: { color: '#69717D', fontSize: 13, fontWeight: '600' },
   acceptButton: { minHeight: 47, borderRadius: 13, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, elevation: 0 },
