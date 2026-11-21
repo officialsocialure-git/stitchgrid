@@ -4,14 +4,12 @@ import { prisma } from "../config/prisma";
 import { env } from "../config/env";
 import { AppError, sendOk } from "../utils/http";
 import { audit } from "../services/audit";
-import { emitToOrg, emitToRole } from "../services/realtime";
+import { emitToOrg, emitToRole, emitToUser } from "../services/realtime";
 import { createRazorpayOrder, createRazorpayRefund, fetchRazorpayPayment, getRazorpayPublicKey, isRazorpayConfigured, verifyCheckoutSignature, verifyWebhookSignature } from "../services/razorpay";
 
 const DEFAULT_PLAN = [
-  { title: "Order Confirmation", sequence: 1, percentage: 20 },
-  { title: "Sample Approval", sequence: 2, percentage: 20 },
-  { title: "Production Completion", sequence: 3, percentage: 40 },
-  { title: "QC & Dispatch", sequence: 4, percentage: 20 }
+  { title: "Production Payment", sequence: 1, percentage: 0 },
+  { title: "Final Payment", sequence: 2, percentage: 100 }
 ];
 
 async function orderMembership(orderId: string, userId: string) {
@@ -40,7 +38,7 @@ async function ensurePaymentPlan(orderId: string) {
           amount: index === DEFAULT_PLAN.length - 1
             ? total - DEFAULT_PLAN.slice(0, -1).reduce((sum, part) => sum + total * part.percentage / 100, 0)
             : total * item.percentage / 100,
-          status: index === 0 ? ("DUE" as const) : ("UPCOMING" as const)
+          status: "UPCOMING" as const
         }))
       },
     },
@@ -68,11 +66,11 @@ export async function paymentDashboard(req: Request, res: Response, next: NextFu
       orderBy: { createdAt: "desc" }
     });
     return sendOk(res, {
-      provider: env.MOCK_PAYMENTS_ENABLED ? "MOCK_TEST" : "NONE",
-      paymentMode: env.MOCK_PAYMENTS_ENABLED ? "MOCK_TEST" : "DISABLED",
+      provider: env.MOCK_PAYMENTS_ENABLED ? "MOCK_TEST" : isRazorpayConfigured() ? "RAZORPAY" : "NONE",
+      paymentMode: env.MOCK_PAYMENTS_ENABLED ? "MOCK_TEST" : isRazorpayConfigured() ? "RAZORPAY" : "DISABLED",
       mockPaymentsEnabled: Boolean(env.MOCK_PAYMENTS_ENABLED),
-      checkoutConfigured: false,
-      razorpayKeyId: env.MOCK_PAYMENTS_ENABLED ? null : getRazorpayPublicKey(),
+      checkoutConfigured: !env.MOCK_PAYMENTS_ENABLED && isRazorpayConfigured(),
+      razorpayKeyId: env.MOCK_PAYMENTS_ENABLED || !isRazorpayConfigured() ? null : getRazorpayPublicKey(),
       supplierSetup: profile || { status: "NOT_STARTED", kycStatus: "NOT_STARTED", settlementStatus: "NOT_STARTED" },
       orders
     });
@@ -85,6 +83,120 @@ export async function getOrCreatePaymentPlan(req: Request, res: Response, next: 
     if (membership.role !== "BUYER" || membership.organizationId !== order.buyerOrgId) throw new AppError(403, "Only the buyer can set the payment plan.");
     const plan = await ensurePaymentPlan(order.id);
     return sendOk(res, plan);
+  } catch (e) { next(e); }
+}
+
+export async function setProductionAmount(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = z.object({ amount: z.coerce.number().positive().max(999999999) }).parse(req.body);
+    const order = await prisma.purchaseOrder.findUnique({ where: { id: String(req.params.orderId) }, include: { samples: { orderBy: { updatedAt: "desc" } }, paymentPlan: { include: { milestones: { include: { transactions: true } } } } } });
+    if (!order) throw new AppError(404, "Purchase order not found.");
+    const supplier = await prisma.organizationMember.findFirst({ where: { userId: req.auth!.userId, organizationId: order.supplierOrgId, role: "SUPPLIER", isActive: true } });
+    if (!supplier) throw new AppError(403, "Only the order supplier can set the production payment amount.");
+    if (order.status !== "SAMPLE_APPROVED" && !order.samples.some(sample => sample.status === "APPROVED")) throw new AppError(409, "The buyer must approve the sample before production payment can be set.");
+    if (order.currency !== "INR") throw new AppError(400, "Mock production payments currently support INR only.");
+    const total = Number(order.totalAmount);
+    const productionAmount = Math.round(input.amount * 100) / 100;
+    if (productionAmount <= 0 || productionAmount >= total) throw new AppError(400, "Production payment must be less than the total order value so a final balance remains.");
+    if (order.paymentPlan?.milestones.some(m => m.transactions.length)) throw new AppError(409, "The payment schedule cannot be changed after a payment attempt has started.");
+    const balance = Math.round((total - productionAmount) * 100) / 100;
+    const plan = await prisma.$transaction(async tx => {
+      const current = await tx.paymentPlan.findUnique({ where: { purchaseOrderId: order.id }, include: { milestones: true } });
+      if (current) {
+        await tx.paymentMilestone.deleteMany({ where: { paymentPlanId: current.id } });
+        return tx.paymentPlan.update({
+          where: { id: current.id },
+          data: { totalAmount: order.totalAmount, currency: order.currency, milestones: { create: [
+            { title: "Production Payment", sequence: 1, percentage: productionAmount / total * 100, amount: productionAmount, status: "DUE" },
+            { title: "Final Payment", sequence: 2, percentage: balance / total * 100, amount: balance, status: "UPCOMING" }
+          ] } },
+          include: { milestones: { orderBy: { sequence: "asc" } } }
+        });
+      }
+      return tx.paymentPlan.create({
+        data: { purchaseOrderId: order.id, totalAmount: order.totalAmount, currency: order.currency, milestones: { create: [
+          { title: "Production Payment", sequence: 1, percentage: productionAmount / total * 100, amount: productionAmount, status: "DUE" },
+          { title: "Final Payment", sequence: 2, percentage: balance / total * 100, amount: balance, status: "UPCOMING" }
+        ] } },
+        include: { milestones: { orderBy: { sequence: "asc" } } }
+      });
+    });
+    await prisma.orderEvent.create({ data: { purchaseOrderId: order.id, eventType: "PRODUCTION_PAYMENT_AMOUNT_SET", note: `Supplier set production payment to ${productionAmount.toFixed(2)} ${order.currency}; final balance ${balance.toFixed(2)} ${order.currency}.`, actorUserId: req.auth!.userId } });
+    const buyers = await prisma.organizationMember.findMany({ where: { organizationId: order.buyerOrgId, role: "BUYER", isActive: true }, select: { userId: true } });
+    if (buyers.length) await prisma.notification.createMany({ data: buyers.map(member => ({ userId: member.userId, title: "Production payment due", body: `Supplier set the production payment for PO #${order.poNumber} to INR ${productionAmount.toFixed(2)}. Review and pay when ready.` })) });
+    buyers.forEach(member => emitToUser(member.userId, "notification:new", { orderId: order.id, title: "Production payment due" }));
+    emitToOrg(order.buyerOrgId, "payment:updated", { orderId: order.id, status: "DUE", stage: "PRODUCTION" });
+    emitToOrg(order.supplierOrgId, "payment:updated", { orderId: order.id, status: "DUE", stage: "PRODUCTION" });
+    await audit("PRODUCTION_PAYMENT_AMOUNT_SET", "PaymentPlan", plan.id, req.auth!.userId, order.supplierOrgId, { productionAmount, finalAmount: balance });
+    return sendOk(res, plan);
+  } catch (e) { next(e); }
+}
+
+export async function createMockSamplePayment(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!env.MOCK_PAYMENTS_ENABLED) throw new AppError(403, "Mock sample payments are disabled.");
+    const input = z.object({ outcome: z.enum(["SUCCESS", "FAILED", "PENDING"]) }).parse(req.body);
+    const sample = await prisma.sample.findUnique({ where: { id: String(req.params.sampleId) }, include: { purchaseOrder: true } });
+    if (!sample) throw new AppError(404, "Sample not found.");
+    const buyer = await prisma.organizationMember.findFirst({ where: { userId: req.auth!.userId, organizationId: sample.purchaseOrder.buyerOrgId, role: "BUYER", isActive: true } });
+    if (!buyer) throw new AppError(403, "Only the buyer can pay the sample amount.");
+    if (["PENDING_ACCEPTANCE", "PO_CREATED", "CANCELLED"].includes(sample.purchaseOrder.status)) throw new AppError(409, "The supplier must accept the purchase order before sample payment can begin.");
+    if (sample.purchaseOrder.currency !== "INR") throw new AppError(400, "Mock sample payments currently support INR only.");
+    let meta: any = {};
+    try { meta = sample.notes ? JSON.parse(sample.notes) : {}; } catch { meta = {}; }
+    const samplePrice = Number(meta.samplePrice || 0);
+    if (!Number.isFinite(samplePrice) || samplePrice <= 0) throw new AppError(409, "The supplier has not set the sample price yet.");
+    if (meta.samplePaymentStatus === "PAID") throw new AppError(409, "The sample has already been paid.");
+    const pendingId = meta.samplePaymentTransactionId as string | undefined;
+    if (meta.samplePaymentStatus === "PENDING" && pendingId) {
+      if (input.outcome === "PENDING") {
+        const pending = await prisma.paymentTransaction.findUnique({ where: { id: pendingId } });
+        return sendOk(res, { payment: pending, mode: "MOCK_TEST", message: "Sample payment is already pending." });
+      }
+      const status = input.outcome === "SUCCESS" ? "PAID" : "FAILED";
+      const updated = await prisma.$transaction(async tx => {
+        const claimed = await tx.sample.updateMany({ where: { id: sample.id, notes: sample.notes }, data: { notes: JSON.stringify({ ...meta, samplePaymentStatus: status }) } });
+        if (claimed.count !== 1) throw new AppError(409, "Sample payment is being updated. Refresh and retry.");
+        const paymentClaim = await tx.paymentTransaction.updateMany({ where: { id: pendingId, status: "PENDING" }, data: { status, capturedAt: status === "PAID" ? new Date() : null } });
+        if (paymentClaim.count !== 1) throw new AppError(409, "This sample payment has already been resolved.");
+        await tx.orderEvent.create({ data: { purchaseOrderId: sample.purchaseOrderId, eventType: "SAMPLE_PAYMENT_" + status, note: `Sample payment ${status.toLowerCase()} (${samplePrice.toFixed(2)} ${sample.purchaseOrder.currency})`, actorUserId: req.auth!.userId } });
+        return tx.paymentTransaction.findUniqueOrThrow({ where: { id: pendingId } });
+      });
+      await audit("MOCK_SAMPLE_PAYMENT_" + input.outcome, "PaymentTransaction", updated.id, req.auth!.userId, sample.purchaseOrder.buyerOrgId, { mode: "MOCK_TEST", sampleId: sample.id });
+      const suppliers = await prisma.organizationMember.findMany({ where: { organizationId: sample.purchaseOrder.supplierOrgId, role: "SUPPLIER", isActive: true }, select: { userId: true } });
+      const title = status === "PAID" ? "Sample payment received" : status === "FAILED" ? "Sample payment failed" : "Sample payment pending";
+      const body = `Buyer sample payment for PO #${sample.purchaseOrder.poNumber} (${sample.purchaseOrder.currency} ${samplePrice.toFixed(2)}) is ${status.toLowerCase()}. This is a simulated payment; no money was collected.`;
+      if (suppliers.length) await prisma.notification.createMany({ data: suppliers.map(member => ({ userId: member.userId, title, body })) });
+      suppliers.forEach(member => emitToUser(member.userId, "notification:new", { orderId: sample.purchaseOrderId, sampleId: sample.id, title }));
+      const buyerTitle = status === "PAID" ? "Sample payment successful" : status === "FAILED" ? "Sample payment failed" : "Sample payment pending";
+      const buyerMembers = await prisma.organizationMember.findMany({ where: { organizationId: sample.purchaseOrder.buyerOrgId, role: "BUYER", isActive: true }, select: { userId: true } });
+      if (buyerMembers.length) await prisma.notification.createMany({ data: buyerMembers.map(member => ({ userId: member.userId, title: buyerTitle, body: `Your sample payment for PO #${sample.purchaseOrder.poNumber} is ${status.toLowerCase()}. No real money was collected.` })) });
+      buyerMembers.forEach(member => emitToUser(member.userId, "notification:new", { orderId: sample.purchaseOrderId, sampleId: sample.id, title: buyerTitle }));
+      emitToOrg(sample.purchaseOrder.buyerOrgId, "payment:updated", { orderId: sample.purchaseOrderId, sampleId: sample.id, paymentId: updated.id, status, stage: "SAMPLE", mode: "MOCK_TEST" });
+      emitToOrg(sample.purchaseOrder.supplierOrgId, "payment:updated", { orderId: sample.purchaseOrderId, sampleId: sample.id, paymentId: updated.id, status, stage: "SAMPLE", mode: "MOCK_TEST" });
+      return sendOk(res, { payment: updated, mode: "MOCK_TEST", message: status === "PAID" ? "Sample test payment successful. No money was collected." : "Sample test payment failed." });
+    }
+    const status = input.outcome === "SUCCESS" ? "PAID" : input.outcome === "FAILED" ? "FAILED" : "PENDING";
+    const payment = await prisma.$transaction(async tx => {
+      const transaction = await tx.paymentTransaction.create({ data: { purchaseOrderId: sample.purchaseOrderId, provider: "MOCK_TEST", providerRef: "MOCK-SAMPLE-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10), paymentMethod: "SAMPLE_PAYMENT", amount: samplePrice, currency: sample.purchaseOrder.currency, status, signatureVerified: false, capturedAt: status === "PAID" ? new Date() : null } });
+      const claimed = await tx.sample.updateMany({ where: { id: sample.id, notes: sample.notes }, data: { notes: JSON.stringify({ ...meta, samplePaymentStatus: status, samplePaymentTransactionId: transaction.id }) } });
+      if (claimed.count !== 1) throw new AppError(409, "Sample payment has already been started. Refresh and retry.");
+      await tx.orderEvent.create({ data: { purchaseOrderId: sample.purchaseOrderId, eventType: "SAMPLE_PAYMENT_" + status, note: `Sample payment ${status.toLowerCase()} (${samplePrice.toFixed(2)} ${sample.purchaseOrder.currency})`, actorUserId: req.auth!.userId } });
+      return transaction;
+    });
+    await audit("MOCK_SAMPLE_PAYMENT_" + input.outcome, "PaymentTransaction", payment.id, req.auth!.userId, sample.purchaseOrder.buyerOrgId, { mode: "MOCK_TEST", sampleId: sample.id });
+    const suppliers = await prisma.organizationMember.findMany({ where: { organizationId: sample.purchaseOrder.supplierOrgId, role: "SUPPLIER", isActive: true }, select: { userId: true } });
+    const title = status === "PAID" ? "Sample payment received" : status === "FAILED" ? "Sample payment failed" : "Sample payment pending";
+    const body = `Buyer sample payment for PO #${sample.purchaseOrder.poNumber} (${sample.purchaseOrder.currency} ${samplePrice.toFixed(2)}) is ${status.toLowerCase()}. This is a simulated payment; no money was collected.`;
+    if (suppliers.length) await prisma.notification.createMany({ data: suppliers.map(member => ({ userId: member.userId, title, body })) });
+    suppliers.forEach(member => emitToUser(member.userId, "notification:new", { orderId: sample.purchaseOrderId, sampleId: sample.id, title }));
+    const buyerTitle = status === "PAID" ? "Sample payment successful" : status === "FAILED" ? "Sample payment failed" : "Sample payment pending";
+    const buyerMembers = await prisma.organizationMember.findMany({ where: { organizationId: sample.purchaseOrder.buyerOrgId, role: "BUYER", isActive: true }, select: { userId: true } });
+    if (buyerMembers.length) await prisma.notification.createMany({ data: buyerMembers.map(member => ({ userId: member.userId, title: buyerTitle, body: `Your sample payment for PO #${sample.purchaseOrder.poNumber} is ${status.toLowerCase()}. No real money was collected.` })) });
+    buyerMembers.forEach(member => emitToUser(member.userId, "notification:new", { orderId: sample.purchaseOrderId, sampleId: sample.id, title: buyerTitle }));
+    emitToOrg(sample.purchaseOrder.buyerOrgId, "payment:updated", { orderId: sample.purchaseOrderId, sampleId: sample.id, paymentId: payment.id, status, stage: "SAMPLE", mode: "MOCK_TEST" });
+    emitToOrg(sample.purchaseOrder.supplierOrgId, "payment:updated", { orderId: sample.purchaseOrderId, sampleId: sample.id, paymentId: payment.id, status, stage: "SAMPLE", mode: "MOCK_TEST" });
+    return sendOk(res, { payment, mode: "MOCK_TEST", message: status === "PAID" ? "Sample test payment successful. No money was collected." : status === "FAILED" ? "Sample test payment failed." : "Sample test payment pending. Resolve it later from the same screen." }, 201);
   } catch (e) { next(e); }
 }
 
@@ -121,10 +233,16 @@ export async function createMockMilestonePayment(req: Request, res: Response, ne
         const payment = await tx.paymentTransaction.findUnique({ where: { id: existingPending.id } });
         if (!payment) throw new AppError(404, "Pending test payment not found.");
         await tx.paymentMilestone.update({ where: { id: milestone.id }, data: { status } });
-        if (status === "PAID") {
-          const members = await tx.organizationMember.findMany({ where: { organizationId: order.supplierOrgId, role: "SUPPLIER", isActive: true }, select: { userId: true } });
-          if (members.length) await tx.notification.createMany({ data: members.map(member => ({ userId: member.userId, title: "Test payment received", body: "A simulated test payment for " + milestone.title + " on PO #" + order.poNumber + " was marked successful. No money was collected." })) });
+        await tx.orderEvent.create({ data: { purchaseOrderId: order.id, eventType: "PAYMENT_" + milestone.title.toUpperCase().replaceAll(" ", "_") + "_" + status, note: milestone.title + " payment " + status.toLowerCase(), actorUserId: req.auth!.userId } });
+        if (status === "PAID" && milestone.title === "Production Payment") {
+          await tx.purchaseOrder.updateMany({ where: { id: order.id, status: { in: ["ACCEPTED", "SAMPLE_APPROVED"] } }, data: { status: "PRODUCTION_STARTED" } });
         }
+        const members = await tx.organizationMember.findMany({ where: { organizationId: order.supplierOrgId, role: "SUPPLIER", isActive: true }, select: { userId: true } });
+        const notificationTitle = status === "PAID" ? "Test payment received" : status === "FAILED" ? "Test payment failed" : "Test payment pending";
+        const notificationBody = "Buyer test payment for " + milestone.title + " on PO #" + order.poNumber + " is " + status.toLowerCase() + ". No real money was collected.";
+        if (members.length) await tx.notification.createMany({ data: members.map(member => ({ userId: member.userId, title: notificationTitle, body: notificationBody })) });
+        const buyerMembers = await tx.organizationMember.findMany({ where: { organizationId: order.buyerOrgId, role: "BUYER", isActive: true }, select: { userId: true } });
+        if (buyerMembers.length) await tx.notification.createMany({ data: buyerMembers.map(member => ({ userId: member.userId, title: "Your " + notificationTitle.toLowerCase(), body: notificationBody })) });
         return payment;
       });
       await audit("MOCK_PAYMENT_" + input.outcome, "PaymentTransaction", updated.id, req.auth!.userId, order.buyerOrgId, { mode: "MOCK_TEST", milestoneId: milestone.id });
@@ -144,6 +262,10 @@ export async function createMockMilestonePayment(req: Request, res: Response, ne
       });
       if (claimed.count !== 1) throw new AppError(409, "This milestone already has a payment attempt or is no longer eligible.");
 
+      if (status === "PAID" && milestone.title === "Production Payment") {
+        await tx.purchaseOrder.updateMany({ where: { id: order.id, status: { in: ["ACCEPTED", "SAMPLE_APPROVED"] } }, data: { status: "PRODUCTION_STARTED" } });
+      }
+      await tx.orderEvent.create({ data: { purchaseOrderId: order.id, eventType: "PAYMENT_" + milestone.title.toUpperCase().replaceAll(" ", "_") + "_" + status, note: milestone.title + " payment " + status.toLowerCase(), actorUserId: req.auth!.userId } });
       const payment = await tx.paymentTransaction.create({
         data: {
           purchaseOrderId: order.id, paymentMilestoneId: milestone.id, provider: "MOCK_TEST",
@@ -152,10 +274,12 @@ export async function createMockMilestonePayment(req: Request, res: Response, ne
           paymentMethod: "TEST_SIMULATOR", capturedAt: status === "PAID" ? new Date() : null
         }
       });
-      if (status === "PAID") {
-        const members = await tx.organizationMember.findMany({ where: { organizationId: order.supplierOrgId, role: "SUPPLIER", isActive: true }, select: { userId: true } });
-        if (members.length) await tx.notification.createMany({ data: members.map(member => ({ userId: member.userId, title: "Test payment received", body: "A simulated test payment for " + milestone.title + " on PO #" + order.poNumber + " was marked successful. No money was collected." })) });
-      }
+      const members = await tx.organizationMember.findMany({ where: { organizationId: order.supplierOrgId, role: "SUPPLIER", isActive: true }, select: { userId: true } });
+      const notificationTitle = status === "PAID" ? "Test payment received" : status === "FAILED" ? "Test payment failed" : "Test payment pending";
+      const notificationBody = "Buyer test payment for " + milestone.title + " on PO #" + order.poNumber + " is " + status.toLowerCase() + ". No real money was collected.";
+      if (members.length) await tx.notification.createMany({ data: members.map(member => ({ userId: member.userId, title: notificationTitle, body: notificationBody })) });
+      const buyerMembers = await tx.organizationMember.findMany({ where: { organizationId: order.buyerOrgId, role: "BUYER", isActive: true }, select: { userId: true } });
+      if (buyerMembers.length) await tx.notification.createMany({ data: buyerMembers.map(member => ({ userId: member.userId, title: "Your " + notificationTitle.toLowerCase(), body: notificationBody })) });
       return payment;
     });
     await audit("MOCK_PAYMENT_" + input.outcome, "PaymentTransaction", created.id, req.auth!.userId, order.buyerOrgId, { mode: "MOCK_TEST", milestoneId: milestone.id });

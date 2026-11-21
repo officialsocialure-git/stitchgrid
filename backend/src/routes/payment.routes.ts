@@ -1,7 +1,10 @@
 import { Router } from "express";
 import { authenticate, requireRole } from "../middleware/auth";
 import {
+  createMilestoneCheckout,
+  createMockSamplePayment,
   createMockMilestonePayment,
+  setProductionAmount,
   getOrCreatePaymentPlan,
   requestPaymentRefund,
   paymentDashboard,
@@ -20,7 +23,10 @@ router.post("/webhook", razorpayWebhook);
 router.use(authenticate);
 router.get("/dashboard", paymentDashboard);
 router.post("/orders/:orderId/plan", requireRole("BUYER"), getOrCreatePaymentPlan);
+router.post("/orders/:orderId/production-amount", requireRole("SUPPLIER"), setProductionAmount);
+router.post("/samples/:sampleId/test-payment", requireRole("BUYER"), createMockSamplePayment);
 router.post("/milestones/:milestoneId/test-payment", requireRole("BUYER"), createMockMilestonePayment);
+router.post("/milestones/:milestoneId/checkout", requireRole("BUYER"), createMilestoneCheckout);
 router.post("/verify", requireRole("BUYER"), verifyMilestonePayment);
 router.post("/milestones/:milestoneId/proof", requireRole("SUPPLIER"), submitMilestoneProof);
 router.post("/milestones/:milestoneId/review", requireRole("BUYER"), reviewMilestoneProof);

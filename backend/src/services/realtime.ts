@@ -87,18 +87,9 @@ export function initRealtime(server: HttpServer): SocketIOServer {
       }
     }
 
-    // Client can explicitly subscribe to entity rooms (e.g. order tracking or chat room)
-    socket.on("subscribe:channel", (channel: string) => {
-      if (typeof channel === "string" && channel.length < 100) {
-        socket.join(channel);
-      }
-    });
-
-    socket.on("unsubscribe:channel", (channel: string) => {
-      if (typeof channel === "string") {
-        socket.leave(channel);
-      }
-    });
+    // Private rooms are assigned only from the verified JWT above.
+    // Never accept arbitrary room names from clients: a caller could otherwise
+    // subscribe to another user's or organization's private event stream.
   });
 
   console.log("[REALTIME] Socket.IO server initialized successfully");

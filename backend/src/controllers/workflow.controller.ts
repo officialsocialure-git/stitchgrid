@@ -204,6 +204,7 @@ export async function updateSample(req: Request, res: Response, next: NextFuncti
       })).max(30).optional(),
       files: z.array(fileSchema).max(30).optional(),
       supplierNote: z.string().max(5000).optional(),
+      samplePrice: z.coerce.number().positive().max(9999999).optional(),
       feedback: z.string().max(5000).optional()
     }).parse(req.body);
 
@@ -231,9 +232,11 @@ export async function updateSample(req: Request, res: Response, next: NextFuncti
         throw new AppError(403, "Only buyer can approve, reject or request revisions on a sample");
       }
     }
-    if ((input.photos !== undefined || input.files !== undefined || input.supplierNote !== undefined) && !supplier) {
-      throw new AppError(403, "Only supplier can upload sample attachments or update the supplier note");
+    if ((input.photos !== undefined || input.files !== undefined || input.supplierNote !== undefined || input.samplePrice !== undefined) && !supplier) {
+      throw new AppError(403, "Only supplier can upload sample attachments, set sample price or update the supplier note");
     }
+    if (input.samplePrice !== undefined && sample.status === "APPROVED") throw new AppError(409, "Sample price cannot be changed after buyer approval.");
+    if (input.samplePrice !== undefined && !["ACCEPTED", "SAMPLE_PENDING"].includes(sample.purchaseOrder.status)) throw new AppError(409, "Supplier can set the sample price after accepting the purchase order.");
 
     let existingMeta: any = {};
     if (sample.notes) {
@@ -244,15 +247,27 @@ export async function updateSample(req: Request, res: Response, next: NextFuncti
       }
     }
 
+    if (input.samplePrice !== undefined && ["PENDING", "PAID"].includes(existingMeta.samplePaymentStatus)) throw new AppError(409, "Sample price cannot be changed after a payment has started or completed.");
+    if (supplier && (input.photos !== undefined || input.files !== undefined) && existingMeta.samplePaymentStatus !== "PAID") throw new AppError(409, "Buyer sample payment must be successful before sample preparation photos or files can be submitted.");
+
     const now = new Date().toISOString();
     const newStatus = input.status || sample.status;
     const statusChanged = newStatus !== sample.status;
+    if (supplier && ["IN_PROGRESS", "DISPATCHED"].includes(newStatus)) {
+      if (!(Number(existingMeta.samplePrice) > 0)) throw new AppError(409, "Set the sample price before preparing or dispatching the sample.");
+      if (existingMeta.samplePaymentStatus !== "PAID") throw new AppError(409, "Buyer sample payment must be successful before sample preparation or dispatch.");
+    }
+    if (buyer && ["APPROVED", "REJECTED", "REVISION_REQUIRED"].includes(newStatus) && sample.status !== "DISPATCHED") {
+      throw new AppError(409, "The supplier must submit the sample before the buyer can review it.");
+    }
     const updatedMeta: any = {
       ...existingMeta,
       description: input.notes !== undefined ? input.notes : existingMeta.description,
       photos: input.photos !== undefined ? input.photos : (existingMeta.photos || []),
       files: input.files !== undefined ? input.files : (existingMeta.files || []),
       supplierNote: input.supplierNote !== undefined ? input.supplierNote : (existingMeta.supplierNote || ""),
+      samplePrice: input.samplePrice !== undefined ? input.samplePrice : existingMeta.samplePrice,
+      samplePriceCurrency: input.samplePrice !== undefined ? sample.purchaseOrder.currency : existingMeta.samplePriceCurrency,
       buyerFeedback: input.feedback !== undefined ? input.feedback : existingMeta.buyerFeedback,
       updatedAt: now,
       lastUpdatedBy: req.auth!.userId,
@@ -280,6 +295,15 @@ export async function updateSample(req: Request, res: Response, next: NextFuncti
       where: { id: sample.id },
       data: { status: newStatus, notes: JSON.stringify(updatedMeta) }
     });
+    if (supplier && newStatus === "DISPATCHED") {
+      await prisma.purchaseOrder.updateMany({ where: { id: sample.purchaseOrderId, status: "ACCEPTED" }, data: { status: "SAMPLE_PENDING" } });
+    }
+    if (buyer && newStatus === "APPROVED") {
+      await prisma.purchaseOrder.updateMany({
+        where: { id: sample.purchaseOrderId, status: { in: ["ACCEPTED", "SAMPLE_PENDING"] } },
+        data: { status: "SAMPLE_APPROVED" }
+      });
+    }
 
     await prisma.orderEvent.create({
       data: {
@@ -290,7 +314,7 @@ export async function updateSample(req: Request, res: Response, next: NextFuncti
       }
     }).catch(() => {});
 
-    const shouldNotifyPartner = statusChanged || input.supplierNote !== undefined || input.photos !== undefined || input.files !== undefined;
+    const shouldNotifyPartner = statusChanged || input.supplierNote !== undefined || input.samplePrice !== undefined || input.photos !== undefined || input.files !== undefined;
     if (shouldNotifyPartner) {
       const recipientRole = supplier ? "BUYER" : "SUPPLIER";
       const recipientOrgId = supplier ? sample.purchaseOrder.buyerOrgId : sample.purchaseOrder.supplierOrgId;
@@ -300,10 +324,12 @@ export async function updateSample(req: Request, res: Response, next: NextFuncti
       });
       const recipientIds = [...new Set(recipients.map(member => member.userId))];
       const title = supplier
-        ? (newStatus === "DISPATCHED" ? "Sample received" : statusChanged ? "Sample updated by supplier" : "Supplier added sample update")
+        ? (input.samplePrice !== undefined ? "Sample price set" : newStatus === "DISPATCHED" ? "Sample received" : statusChanged ? "Sample updated by supplier" : "Supplier added sample update")
         : (newStatus === "APPROVED" ? "Sample approved" : newStatus === "REVISION_REQUIRED" ? "Changes requested on sample" : "Sample rejected");
       const body = supplier
-        ? (newStatus === "DISPATCHED"
+        ? (input.samplePrice !== undefined
+          ? `Supplier set the sample price to ${sample.purchaseOrder.currency} ${input.samplePrice.toFixed(2)} for PO #${sample.purchaseOrder.poNumber}. Please review and pay the sample amount.`
+          : newStatus === "DISPATCHED"
           ? `Your supplier has submitted sample ${sample.id} for order ${sample.purchaseOrder.poNumber}.`
           : statusChanged
             ? `Supplier updated the sample for order ${sample.purchaseOrder.poNumber}: ${newStatus.replaceAll("_", " ").toLowerCase()}.`
@@ -349,7 +375,44 @@ export async function updateMilestone(req: Request, res: Response, next: NextFun
     const membership = await prisma.organizationMember.findFirst({ where: { userId: req.auth!.userId, organizationId: milestone.purchaseOrder.supplierOrgId, role: "SUPPLIER", isActive: true } });
     if (!membership) throw new AppError(403, "Supplier membership required");
     const updated = await prisma.orderMilestone.update({ where: { id: milestone.id }, data: { status: input.status, dueDate: input.dueDate, completedAt: input.status === "COMPLETED" ? new Date() : null } });
+    if (input.status === "COMPLETED" && /quality|qc/i.test(milestone.title)) {
+      await prisma.purchaseOrder.updateMany({ where: { id: milestone.purchaseOrderId, status: { in: ["PRODUCTION_STARTED", "IN_PRODUCTION", "QC_PENDING"] } }, data: { status: "READY_TO_DISPATCH" } });
+    }
+    if (input.status === "COMPLETED" && /dispatch/i.test(milestone.title)) {
+      await prisma.purchaseOrder.updateMany({ where: { id: milestone.purchaseOrderId, status: { in: ["READY_TO_DISPATCH", "QC"] } }, data: { status: "DISPATCHED", dispatchDate: new Date() } });
+    }
+    if (input.status === "COMPLETED" && /dispatch|quality|qc/i.test(milestone.title)) {
+      const [plan, workflowStages] = await Promise.all([
+        prisma.paymentPlan.findUnique({ where: { purchaseOrderId: milestone.purchaseOrderId }, include: { milestones: true } }),
+        prisma.orderMilestone.findMany({ where: { purchaseOrderId: milestone.purchaseOrderId } })
+      ]);
+      const production = plan?.milestones.find(item => item.title === "Production Payment");
+      const finalPayment = plan?.milestones.find(item => item.title === "Final Payment");
+      const qcComplete = workflowStages.some(item => /quality|qc/i.test(item.title) && item.status === "COMPLETED");
+      const dispatchComplete = workflowStages.some(item => /dispatch/i.test(item.title) && item.status === "COMPLETED");
+      if (qcComplete && dispatchComplete && production?.status === "PAID" && finalPayment?.status === "UPCOMING") {
+        await prisma.paymentMilestone.update({ where: { id: finalPayment.id }, data: { status: "DUE" } });
+        const dueBuyers = await prisma.organizationMember.findMany({ where: { organizationId: milestone.purchaseOrder.buyerOrgId, role: "BUYER", isActive: true }, select: { userId: true } });
+        if (dueBuyers.length) {
+          await prisma.notification.createMany({ data: dueBuyers.map(member => ({ userId: member.userId, title: "Final payment due", body: `QC and dispatch are complete for PO #${milestone.purchaseOrder.poNumber}. The remaining balance is now due.` })) });
+          dueBuyers.forEach(member => emitToUser(member.userId, "notification:new", { orderId: milestone.purchaseOrderId, title: "Final payment due" }));
+        }
+        emitToOrg(milestone.purchaseOrder.buyerOrgId, "payment:updated", { orderId: milestone.purchaseOrderId, milestoneId: finalPayment.id, status: "DUE", stage: "FINAL" });
+        emitToOrg(milestone.purchaseOrder.supplierOrgId, "payment:updated", { orderId: milestone.purchaseOrderId, milestoneId: finalPayment.id, status: "DUE", stage: "FINAL" });
+      }
+    }
     await prisma.orderEvent.create({ data: { purchaseOrderId: milestone.purchaseOrderId, eventType: "MILESTONE_" + input.status, note: milestone.title, actorUserId: req.auth!.userId } });
+    const buyerMembers = await prisma.organizationMember.findMany({
+      where: { organizationId: milestone.purchaseOrder.buyerOrgId, role: "BUYER", isActive: true },
+      select: { userId: true },
+    });
+    const buyerUserIds = [...new Set(buyerMembers.map(member => member.userId))];
+    if (buyerUserIds.length) {
+      const title = "Production milestone updated";
+      const body = `Supplier updated ${milestone.title} on PO #${milestone.purchaseOrder.poNumber} to ${input.status.replaceAll("_", " ").toLowerCase()}.`;
+      await prisma.notification.createMany({ data: buyerUserIds.map(userId => ({ userId, title, body })) });
+      buyerUserIds.forEach(userId => emitToUser(userId, "notification:new", { title, orderId: milestone.purchaseOrderId, milestoneId: milestone.id, status: input.status }));
+    }
     emitToOrg(milestone.purchaseOrder.buyerOrgId, "milestone:updated", { orderId: milestone.purchaseOrderId, milestoneId: milestone.id, status: input.status });
     emitToOrg(milestone.purchaseOrder.supplierOrgId, "milestone:updated", { orderId: milestone.purchaseOrderId, milestoneId: milestone.id, status: input.status });
     emitToRole("ADMIN", "milestone:updated", { orderId: milestone.purchaseOrderId, milestoneId: milestone.id, status: input.status });

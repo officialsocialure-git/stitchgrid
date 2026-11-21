@@ -8,7 +8,8 @@ import {
   emitGlobalSync,
   emitToMarketplace,
   emitToOrg,
-  emitToRole
+  emitToRole,
+  emitToUser
 } from "../services/realtime";
 
 const GARMENT_SYNONYMS = [
@@ -1077,6 +1078,21 @@ export async function updateOrderStatus(req: Request, res: Response, next: NextF
     if (input.status === "ACCEPTED" && !supplier) {
       throw new AppError(403, "Only the supplier can accept the purchase order");
     }
+    if (supplier && input.status === "SAMPLE_PENDING") {
+      const sampleRecords = await prisma.sample.findMany({ where: { purchaseOrderId: order.id }, select: { notes: true } });
+      const paidSampleExists = sampleRecords.some(sample => {
+        try { return JSON.parse(sample.notes || "{}").samplePaymentStatus === "PAID"; } catch { return false; }
+      });
+      if (!paidSampleExists) throw new AppError(409, "Buyer must pay the sample price before the supplier can dispatch the PP sample.");
+    }
+    if (supplier && input.status === "PRODUCTION_STARTED") {
+      const plan = await prisma.paymentPlan.findUnique({ where: { purchaseOrderId: order.id }, include: { milestones: true } });
+      const productionPayment = plan?.milestones.find(item => item.title === "Production Payment");
+      if (productionPayment?.status !== "PAID") throw new AppError(409, "Buyer production payment must be successful before bulk production can start.");
+    }
+    if (supplier && input.status === "DISPATCHED" && !["READY_TO_DISPATCH", "QC"].includes(order.status)) {
+      throw new AppError(409, "Quality check must be passed before dispatch.");
+    }
 
     const updated = await prisma.$transaction(async tx => {
       const updateData: any = { status: input.status };
@@ -1136,6 +1152,42 @@ export async function updateOrderStatus(req: Request, res: Response, next: NextF
 
       return result;
     });
+
+    if (input.status === "DISPATCHED") {
+      const [plan, stages] = await Promise.all([
+        prisma.paymentPlan.findUnique({ where: { purchaseOrderId: order.id }, include: { milestones: true } }),
+        prisma.orderMilestone.findMany({ where: { purchaseOrderId: order.id } })
+      ]);
+      const production = plan?.milestones.find(item => item.title === "Production Payment");
+      const finalPayment = plan?.milestones.find(item => item.title === "Final Payment");
+      const qcComplete = ["READY_TO_DISPATCH", "QC"].includes(order.status) || stages.some(item => /quality|qc/i.test(item.title) && item.status === "COMPLETED");
+      if (qcComplete && production?.status === "PAID" && finalPayment?.status === "UPCOMING") {
+        await prisma.paymentMilestone.update({ where: { id: finalPayment.id }, data: { status: "DUE" } });
+        const buyerMembers = await prisma.organizationMember.findMany({ where: { organizationId: order.buyerOrgId, role: "BUYER", isActive: true }, select: { userId: true } });
+        if (buyerMembers.length) {
+          await prisma.notification.createMany({ data: buyerMembers.map(member => ({ userId: member.userId, title: "Final payment due", body: `QC and dispatch are complete for PO #${order.poNumber}. The remaining balance is now due.` })) });
+          buyerMembers.forEach(member => emitToUser(member.userId, "notification:new", { orderId: order.id, title: "Final payment due" }));
+        }
+        emitToOrg(order.buyerOrgId, "payment:updated", { orderId: order.id, milestoneId: finalPayment.id, status: "DUE", stage: "FINAL" });
+        emitToOrg(order.supplierOrgId, "payment:updated", { orderId: order.id, milestoneId: finalPayment.id, status: "DUE", stage: "FINAL" });
+      }
+    }
+    if (input.status !== "ACCEPTED") {
+      const recipientOrgId = supplier ? order.buyerOrgId : order.supplierOrgId;
+      const recipientRole = supplier ? "BUYER" : "SUPPLIER";
+      const recipients = await prisma.organizationMember.findMany({ where: { organizationId: recipientOrgId, role: recipientRole, isActive: true }, select: { userId: true } });
+      const titleByStatus: Record<string, string> = {
+        SAMPLE_APPROVED: "Sample approved", PRODUCTION_STARTED: "Production started", IN_PRODUCTION: "Production progress updated",
+        QC_PENDING: "Quality check started", QC: "Quality check updated", READY_TO_DISPATCH: "Order ready to dispatch",
+        DISPATCHED: "Order dispatched", DELIVERED: "Order delivered", COMPLETED: "Order completed", CANCELLED: "Order cancelled"
+      };
+      const title = titleByStatus[input.status] || "Order status updated";
+      const body = `PO #${order.poNumber} status changed to ${input.status.replaceAll("_", " ")}${input.trackingNumber ? `. Tracking number: ${input.trackingNumber}` : ""}${input.note ? `. ${input.note}` : ""}`;
+      if (recipients.length) {
+        await prisma.notification.createMany({ data: recipients.map(member => ({ userId: member.userId, title, body })) });
+        recipients.forEach(member => emitToUser(member.userId, "notification:new", { orderId: order.id, status: input.status, title }));
+      }
+    }
 
     await audit("ORDER_STATUS_UPDATED", "PurchaseOrder", order.id, req.auth!.userId, supplier ? order.supplierOrgId : order.buyerOrgId);
     emitToOrg(order.buyerOrgId, "order:updated", { orderId: order.id, status: input.status });
