@@ -1070,8 +1070,8 @@ export async function updateOrderStatus(req: Request, res: Response, next: NextF
     });
     if (!supplier && !buyer) throw new AppError(403, "Order membership required");
 
-    const supplierStatuses = ["ACCEPTED", "SAMPLE_PENDING", "PRODUCTION_STARTED", "IN_PRODUCTION", "QC_PENDING", "QC", "READY_TO_DISPATCH", "DISPATCHED"];
-    const buyerStatuses = ["SAMPLE_APPROVED", "DELIVERED", "COMPLETED"];
+    const supplierStatuses = ["ACCEPTED", "SAMPLE_PENDING", "PRODUCTION_STARTED", "IN_PRODUCTION", "QC_PENDING", "QC", "DISPATCHED"];
+    const buyerStatuses = ["SAMPLE_APPROVED", "IN_PRODUCTION", "READY_TO_DISPATCH", "DELIVERED", "COMPLETED"];
     if (supplier && !buyer && !supplierStatuses.includes(input.status) && input.status !== "CANCELLED") {
       throw new AppError(403, "This order status can only be updated by the buyer");
     }
@@ -1093,8 +1093,17 @@ export async function updateOrderStatus(req: Request, res: Response, next: NextF
       const productionPayment = plan?.milestones.find(item => item.title === "Production Payment");
       if (productionPayment?.status !== "PAID") throw new AppError(409, "Buyer production payment must be successful before bulk production can start.");
     }
-    if (supplier && input.status === "DISPATCHED" && !["READY_TO_DISPATCH", "QC"].includes(order.status)) {
-      throw new AppError(409, "Quality check must be passed before dispatch.");
+    if (supplier && input.status === "QC_PENDING" && !["PRODUCTION_STARTED", "IN_PRODUCTION", "QC_PENDING", "QC"].includes(order.status)) {
+      throw new AppError(409, "Order must be in production before submitting a quality inspection.");
+    }
+    if (buyer && input.status === "READY_TO_DISPATCH" && !["QC_PENDING", "QC"].includes(order.status)) {
+      throw new AppError(409, "Supplier must submit the quality inspection before buyer approval.");
+    }
+    if (buyer && input.status === "IN_PRODUCTION" && !["QC_PENDING", "QC"].includes(order.status)) {
+      throw new AppError(409, "There is no pending quality inspection to reject.");
+    }
+    if (supplier && input.status === "DISPATCHED" && order.status !== "READY_TO_DISPATCH") {
+      throw new AppError(409, "Buyer must approve the quality check before dispatch.");
     }
 
     const updated = await prisma.$transaction(async tx => {
