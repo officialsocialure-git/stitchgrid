@@ -330,7 +330,7 @@ export async function getPublicSupplierProfile(req: Request, res: Response, next
     });
 
     if (!organization) throw new AppError(404, "Supplier profile not found");
-    const [ratingSummary, recentReviews, ratingBreakdown] = await Promise.all([
+    const [ratingSummary, recentReviews, ratingBreakdown, supplierTestimonials] = await Promise.all([
       prisma.review.aggregate({
         where: { reviewedOrgId: organizationId },
         _avg: { rating: true },
@@ -346,6 +346,7 @@ export async function getPublicSupplierProfile(req: Request, res: Response, next
         where: { reviewedOrgId: organizationId },
         _count: { _all: true },
       }),
+      prisma.supplierTestimonial.findMany({ where: { organizationId }, orderBy: { createdAt: "desc" }, take: 20 }),
     ]);
 
     const reviewerIds = [...new Set(recentReviews.map((review) => review.reviewerOrgId))];
@@ -374,6 +375,7 @@ export async function getPublicSupplierProfile(req: Request, res: Response, next
         createdAt: review.createdAt,
         reviewerName: reviewerNames.get(review.reviewerOrgId) || "Verified buyer",
       })),
+      supplierTestimonials,
     });
   } catch (error) {
     next(error);
@@ -469,10 +471,11 @@ export async function getOrganizationProfile(req: Request, res: Response, next: 
       }
     });
     if (!organization) throw new AppError(404, "Organization not found");
-    const [ratingSummary, recentReviews, ratingBreakdown] = await Promise.all([
+    const [ratingSummary, recentReviews, ratingBreakdown, supplierTestimonials] = await Promise.all([
       prisma.review.aggregate({ where: { reviewedOrgId: organizationId }, _avg: { rating: true }, _count: { _all: true } }),
       prisma.review.findMany({ where: { reviewedOrgId: organizationId }, orderBy: { createdAt: "desc" }, take: 10 }),
-      prisma.review.groupBy({ by: ["rating"], where: { reviewedOrgId: organizationId }, _count: { _all: true } })
+      prisma.review.groupBy({ by: ["rating"], where: { reviewedOrgId: organizationId }, _count: { _all: true } }),
+      prisma.supplierTestimonial.findMany({ where: { organizationId }, orderBy: { createdAt: "desc" }, take: 20 })
     ]);
     const reviewerIds = [...new Set(recentReviews.map(review => review.reviewerOrgId))];
     const reviewers = reviewerIds.length ? await prisma.organization.findMany({
@@ -485,7 +488,8 @@ export async function getOrganizationProfile(req: Request, res: Response, next: 
       publicReviews: recentReviews.map(review => ({
         id: review.id, rating: review.rating, comment: review.comment, createdAt: review.createdAt,
         reviewerName: reviewerNames.get(review.reviewerOrgId) || "Verified buyer"
-      }))
+      })),
+      supplierTestimonials
     });
   } catch (e) { next(e); }
 }

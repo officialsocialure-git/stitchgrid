@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticate, optionalAuthenticate, requireRole } from "../middleware/auth";
+import { createSupplierTestimonial, deleteSupplierTestimonial, listSupplierTestimonials, updateSupplierTestimonial } from "../controllers/testimonial.controller";
 import { createCatalogItem, listMyCatalogItems, updateCatalogItem, deleteCatalogItem } from "../controllers/catalog.controller";
 import { createCertification, listMyCertifications, updateCertification, deleteCertification } from "../controllers/certification.controller";
 import {
@@ -23,6 +24,10 @@ router.post("/catalog-items", createCatalogItem);
 router.patch("/catalog-items/:itemId", updateCatalogItem);
 router.delete("/catalog-items/:itemId", deleteCatalogItem);
 router.get("/certifications", listMyCertifications);
+router.get("/supplier-testimonials", listSupplierTestimonials);
+router.post("/supplier-testimonials", createSupplierTestimonial);
+router.patch("/supplier-testimonials/:testimonialId", updateSupplierTestimonial);
+router.delete("/supplier-testimonials/:testimonialId", deleteSupplierTestimonial);
 router.post("/certifications", createCertification);
 router.patch("/certifications/:certificationId", updateCertification);
 router.delete("/certifications/:certificationId", deleteCertification);

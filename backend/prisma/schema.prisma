@@ -137,6 +137,7 @@ model Organization {
   supplierProfile        SupplierProfile?
   businessMedia          BusinessMedia[]
   supplierPaymentProfile SupplierPaymentProfile?
+  supplierTestimonials   SupplierTestimonial[]
   rfqs                   Rfq[]
   quotes                 Quotation[]
   buyerOrders            PurchaseOrder[]         @relation("BuyerOrganization")
@@ -639,6 +640,19 @@ model Review {
   rating          Int
   comment         String?  @db.Text
   createdAt       DateTime @default(now())
+}
+
+model SupplierTestimonial {
+  id             String       @id @default(cuid())
+  organizationId String
+  customerName   String       @db.VarChar(150)
+  rating         Int
+  comment        String       @db.Text
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
 }
 
 model AuditLog {
