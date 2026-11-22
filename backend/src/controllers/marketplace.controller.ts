@@ -84,6 +84,7 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
           include: {
             categories: true,
             capabilities: true,
+            workforceResources: { orderBy: { resource: "asc" } },
             catalogItems: { orderBy: { createdAt: "desc" } },
             certifications: { where: { status: "VERIFIED" }, orderBy: { createdAt: "desc" } },
           },
@@ -311,6 +312,7 @@ export async function getPublicSupplierProfile(req: Request, res: Response, next
           include: {
             categories: true,
             capabilities: true,
+            workforceResources: { orderBy: { resource: "asc" } },
             catalogItems: {
               select: { id: true, name: true, itemType: true, imageUrl: true },
               orderBy: { createdAt: "desc" },
@@ -459,6 +461,7 @@ export async function getOrganizationProfile(req: Request, res: Response, next: 
           include: {
             categories: true,
             capabilities: true,
+            workforceResources: { orderBy: { resource: "asc" } },
             catalogItems: { orderBy: { createdAt: "desc" } },
             certifications: { where: { status: "VERIFIED" }, orderBy: { createdAt: "desc" } }
           }
@@ -508,6 +511,11 @@ export async function updateOrganizationProfile(req: Request, res: Response, nex
       categoryImages: z.array(z.object({ category: z.string().trim().min(1).max(100), imageUrl: z.string().url().max(2000) })).max(30).optional(),
       fabricExpertise: z.array(z.string().trim().min(1).max(60)).max(30).optional(),
       additionalCapabilities: z.array(z.string().trim().min(1).max(80)).max(40).optional(),
+      workforceResources: z.array(z.object({
+        resource: z.string().trim().min(1).max(100),
+        availability: z.enum(["IN_HOUSE", "OUTSOURCED", "NOT_AVAILABLE"]),
+        headcount: z.number().int().min(0).max(100000).nullable().optional(),
+      })).max(30).optional(),
     }).parse(req.body);
 
     const membership = await prisma.organizationMember.findFirst({
@@ -568,6 +576,21 @@ export async function updateOrganizationProfile(req: Request, res: Response, nex
           }
         }
 
+        if (input.workforceResources !== undefined) {
+          const resources = [...new Map(input.workforceResources.map(item => [item.resource, item])).values()];
+          await tx.supplierWorkforceResource.deleteMany({ where: { supplierProfileId: profile.id } });
+          if (resources.length) {
+            await tx.supplierWorkforceResource.createMany({
+              data: resources.map(item => ({
+                supplierProfileId: profile.id,
+                resource: item.resource,
+                availability: item.availability,
+                headcount: item.headcount ?? null,
+              })),
+            });
+          }
+        }
+
         if (input.fabricExpertise !== undefined || input.additionalCapabilities !== undefined) {
           const groups = [
             ...(input.fabricExpertise !== undefined ? ["FABRIC"] : []),
@@ -590,7 +613,7 @@ export async function updateOrganizationProfile(req: Request, res: Response, nex
 
       return tx.organization.findUnique({
         where: { id: input.organizationId },
-        include: { supplierProfile: { include: { categories: true, capabilities: true, certifications: { orderBy: { createdAt: "desc" } } } } }
+        include: { supplierProfile: { include: { categories: true, capabilities: true, workforceResources: { orderBy: { resource: "asc" } }, certifications: { orderBy: { createdAt: "desc" } } } } }
       });
     });
 
