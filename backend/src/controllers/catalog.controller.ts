@@ -14,11 +14,13 @@ export async function listMyCatalogItems(req: Request, res: Response, next: Next
       select: { id: true }
     });
     if (!membership) throw new AppError(403, "Active supplier membership required");
-    const profile = await prisma.supplierProfile.findUnique({
-      where: { organizationId },
-      include: { catalogItems: { orderBy: { createdAt: "desc" } } }
-    });
-    return sendOk(res, profile?.catalogItems ?? []);
+    // Product publishing is self-service: migrate any legacy pending listings
+    // to approved as they are loaded, then return the full supplier portfolio.
+    const profile = await prisma.supplierProfile.findUnique({ where: { organizationId }, select: { id: true } });
+    if (!profile) return sendOk(res, []);
+    await prisma.catalogItem.updateMany({ where: { supplierProfileId: profile.id, moderationStatus: { not: "APPROVED" } }, data: { moderationStatus: "APPROVED", moderationNote: null } });
+    const items = await prisma.catalogItem.findMany({ where: { supplierProfileId: profile.id }, orderBy: { createdAt: "desc" } });
+    return sendOk(res, items);
   } catch (error) { next(error); }
 }
 
@@ -62,7 +64,7 @@ export async function createCatalogItem(req: Request, res: Response, next: NextF
           unitPrice: input.unitPrice,
           currency: input.currency,
           imageUrl: input.imageUrl,
-          moderationStatus: "PENDING"
+          moderationStatus: "APPROVED"
         }
       });
     });
@@ -91,7 +93,7 @@ export async function updateCatalogItem(req: Request, res: Response, next: NextF
       select: { id: true }
     });
     if (!membership) throw new AppError(403, "Active supplier membership required");
-    const updated = await prisma.catalogItem.update({ where: { id: item.id }, data: { ...input, moderationStatus: "PENDING", moderationNote: null } });
+    const updated = await prisma.catalogItem.update({ where: { id: item.id }, data: { ...input, moderationStatus: "APPROVED", moderationNote: null } });
     await audit("CATALOG_ITEM_UPDATED", "CatalogItem", item.id, req.auth!.userId, item.supplierProfile.organizationId);
     await invalidateCachePattern("cache:suppliers:");
     return sendOk(res, updated);

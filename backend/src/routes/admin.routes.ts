@@ -2,7 +2,7 @@ import { Router } from "express";
 import { authenticate, requireRole } from "../middleware/auth";
 import {
   adminCatalog, adminDisputes, adminOrderDetails, adminOrders, adminOrganizationDetails, adminOverview, adminPayments, adminSupplierPaymentSetups, adminReviewSupplierPaymentSetup,
-  adminRfqDetails, adminRfqs, adminUpdateCatalogStatus, adminUpdateRfqStatus, adminUpdateUserStatus, adminUsers
+  adminRfqDetails, adminRfqs, adminUpdateRfqStatus, adminUpdateUserStatus, adminUsers
 } from "../controllers/admin.controller";
 import { adminAuditLogs } from "../controllers/workflow.controller";
 import { adminListPaymentRefunds, adminProcessPaymentRefund } from "../controllers/payment.controller";
@@ -15,7 +15,6 @@ router.get("/users", adminUsers);
 router.get("/organizations/:organizationId", adminOrganizationDetails);
 router.patch("/users/:userId/status", adminUpdateUserStatus);
 router.get("/marketplace", adminCatalog);
-router.patch("/marketplace/:itemId/moderation", adminUpdateCatalogStatus);
 router.get("/certifications", adminCertifications);
 router.patch("/certifications/:certificationId/review", adminReviewCertification);
 router.get("/rfqs", adminRfqs);

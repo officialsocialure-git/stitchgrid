@@ -84,7 +84,7 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
           include: {
             categories: true,
             capabilities: true,
-            catalogItems: { where: { moderationStatus: "APPROVED" }, orderBy: { createdAt: "desc" } },
+            catalogItems: { orderBy: { createdAt: "desc" } },
             certifications: { where: { status: "VERIFIED" }, orderBy: { createdAt: "desc" } },
           },
         },
@@ -312,7 +312,6 @@ export async function getPublicSupplierProfile(req: Request, res: Response, next
             categories: true,
             capabilities: true,
             catalogItems: {
-              where: { moderationStatus: "APPROVED" },
               select: { id: true, name: true, itemType: true, imageUrl: true },
               orderBy: { createdAt: "desc" },
             },
@@ -423,8 +422,19 @@ export async function upsertSupplierProfile(req: Request, res: Response, next: N
       }
     });
     if (input.categories) {
-      await prisma.supplierCategory.deleteMany({ where: { supplierProfileId: profile.id } });
-      await prisma.supplierCategory.createMany({ data: input.categories.map(category => ({ supplierProfileId: profile.id, category })), skipDuplicates: true });
+      const selectedCategories = [...new Set(input.categories)];
+      const existingCategories = await prisma.supplierCategory.findMany({ where: { supplierProfileId: profile.id } });
+      const existingImageByName = new Map(existingCategories.map(row => [row.category, row.imageUrl]));
+      await prisma.supplierCategory.deleteMany({
+        where: { supplierProfileId: profile.id, category: { notIn: selectedCategories.length ? selectedCategories : ["__none__"] } }
+      });
+      for (const category of selectedCategories) {
+        await prisma.supplierCategory.upsert({
+          where: { supplierProfileId_category: { supplierProfileId: profile.id, category } },
+          create: { supplierProfileId: profile.id, category },
+          update: { imageUrl: existingImageByName.get(category) || null }
+        });
+      }
     }
     await invalidateCachePattern("cache:suppliers:");
     await audit("SUPPLIER_PROFILE_UPDATED", "SupplierProfile", profile.id, req.auth!.userId, input.organizationId);
@@ -449,7 +459,7 @@ export async function getOrganizationProfile(req: Request, res: Response, next: 
           include: {
             categories: true,
             capabilities: true,
-            catalogItems: { where: { moderationStatus: "APPROVED" }, orderBy: { createdAt: "desc" } },
+            catalogItems: { orderBy: { createdAt: "desc" } },
             certifications: { where: { status: "VERIFIED" }, orderBy: { createdAt: "desc" } }
           }
         },
@@ -495,6 +505,7 @@ export async function updateOrganizationProfile(req: Request, res: Response, nex
       minimumOrderQuantity: z.number().int().min(1).max(10000000).optional(),
       sampleDevelopment: z.boolean().optional(),
       categories: z.array(z.string().trim().min(1).max(100)).max(30).optional(),
+      categoryImages: z.array(z.object({ category: z.string().trim().min(1).max(100), imageUrl: z.string().url().max(2000) })).max(30).optional(),
       fabricExpertise: z.array(z.string().trim().min(1).max(60)).max(30).optional(),
       additionalCapabilities: z.array(z.string().trim().min(1).max(80)).max(40).optional(),
     }).parse(req.body);
@@ -543,11 +554,16 @@ export async function updateOrganizationProfile(req: Request, res: Response, nex
         });
 
         if (input.categories !== undefined) {
-          await tx.supplierCategory.deleteMany({ where: { supplierProfileId: profile.id } });
-          if (input.categories.length > 0) {
-            await tx.supplierCategory.createMany({
-              data: [...new Set(input.categories)].map(category => ({ supplierProfileId: profile.id, category })),
-              skipDuplicates: true
+          const existingCategories = await tx.supplierCategory.findMany({ where: { supplierProfileId: profile.id } });
+          const existingImageByName = new Map(existingCategories.map(row => [row.category, row.imageUrl]));
+          const selectedCategories = [...new Set(input.categories)];
+          const imageByName = new Map((input.categoryImages || []).map(row => [row.category, row.imageUrl]));
+          await tx.supplierCategory.deleteMany({ where: { supplierProfileId: profile.id, category: { notIn: selectedCategories.length ? selectedCategories : ["__none__"] } } });
+          for (const category of selectedCategories) {
+            await tx.supplierCategory.upsert({
+              where: { supplierProfileId_category: { supplierProfileId: profile.id, category } },
+              create: { supplierProfileId: profile.id, category, imageUrl: imageByName.get(category) || null },
+              update: imageByName.has(category) ? { imageUrl: imageByName.get(category)! } : { imageUrl: existingImageByName.get(category) || null }
             });
           }
         }

@@ -221,6 +221,7 @@ model SupplierCategory {
   id                String @id @default(cuid())
   supplierProfileId String
   category          String
+  imageUrl          String? @db.VarChar(2000)
   supplierProfile   SupplierProfile @relation(fields: [supplierProfileId], references: [id], onDelete: Cascade)
   @@unique([supplierProfileId, category])
 }

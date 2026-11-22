@@ -1,0 +1,2 @@
+ALTER TABLE `SupplierCategory`
+ADD COLUMN `imageUrl` VARCHAR(2000) NULL;
