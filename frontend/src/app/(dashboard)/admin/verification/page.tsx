@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Search, RefreshCw, Download, Clock3, CheckCircle2, XCircle, Building2,
   ChevronLeft, ChevronRight, LoaderCircle, MapPin, Users, ArrowUp, X
@@ -24,6 +25,7 @@ const labelStatus = (s: string) =>
   s === "APPROVED" ? "Approved" : s === "REJECTED" ? "Rejected" : "Pending";
 
 export default function VerificationPage() {
+  const router = useRouter();
   const [items, setItems] = useState<VerificationItem[]>([]);
   const [tab, setTab] = useState("ALL");
   const [q, setQ] = useState("");
@@ -445,7 +447,7 @@ export default function VerificationPage() {
                       <td className="px-5 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => setSelectedOrg(o)}
+                            onClick={() => router.push(`/admin/verification/${o.id}`)}
                             className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
                           >
                             Review

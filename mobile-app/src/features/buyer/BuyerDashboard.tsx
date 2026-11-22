@@ -1,6 +1,6 @@
 import { ui } from '@/theme/ui';
 import { AppBottomNav } from '@/components/AppBottomNav';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet,
   Text, TextInput, View, useWindowDimensions,
@@ -35,6 +35,10 @@ type Supplier = {
   capacity: string;
   tags: string;
   description: string;
+  yearsInBusiness?: number | null;
+  sampleDevelopment?: boolean;
+  fabricExpertise: string[];
+  additionalCapabilities: string[];
   catalog: { name: string; price: string; moq?: number }[];
 };
 
@@ -59,10 +63,14 @@ function parseSupplier(row: any): Supplier {
     city: org.city || 'India',
     address: org.address || undefined,
     verificationStatus: row?.verificationStatus || org.verificationStatus || 'PENDING',
-    moq: moqMatch?.[1]?.trim() || (firstCatalog?.minOrderQty ? `${firstCatalog.minOrderQty} pcs` : 'Flexible'),
-    capacity: capacityMatch?.[1]?.trim() || (row?.productionCapacity ? `${Number(row.productionCapacity).toLocaleString('en-IN')} pcs / month` : 'Flexible'),
+    moq: row?.minimumOrderQuantity ? `${Number(row.minimumOrderQuantity).toLocaleString('en-IN')} pcs` : moqMatch?.[1]?.trim() || (firstCatalog?.minOrderQty ? `${firstCatalog.minOrderQty} pcs` : 'Flexible'),
+    capacity: row?.productionCapacity ? `${Number(row.productionCapacity).toLocaleString('en-IN')} pcs / month` : capacityMatch?.[1]?.trim() || 'Flexible',
     tags: categories.slice(0, 3).join(' · ') || 'Garment manufacturing',
     description: description.split('|')[0].trim() || 'Registered business in the STITCHGRID supplier network.',
+    yearsInBusiness: row?.yearsInBusiness ?? null,
+    sampleDevelopment: Boolean(row?.sampleDevelopment),
+    fabricExpertise: Array.isArray(row?.capabilities) ? row.capabilities.filter((item: any) => item.capabilityGroup === 'FABRIC').map((item: any) => item.value) : [],
+    additionalCapabilities: Array.isArray(row?.capabilities) ? row.capabilities.filter((item: any) => item.capabilityGroup === 'SERVICE').map((item: any) => item.value) : [],
     catalog,
   };
 }
@@ -131,8 +139,10 @@ export default function BuyerDashboard() {
   const [activeTab, setActiveTab] = useState('Dashboard');
   const [headerHeight, setHeaderHeight] = useState(0);
   const [bottomNavHeight, setBottomNavHeight] = useState(0);
+  const supplierRequestId = useRef(0);
 
   const loadSuppliers = useCallback(async () => {
+    const requestId = ++supplierRequestId.current;
     setLoading(true);
     setRefreshingError('');
     try {
@@ -141,8 +151,10 @@ export default function BuyerDashboard() {
       if (search.trim()) params.append('q', search.trim());
       const query = params.toString();
       const data = await apiGet<any[]>(`/suppliers${query ? `?${query}` : ''}`);
+      if (requestId !== supplierRequestId.current) return;
       setSuppliers(Array.isArray(data) ? data.map(parseSupplier) : []);
     } catch (error) {
+      if (requestId !== supplierRequestId.current) return;
       setSuppliers([]);
       setRefreshingError(error instanceof Error ? error.message : 'Unable to load suppliers.');
     } finally {
@@ -151,7 +163,7 @@ export default function BuyerDashboard() {
   }, [category, search]);
 
   useEffect(() => {
-    const timer = setTimeout(() => { void loadSuppliers(); }, 250);
+    const timer = setTimeout(() => { void loadSuppliers(); }, 400);
     return () => clearTimeout(timer);
   }, [loadSuppliers]);
 
@@ -260,7 +272,7 @@ export default function BuyerDashboard() {
           </View>
         ) : (
           <View style={{ gap: 16, paddingBottom: 20 }}>
-            {visibleSuppliers.map(supplier => <SupplierCard key={supplier.id} supplier={supplier} onPress={() => setSelectedSupplier(supplier)} />)}
+            {visibleSuppliers.map(supplier => <SupplierCard key={supplier.id} supplier={supplier} onPress={() => router.push({ pathname: '/buyer/supplier/[organizationId]', params: { organizationId: supplier.organizationId } } as any)} />)}
           </View>
         )}
       </ScrollView>
@@ -308,7 +320,11 @@ export default function BuyerDashboard() {
                 <View style={styles.detailGrid}>
                   <View style={styles.detailBox}><Text style={styles.statLabel}>Minimum Order (MOQ)</Text><Text style={styles.statValue}>{selectedSupplier.moq}</Text></View>
                   <View style={styles.detailBox}><Text style={styles.statLabel}>Capacity / Range</Text><Text style={styles.statValue}>{selectedSupplier.capacity}</Text></View>
+                  <View style={styles.detailBox}><Text style={styles.statLabel}>Years in Business</Text><Text style={styles.statValue}>{selectedSupplier.yearsInBusiness ?? '—'}</Text></View>
+                  <View style={styles.detailBox}><Text style={styles.statLabel}>Sample Development</Text><Text style={styles.statValue}>{selectedSupplier.sampleDevelopment ? 'Available' : 'Not specified'}</Text></View>
                 </View>
+                {!!selectedSupplier.fabricExpertise.length && <><Text style={styles.detailHeading}>FABRIC EXPERTISE</Text><Text style={styles.description}>{selectedSupplier.fabricExpertise.join(' · ')}</Text></>}
+                {!!selectedSupplier.additionalCapabilities.length && <><Text style={styles.detailHeading}>ADDITIONAL CAPABILITIES</Text><Text style={styles.description}>{selectedSupplier.additionalCapabilities.join(' · ')}</Text></>}
                 {!!selectedSupplier.catalog.length && <>
                   <Text style={styles.detailHeading}>VERIFIED PRODUCTION CATALOG</Text>
                   {selectedSupplier.catalog.map((item, index) => <View key={index} style={styles.catalogRow}><View style={{ flex: 1 }}><Text style={styles.catalogName}>{item.name}</Text>{!!item.moq && <Text style={styles.statLabel}>MOQ: {item.moq} units</Text>}</View><Text style={styles.catalogPrice}>{item.price}</Text></View>)}

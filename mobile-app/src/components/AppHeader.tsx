@@ -58,7 +58,8 @@ const SUPPLIER_MENU: [string, string, any][] = [
   ['Tracking', 'tracking', 'factory'],
   ['Samples', 'samples', 'hanger'],
   ['Chats', 'chat', 'message-text-outline'],
-  ['Settings', 'organization-settings', 'cog-outline'],
+  ['My Business Profile', 'business-profile', 'account-outline'],
+  ['Factory Settings', 'organization-settings', 'cog-outline'],
 ];
 
 export function AppHeader({
@@ -82,6 +83,7 @@ export function AppHeader({
   const [internalMenuOpen, setInternalMenuOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [detectedUnread, setDetectedUnread] = useState(0);
+  const [pendingSampleCount, setPendingSampleCount] = useState(0);
 
   const isMenuOpen = controlledMenuOpen !== undefined ? controlledMenuOpen : internalMenuOpen;
 
@@ -131,6 +133,29 @@ export function AppHeader({
     return () => clearInterval(timer);
   }, [propUnread]);
 
+  // Buyer sample badge counts only samples submitted by suppliers and awaiting buyer review.
+  useEffect(() => {
+    if (role !== 'BUYER') {
+      setPendingSampleCount(0);
+      return;
+    }
+    let active = true;
+    const refreshPendingSamples = () => {
+      apiGet<any[]>('/samples')
+        .then(data => {
+          if (!active || !Array.isArray(data)) return;
+          setPendingSampleCount(data.filter(sample => String(sample.status).toUpperCase() === 'DISPATCHED').length);
+        })
+        .catch(() => {});
+    };
+    refreshPendingSamples();
+    const timer = setInterval(refreshPendingSamples, 25000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [role]);
+
   const displayUnread = propUnread !== undefined ? propUnread : detectedUnread;
 
   const handleNotificationPress = () => {
@@ -152,7 +177,7 @@ export function AppHeader({
     setAccountMenuOpen(true);
   };
 
-  const openAccountMenuItem = (section: 'organization-settings' | 'account-settings') => {
+  const openAccountMenuItem = (section: 'organization-settings' | 'account-settings' | 'business-profile') => {
     setAccountMenuOpen(false);
     const targetPath = role === 'SUPPLIER' ? '/supplier/[section]' : '/buyer/[section]';
     router.push({ pathname: targetPath, params: { section } } as any);
@@ -287,7 +312,7 @@ export function AppHeader({
         <View style={styles.accountMenuRoot}>
           <Pressable style={styles.accountMenuBackdrop} onPress={() => setAccountMenuOpen(false)} />
           <View style={[styles.accountMenu, { top: Math.max(insets.top, 8) + 58 }]}>
-            <Pressable style={styles.accountMenuItem} onPress={() => openAccountMenuItem('organization-settings')}>
+            <Pressable style={styles.accountMenuItem} onPress={() => openAccountMenuItem(role === 'SUPPLIER' ? 'business-profile' : 'organization-settings')}>
               <MaterialCommunityIcons name="account-outline" size={21} color="#667085" />
               <Text style={styles.accountMenuText}>My Profile</Text>
             </Pressable>
@@ -358,6 +383,11 @@ export function AppHeader({
                     >
                       {label}
                     </Text>
+                    {sectionKey === 'samples' && role === 'BUYER' && pendingSampleCount > 0 && (
+                      <View style={styles.sampleCountBadge}>
+                        <Text style={styles.sampleCountBadgeText}>{pendingSampleCount > 99 ? '99+' : pendingSampleCount}</Text>
+                      </View>
+                    )}
                     {isActive && (
                       <MaterialCommunityIcons
                         name="check"
@@ -525,6 +555,17 @@ const styles = StyleSheet.create({
     marginVertical: 6,
     marginHorizontal: 6,
   },
+  sampleCountBadge: {
+    marginLeft: 'auto',
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 5,
+    borderRadius: 10,
+    backgroundColor: '#E11D48',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sampleCountBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
   drawerItem: {
     flexDirection: 'row',
     alignItems: 'center',

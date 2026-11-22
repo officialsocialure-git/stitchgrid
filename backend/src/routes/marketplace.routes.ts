@@ -7,12 +7,13 @@ import {
   getRfqDetails, inviteSupplier, listAdminOrganizations, listMyRfqs, listPurchaseOrders,
   submitQuote, supplierSearch, updateOrderStatus, upsertSupplierProfile,
   getOrganizationProfile, updateOrganizationProfile, updateQuotationStatus, reviseSupplierQuotation,
-  listBusinessMedia, createBusinessMedia, deleteBusinessMedia
+  listBusinessMedia, createBusinessMedia, deleteBusinessMedia, getPublicSupplierProfile
 } from "../controllers/marketplace.controller";
 const router = Router();
 
 // Public / optional auth routes for supplier discovery
 router.get("/suppliers", optionalAuthenticate, supplierSearch);
+router.get("/suppliers/:organizationId/profile", optionalAuthenticate, getPublicSupplierProfile);
 
 // Protected routes below
 router.use(authenticate);

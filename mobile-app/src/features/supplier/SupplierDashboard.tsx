@@ -2,7 +2,7 @@ import { ui } from '@/theme/ui';
 import { AppBottomNav } from '@/components/AppBottomNav';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView,
+  ActivityIndicator, Alert, AppState, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView,
   StyleSheet, Text, TextInput, View, useWindowDimensions,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -161,7 +161,9 @@ export default function SupplierDashboard() {
 
   useEffect(() => {
     void loadDashboard();
-    const timer = setInterval(() => { void loadDashboard(true); }, 30000);
+    const timer = setInterval(() => {
+      if (AppState.currentState === 'active') void loadDashboard(true);
+    }, 60000);
     return () => clearInterval(timer);
   }, [loadDashboard]);
 
@@ -219,14 +221,14 @@ export default function SupplierDashboard() {
 
   const openAccountMenuItem = (item: 'profile' | 'account-settings') => {
     setProfileMenuOpen(false);
-    router.push({ pathname: '/supplier/[section]', params: { section: item === 'profile' ? 'organization-settings' : 'account-settings' } } as any);
+    router.push({ pathname: '/supplier/[section]', params: { section: item === 'profile' ? 'business-profile' : 'account-settings' } } as any);
   };
 
   const navigate = (section: string) => {
     setMenuOpen(false);
     if (section === 'home') return;
     if (section === 'profile') {
-      router.push({ pathname: '/supplier/[section]', params: { section: 'organization-settings' } } as any);
+      router.push({ pathname: '/supplier/[section]', params: { section: 'business-profile' } } as any);
       return;
     }
     router.push({ pathname: '/supplier/[section]', params: { section } } as any);

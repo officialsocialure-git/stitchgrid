@@ -21,12 +21,13 @@ type SamplePaymentInfo = {
   id: string; status: string; sampleName?: string; sampleType?: string;
   parsedMeta?: { samplePrice?: number | string; samplePaymentStatus?: string };
 };
+type QcReport = { id: string; status: string; totalQuantity: number; inspectedQuantity: number; passedQuantity: number; defectiveQuantity: number; checklist: Record<string, boolean>; photos: string[]; defectivePhotos?: string[] | null; remarks?: string | null; buyerFeedback?: string | null; submittedAt: string };
 type Order = {
   id: string; poNumber: string; status: string; totalAmount: number | string; currency?: string; qcNotes?: string | null;
   expectedDate?: string | null; createdAt: string; buyerOrgId: string; supplierOrgId: string;
   buyer?: { id: string; name: string; city?: string | null };
   supplier?: { id: string; name: string; city?: string | null };
-  items?: OrderItem[]; milestones?: Milestone[]; samples?: { id: string; status: string }[];
+  items?: OrderItem[]; milestones?: Milestone[]; samples?: { id: string; status: string }[]; qcReports?: QcReport[];
 };
 type Membership = { organizationId?: string; organization?: { id?: string }; role?: string };
 type PaymentSummary = {
@@ -184,18 +185,11 @@ export default function BuyerMyOrdersScreen() {
     const order = qcReviewOrder;
     try {
       setUpdatingOrderId(order.id);
-      const status = decision === 'APPROVE' ? 'READY_TO_DISPATCH' : 'IN_PRODUCTION';
-      await apiRequest(`/purchase-orders/${order.id}/status`, {
+      const report = order.qcReports?.find(item => item.status === 'SUBMITTED');
+      if (!report) throw new Error('The supplier QC report could not be found. Please refresh the order and try again.');
+      await apiRequest(`/quality-checks/${report.id}/review`, {
         method: 'PATCH',
-        body: {
-          status,
-          qcNotes: decision === 'APPROVE'
-            ? `BUYER APPROVED QC: ${qcFeedback.trim() || 'Quality inspection approved'}`
-            : `BUYER REJECTED QC: ${qcFeedback.trim()}`,
-          note: decision === 'APPROVE'
-            ? 'Buyer reviewed and approved the supplier quality inspection. Order is ready for dispatch.'
-            : `Buyer requested QC rework: ${qcFeedback.trim()}`,
-        },
+        body: { decision: decision === 'APPROVE' ? 'APPROVE' : 'RECHECK', feedback: qcFeedback.trim() || undefined },
       });
       setQcReviewOrder(null);
       setQcFeedback('');
@@ -306,6 +300,7 @@ export default function BuyerMyOrdersScreen() {
             const paymentTotal = Number(paymentPlan?.totalAmount || order.totalAmount || 0);
             const paymentPercent = paymentTotal > 0 ? Math.min(100, Math.round(paymentPaid / paymentTotal * 100)) : 0;
             const paidCount = paymentMilestones.filter(item => ['PAID', 'RELEASED'].includes(item.status)).length;
+            const orderPendingSampleCount = (samplesByOrder[order.id] || []).filter(sample => String((sample as any).status).toUpperCase() === 'DISPATCHED').length;
             return (
               <View key={order.id} style={styles.orderCard}>
                 <View style={styles.orderMeta}>
@@ -385,7 +380,7 @@ export default function BuyerMyOrdersScreen() {
                     <Text style={styles.actionLabel}>Track Milestones</Text>
                   </Pressable>
                   <Pressable style={styles.actionItem} onPress={() => navigate('samples')}>
-                    <MaterialCommunityIcons name="hanger" size={27} color="#17202D" />
+                    <View style={styles.sampleActionIconWrap}><MaterialCommunityIcons name="hanger" size={27} color="#17202D" />{orderPendingSampleCount > 0 && <View style={styles.sampleActionBadge}><Text style={styles.sampleActionBadgeText}>{orderPendingSampleCount > 99 ? "99+" : orderPendingSampleCount}</Text></View>}</View>
                     <Text style={styles.actionLabel}>View Samples</Text>
                   </Pressable>
                   <Pressable style={styles.actionItem} onPress={() => navigate('payments')}>
@@ -488,7 +483,22 @@ export default function BuyerMyOrdersScreen() {
                 <Pressable style={styles.reviewClose} onPress={() => setQcReviewOrder(null)}><MaterialCommunityIcons name="close" size={24} color={ui.muted} /></Pressable>
               </View>
               <Text style={styles.ratingPrompt}>Supplier QC report</Text>
-              <Text style={styles.qcReportText}>{qcReviewOrder?.qcNotes?.trim() || 'Supplier has submitted the order for quality inspection. No detailed QC notes were attached.'}</Text>
+              {(() => {
+                const report = qcReviewOrder?.qcReports?.find(item => item.status === 'SUBMITTED') || qcReviewOrder?.qcReports?.[0];
+                if (!report) return <Text style={styles.qcReportText}>No detailed QC report is available yet. Please refresh the order.</Text>;
+                const checks: Record<string, string> = { fabricQuality: 'Fabric quality', stitching: 'Stitching and seams', measurements: 'Measurements', colorAndFinishing: 'Color and finishing', buttonsZippersAccessories: 'Buttons, zippers and accessories', defectsInspected: 'Defects inspection' };
+                return <View style={{ backgroundColor: '#F8F7FC', borderRadius: 12, padding: 12, gap: 10 }}>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {[['Total produced', report.totalQuantity], ['Inspected', report.inspectedQuantity], ['Passed', report.passedQuantity], ['Defective', report.defectiveQuantity]].map(([label, value]) => <View key={String(label)} style={{ width: '47%', backgroundColor: '#fff', borderRadius: 9, padding: 9 }}><Text style={{ color: '#667085', fontSize: 11 }}>{label}</Text><Text style={{ color: '#172033', fontSize: 18, fontWeight: '800' }}>{value}</Text></View>)}
+                  </View>
+                  <Text style={styles.ratingPrompt}>Quality checklist</Text>
+                  {Object.entries(checks).map(([key, label]) => <View key={key} style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}><MaterialCommunityIcons name={report.checklist?.[key] ? 'check-circle' : 'close-circle'} size={17} color={report.checklist?.[key] ? '#087653' : '#B42318'} /><Text style={{ color: '#344054', fontSize: 12 }}>{label}</Text></View>)}
+                  <Text style={styles.ratingPrompt}>QC inspection photos</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{(report.photos || []).map((url, index) => <Image key={url + index} source={{ uri: url }} style={{ width: 88, height: 88, borderRadius: 9, backgroundColor: '#EAECF0' }} />)}</View>
+                  {!!report.defectivePhotos?.length && <><Text style={styles.ratingPrompt}>Defective-item photos</Text><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{report.defectivePhotos.map((url, index) => <Image key={url + index} source={{ uri: url }} style={{ width: 88, height: 88, borderRadius: 9 }} />)}</View></>}
+                  {!!report.remarks && <Text style={styles.qcReportText}>Supplier remarks: {report.remarks}</Text>}
+                </View>;
+              })()}
               <Text style={styles.ratingPrompt}>Your review note (optional for approval, required for recheck)</Text>
               <TextInput value={qcFeedback} onChangeText={setQcFeedback} placeholder="Add your QC observations..." placeholderTextColor={ui.muted} multiline style={styles.commentInput} />
               <Pressable disabled={!!updatingOrderId} onPress={() => Alert.alert('Approve quality check?', 'This will allow the supplier to proceed to dispatch.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Approve QC', onPress: () => void reviewQualityCheck('APPROVE') }])} style={[styles.submitReviewButton, !!updatingOrderId && { opacity: .6 }]}>
@@ -568,6 +578,9 @@ const styles = StyleSheet.create({
   reviewedTag: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
   reviewedText: { fontSize: 13, fontWeight: '700', color: '#087653' },
   actionsRow: { flexDirection: 'row', alignItems: 'stretch', justifyContent: 'space-between', gap: 5 },
+  sampleActionIconWrap: { position: 'relative', alignItems: 'center', justifyContent: 'center' },
+  sampleActionBadge: { position: 'absolute', top: -7, right: -12, minWidth: 19, height: 19, paddingHorizontal: 4, borderRadius: 10, backgroundColor: '#E11D48', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: ui.surface },
+  sampleActionBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
   actionItem: { flex: 1, minHeight: 74, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, paddingHorizontal: 2 },
   actionItemActive: { flex: 1, minHeight: 74, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, borderWidth: 1, borderColor: '#D8DCE2', paddingHorizontal: 2 },
   actionLabel: { fontSize: 12, fontWeight: '700', color: ui.ink, textAlign: 'center' },

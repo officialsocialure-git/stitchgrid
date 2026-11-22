@@ -77,4 +77,28 @@ export default function OrganizationSettingsScreen(){
  {!keyboardVisible && <AppBottomNav role={navRole} activeSection="organization-settings" onNavigate={navigate} />}
  </KeyboardAvoidingView>;
 }
-const s=StyleSheet.create({screen:{flex:1,backgroundColor:ui.canvas},content:{padding:16,paddingBottom:30,gap:15,width:'100%',maxWidth:840,alignSelf:'center'},heading:{fontSize:22,lineHeight:29,fontWeight: '700',color:'#142033'},subheading:{fontSize:15,lineHeight:23,color:ui.muted,marginBottom:2},card:{backgroundColor:ui.surface,borderRadius:16,borderWidth:1,borderColor:ui.border,padding:18,gap:17},statusRow:{flexDirection:'row',alignItems:'center',gap:10},sectionTitle:{fontSize:20,fontWeight: '700',color:ui.ink},statusDesc:{fontSize:14,lineHeight:21,color:ui.muted,marginTop:4},badge:{flexDirection:'row',alignItems:'center',gap:6,paddingHorizontal:12,paddingVertical:10,borderRadius:30,backgroundColor:'#E5EDFF'},approved:{backgroundColor:'#E8F8EF'},badgeText:{fontSize: 13,fontWeight: '700',color:'#4B5563'},separator:{height:1,backgroundColor:'#E9EAF0',marginVertical:2},field:{gap:8},label:{fontSize: 13,fontWeight: '700',color:'#596273'},input:{height:54,borderWidth:1,borderColor:'#E2E4E9',borderRadius:12,paddingHorizontal:14,fontSize:15,color:ui.ink,backgroundColor:ui.surface},readOnly:{backgroundColor:'#F0F3FF'},save:{minHeight:54,alignSelf:'flex-end',backgroundColor:ui.accent,borderRadius:13,paddingHorizontal:22,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:10},saveText:{fontSize:16,fontWeight: '700',color:ui.surface},state:{minHeight:220,alignItems:'center',justifyContent:'center',gap:10},muted:{fontSize:13,color:ui.muted},error:{color:'#B42318',fontSize:13},success:{flexDirection:'row',alignItems:'center',gap:8,backgroundColor:'#ECFDF3',padding:12,borderRadius:12},successText:{flex:1,color:'#167447',fontSize:13,fontWeight:'600'}});
+const s=StyleSheet.create({
+ screen:{flex:1,backgroundColor:ui.canvas},
+ content:{paddingHorizontal:12,paddingTop:12,paddingBottom:22,gap:10,width:'100%',maxWidth:840,alignSelf:'center'},
+ heading:{fontSize:16,lineHeight:21,fontWeight:'700',color:'#142033'},
+ subheading:{fontSize:12,lineHeight:18,color:ui.muted,marginBottom:1},
+ card:{backgroundColor:ui.surface,borderRadius:14,borderWidth:1,borderColor:ui.border,padding:12,gap:11},
+ statusRow:{flexDirection:'row',alignItems:'center',gap:8},
+ sectionTitle:{fontSize:14,fontWeight:'700',color:ui.ink},
+ statusDesc:{fontSize:11,lineHeight:16,color:ui.muted,marginTop:3},
+ badge:{flexDirection:'row',alignItems:'center',gap:4,paddingHorizontal:8,paddingVertical:6,borderRadius:30,backgroundColor:'#E5EDFF'},
+ approved:{backgroundColor:'#E8F8EF'},
+ badgeText:{fontSize:10,fontWeight:'700',color:'#4B5563'},
+ separator:{height:1,backgroundColor:'#E9EAF0',marginVertical:1},
+ field:{gap:5},
+ label:{fontSize:10,fontWeight:'700',color:'#596273'},
+ input:{height:39,borderWidth:1,borderColor:'#E2E4E9',borderRadius:9,paddingHorizontal:11,fontSize:13,color:ui.ink,backgroundColor:ui.surface},
+ readOnly:{backgroundColor:'#F0F3FF'},
+ save:{minHeight:44,alignSelf:'flex-end',backgroundColor:ui.accent,borderRadius:10,paddingHorizontal:18,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:8},
+ saveText:{fontSize:13,fontWeight:'700',color:ui.surface},
+ state:{minHeight:180,alignItems:'center',justifyContent:'center',gap:10},
+ muted:{fontSize:12,color:ui.muted},
+ error:{color:'#B42318',fontSize:12},
+ success:{flexDirection:'row',alignItems:'center',gap:8,backgroundColor:'#ECFDF3',padding:10,borderRadius:10},
+ successText:{flex:1,color:'#167447',fontSize:12,fontWeight:'600'}
+});

@@ -11,9 +11,12 @@ type ApiOptions = {
 
 export async function apiRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {
   let token: string | null = null;
-  try {
-    token = await SecureStore.getItemAsync('sg_token');
-  } catch {}
+  const isPublicAuthRequest = /^\/auth\/(login|signup|google|forgot-password|reset-password)(\/|$)/.test(path);
+  if (!isPublicAuthRequest) {
+    try {
+      token = await SecureStore.getItemAsync('sg_token');
+    } catch {}
+  }
 
   let response: Response;
   const controller = options.timeoutMs ? new AbortController() : undefined;

@@ -1,9 +1,9 @@
 import { ui } from '@/theme/ui';
 import { AppBottomNav } from '@/components/AppBottomNav';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, AppState, FlatList, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { apiGet, apiPost } from '@/services/api';
 import { AppHeader } from '@/components/AppHeader';
@@ -16,6 +16,7 @@ const time = (s?:string) => { if(!s)return ''; const d=new Date(s); return Numbe
 
 export default function BuyerChatScreen(){
  const router=useRouter();
+ const { conversationId } = useLocalSearchParams<{ conversationId?: string }>();
  const [user,setUser]=useState<{id:string;fullName?:string}|null>(null);
  const [activeRole,setActiveRole]=useState<'BUYER'|'SUPPLIER'>('BUYER');
  const [convs,setConvs]=useState<Conv[]>([]); const [activeId,setActiveId]=useState('');
@@ -27,6 +28,7 @@ export default function BuyerChatScreen(){
  const active=useRef(activeId); active.current=activeId;
  const conversation=useMemo(()=>convs.find(c=>c.id===activeId)||null,[convs,activeId]);
  const name=(c:Conv)=>activeRole==='SUPPLIER'?(c.buyer?.name||'Buyer Organization'):(c.supplier?.name||'Manufacturing Partner');
+ useEffect(()=>{if(typeof conversationId==='string'&&conversationId)setActiveId(conversationId);},[conversationId]);
 
  const loadConvs=useCallback(async(quiet=false)=>{
   if(!quiet)setLoading(true);
@@ -42,8 +44,8 @@ export default function BuyerChatScreen(){
    setThreadError('');
   }catch(e){if(!quiet)setThreadError(e instanceof Error?e.message:'Unable to load messages.');}
  },[]);
- useEffect(()=>{let live=true;SecureStore.getItemAsync('sg_user').then(v=>{if(live&&v)try{setUser(JSON.parse(v));}catch{}});SecureStore.getItemAsync('sg_membership').then(v=>{if(live&&v)try{const m=JSON.parse(v);if(m.role==='SUPPLIER')setActiveRole('SUPPLIER');}catch{}});void loadConvs();const t=setInterval(()=>void loadConvs(true),7000);return()=>{live=false;clearInterval(t);};},[loadConvs]);
- useEffect(()=>{stickToBottom.current=true;if(!activeId){setMessages([]);return;}void loadMessages(activeId);const t=setInterval(()=>void loadMessages(activeId,true),2200);return()=>clearInterval(t);},[activeId,loadMessages]);
+ useEffect(()=>{let live=true;SecureStore.getItemAsync('sg_user').then(v=>{if(live&&v)try{setUser(JSON.parse(v));}catch{}});SecureStore.getItemAsync('sg_membership').then(v=>{if(live&&v)try{const m=JSON.parse(v);if(m.role==='SUPPLIER')setActiveRole('SUPPLIER');}catch{}});void loadConvs();const t=setInterval(()=>{if(AppState.currentState==='active')void loadConvs(true);},20000);return()=>{live=false;clearInterval(t);};},[loadConvs]);
+ useEffect(()=>{stickToBottom.current=true;if(!activeId){setMessages([]);return;}void loadMessages(activeId);const t=setInterval(()=>{if(AppState.currentState==='active')void loadMessages(activeId,true);},5000);return()=>clearInterval(t);},[activeId,loadMessages]);
 
  const send=async()=>{const body=draft.trim();if(!body||!activeId||sending)return;const id=activeId;const temp:Msg={id:`local-${Date.now()}`,conversationId:id,senderUserId:user?.id||'',body,createdAt:new Date().toISOString()};setDraft('');stickToBottom.current=true;setMessages(v=>[...v,temp]);setSending(true);setThreadError('');
   try{const saved=await apiPost<Msg>(`/conversations/${id}/messages`,{body});setMessages(v=>v.map(m=>m.id===temp.id?saved:m));void loadConvs(true);}

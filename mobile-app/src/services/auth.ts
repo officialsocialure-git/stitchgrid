@@ -18,13 +18,13 @@ export type AuthResponse = {
 
 async function persistSession(result: AuthResponse) {
   if (!result?.accessToken) throw new Error('The server did not return an access token. Please try again.');
-  await SecureStore.setItemAsync('sg_token', result.accessToken);
-  await SecureStore.setItemAsync('sg_user', JSON.stringify(result.user));
-  if (result.activeMembership) {
-    await SecureStore.setItemAsync('sg_membership', JSON.stringify(result.activeMembership));
-  } else {
-    await SecureStore.deleteItemAsync('sg_membership');
-  }
+  await Promise.all([
+    SecureStore.setItemAsync('sg_token', result.accessToken),
+    SecureStore.setItemAsync('sg_user', JSON.stringify(result.user)),
+    result.activeMembership
+      ? SecureStore.setItemAsync('sg_membership', JSON.stringify(result.activeMembership))
+      : SecureStore.deleteItemAsync('sg_membership'),
+  ]);
   return result;
 }
 

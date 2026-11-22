@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   Layers3, Clock3, CheckCircle2, XCircle, Search, RefreshCw, Download,
   ChevronLeft, ChevronRight, MoreHorizontal, Eye, X, LoaderCircle,
@@ -450,9 +451,19 @@ export default function MarketplacePage() {
                           <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#EBE4FF] text-xs font-bold text-[#5B13EC]">
                             {(supplierOrg?.name || "S").slice(0, 1).toUpperCase()}
                           </span>
-                          <span className="truncate max-w-[150px] font-semibold text-slate-700">
-                            {supplierOrg?.name || "Verified Mill"}
-                          </span>
+                          {supplierOrg?.id ? (
+                            <Link
+                              href={`/admin/verification/${supplierOrg.id}`}
+                              className="truncate max-w-[150px] font-semibold text-slate-700 hover:text-[#5B13EC] hover:underline"
+                              title="View supplier business profile"
+                            >
+                              {supplierOrg.name || "Verified Mill"}
+                            </Link>
+                          ) : (
+                            <span className="truncate max-w-[150px] font-semibold text-slate-700">
+                              {supplierOrg?.name || "Verified Mill"}
+                            </span>
+                          )}
                         </div>
                       </td>
 

@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import { apiGet, apiRequest } from '@/services/api';
 import { AppHeader } from '@/components/AppHeader';
+import SupplierQcSubmitModal from './SupplierQcSubmitModal';
 
 const PURPLE = ui.accent;
 const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparent.png';
@@ -99,6 +100,7 @@ export default function SupplierMyOrdersScreen() {
   const [bottomHeight, setBottomHeight] = useState(0);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [dispatchOrder, setDispatchOrder] = useState<PurchaseOrder | null>(null);
+  const [qcSubmitOrder, setQcSubmitOrder] = useState<PurchaseOrder | null>(null);
   const [trackingNumberDraft, setTrackingNumberDraft] = useState('');
   const [sampleOrderIds, setSampleOrderIds] = useState<Set<string>>(new Set());
 
@@ -163,6 +165,10 @@ export default function SupplierMyOrdersScreen() {
   }, [orders, search, filter]);
 
   const updateStatus = (order: PurchaseOrder, nextStatus: string) => {
+    if (nextStatus === 'QC_PENDING') {
+      setQcSubmitOrder(order);
+      return;
+    }
     if (nextStatus === 'OPEN_SAMPLES') {
       navigate('samples', order.id);
       return;
@@ -352,6 +358,8 @@ export default function SupplierMyOrdersScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <SupplierQcSubmitModal visible={!!qcSubmitOrder} orderId={qcSubmitOrder?.id || ''} poNumber={qcSubmitOrder?.poNumber || ''} onClose={() => setQcSubmitOrder(null)} onSubmitted={() => { setQcSubmitOrder(null); void loadOrders(true); }} />
 
       <Modal visible={false} transparent animationType="slide" onRequestClose={() => setDispatchOrder(null)}>
         <View style={styles.modalBackdrop}>

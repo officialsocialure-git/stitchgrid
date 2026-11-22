@@ -12,6 +12,12 @@ import BuyerNotificationsScreen from '@/features/buyer/BuyerNotificationsScreen'
 import BuyerChatScreen from '@/features/buyer/BuyerChatScreen';
 import OrganizationSettingsScreen from '@/features/shared/OrganizationSettingsScreen';
 import SupplierAccountSettingsScreen from '@/features/supplier/SupplierAccountSettingsScreen';
+import SupplierBusinessProfileScreen from '@/features/supplier/SupplierBusinessProfileScreen';
+import SupplierBusinessGalleryScreen from '@/features/supplier/SupplierBusinessGalleryScreen';
+import SupplierProductsPortfolioScreen from '@/features/supplier/SupplierProductsPortfolioScreen';
+import SupplierCertificationsScreen from '@/features/supplier/SupplierCertificationsScreen';
+import SupplierCompanyInformationScreen from '@/features/supplier/SupplierCompanyInformationScreen';
+import SupplierManufacturingCapabilitiesScreen from '@/features/supplier/SupplierManufacturingCapabilitiesScreen';
 import SupplierPaymentsScreen from '@/features/supplier/SupplierPaymentsScreen';
 import { AppHeader } from '@/components/AppHeader';
 
@@ -29,6 +35,12 @@ export default function SupplierSectionScreen() {
   const { section } = useLocalSearchParams<{ section?: string }>();
   if (section === 'notifications') return <BuyerNotificationsScreen />;
   if (section === 'chat') return <BuyerChatScreen />;
+  if (section === 'business-profile') return <SupplierBusinessProfileScreen />;
+  if (section === 'business-gallery') return <SupplierBusinessGalleryScreen />;
+  if (section === 'catalog') return <SupplierProductsPortfolioScreen />;
+  if (section === 'business-certifications') return <SupplierCertificationsScreen />;
+  if (section === 'company-information') return <SupplierCompanyInformationScreen />;
+  if (section === 'manufacturing-capabilities') return <SupplierManufacturingCapabilitiesScreen />;
   if (section === 'organization-settings' || section === 'profile') return <OrganizationSettingsScreen />;
   if (section === 'account-settings') return <SupplierAccountSettingsScreen />;
   if (section === 'home' || !section) return <SupplierDashboard />;

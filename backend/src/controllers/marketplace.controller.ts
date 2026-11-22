@@ -288,6 +288,98 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
   }
 }
 
+
+export async function getPublicSupplierProfile(req: Request, res: Response, next: NextFunction) {
+  try {
+    const organizationId = String(req.params.organizationId || "").trim();
+    if (!organizationId) throw new AppError(400, "Supplier organization ID is required");
+
+    const organization = await prisma.organization.findFirst({
+      where: {
+        id: organizationId,
+        members: { some: { role: "SUPPLIER", isActive: true } },
+      },
+      select: {
+        id: true,
+        name: true,
+        businessType: true,
+        address: true,
+        city: true,
+        country: true,
+        verificationStatus: true,
+        supplierProfile: {
+          include: {
+            categories: true,
+            capabilities: true,
+            catalogItems: {
+              where: { moderationStatus: "APPROVED" },
+              select: { id: true, name: true, itemType: true, imageUrl: true },
+              orderBy: { createdAt: "desc" },
+            },
+            certifications: {
+              where: { status: "VERIFIED" },
+              select: { id: true, name: true, issuer: true, category: true, status: true },
+              orderBy: { createdAt: "desc" },
+            },
+          },
+        },
+        businessMedia: {
+          orderBy: [{ mediaType: "asc" }, { sortOrder: "asc" }],
+        },
+      },
+    });
+
+    if (!organization) throw new AppError(404, "Supplier profile not found");
+    const [ratingSummary, recentReviews, ratingBreakdown] = await Promise.all([
+      prisma.review.aggregate({
+        where: { reviewedOrgId: organizationId },
+        _avg: { rating: true },
+        _count: { _all: true },
+      }),
+      prisma.review.findMany({
+        where: { reviewedOrgId: organizationId },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      }),
+      prisma.review.groupBy({
+        by: ["rating"],
+        where: { reviewedOrgId: organizationId },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const reviewerIds = [...new Set(recentReviews.map((review) => review.reviewerOrgId))];
+    const reviewers = reviewerIds.length
+      ? await prisma.organization.findMany({
+          where: { id: { in: reviewerIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const reviewerNames = new Map(reviewers.map((item) => [item.id, item.name]));
+
+    return sendOk(res, {
+      ...organization,
+      publicRating: {
+        average: ratingSummary._avg.rating ?? null,
+        count: ratingSummary._count._all,
+        breakdown: ratingBreakdown.map((row) => ({
+          rating: row.rating,
+          count: row._count._all,
+        })),
+      },
+      publicReviews: recentReviews.map((review) => ({
+        id: review.id,
+        rating: review.rating,
+        comment: review.comment,
+        createdAt: review.createdAt,
+        reviewerName: reviewerNames.get(review.reviewerOrgId) || "Verified buyer",
+      })),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function upsertSupplierProfile(req: Request, res: Response, next: NextFunction) {
   try {
     const input = z.object({

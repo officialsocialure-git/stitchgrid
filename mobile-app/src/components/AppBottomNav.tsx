@@ -20,7 +20,7 @@ const SUPPLIER_TABS: Tab[] = [
   { section: 'requests', label: 'Sourcing', icon: 'file-document-outline', selectedIcon: 'file-document' },
   { section: 'orders', label: 'Orders', icon: 'package-variant-closed', selectedIcon: 'package-variant' },
   { section: 'chat', label: 'Chats', icon: 'message-text-outline', selectedIcon: 'message-text' },
-  { section: 'organization-settings', label: 'Profile', icon: 'account-outline', selectedIcon: 'account' },
+  { section: 'business-profile', label: 'Profile', icon: 'account-outline', selectedIcon: 'account' },
 ];
 
 type Props = {
@@ -36,8 +36,8 @@ export function AppBottomNav({ role, activeSection, onNavigate, onLayout }: Prop
   const active = activeSection === 'offers' ? 'requests'
     : activeSection === 'tracking' || activeSection === 'samples' || activeSection === 'payments'
       ? 'orders'
-      : activeSection === 'profile' || activeSection === 'account-settings'
-        ? 'organization-settings'
+      : activeSection === 'profile' || activeSection === 'account-settings' || activeSection === 'organization-settings'
+        ? 'business-profile'
         : activeSection;
 
   return (
