@@ -25,6 +25,7 @@ type Order = {
   items?: { id: string; name: string; quantity: number; unitPrice: number | string }[];
   milestones?: { id: string; title: string; status: string; dueDate?: string | null; completedAt?: string | null }[];
   samples?: { id: string; status: string; createdAt: string; notes?: string | null }[];
+  qcReports?: { id: string; status: string; totalQuantity: number; inspectedQuantity: number; passedQuantity: number; defectiveQuantity: number; checklist: Record<string, boolean>; photos: string[]; defectivePhotos?: string[] | null; remarks?: string | null; buyerFeedback?: string | null; submittedAt: string }[];
   paymentTransactions?: { id: string; amount: number | string; currency: string; status: string; createdAt: string }[];
 };
 
@@ -128,7 +129,7 @@ export default function OrdersPage() {
 
   const refresh = useCallback(() => setRefreshKey((v) => v + 1), []);
   useRealtimeSync({
-    topics: ["orders", "order:created", "order:updated", "milestone:updated", "payments", "production", "sample:created", "sample:updated", "admin:stats_updated"],
+    topics: ["orders", "order:created", "order:updated", "milestone:updated", "payments", "production", "sample:created", "sample:updated", "qc:submitted", "qc:reviewed", "admin:stats_updated"],
     onSync: refresh,
     pollIntervalMs: 30000,
     enabled: true,
@@ -703,6 +704,20 @@ export default function OrdersPage() {
                   <span className="text-slate-400 font-semibold uppercase">Status</span>
                   <p className="font-bold text-[#5B13EC] mt-0.5">{activeOrder.status}</p>
                 </div>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-slate-900 mb-2">Quality Check Reports</h4>
+                {activeOrder.qcReports?.length ? activeOrder.qcReports.map((report) => (
+                  <div key={report.id} className="mb-3 rounded-xl border border-slate-200 bg-[#FAF9FD] p-3 space-y-3">
+                    <div className="flex items-center justify-between gap-2"><span className="font-bold text-slate-900">{new Date(report.submittedAt).toLocaleString("en-IN")}</span><span className="rounded-full bg-[#EBE4FF] px-2 py-1 text-[10px] font-bold text-[#5B13EC]">{report.status.replaceAll("_", " ")}</span></div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{[["Produced", report.totalQuantity], ["Inspected", report.inspectedQuantity], ["Passed", report.passedQuantity], ["Defective", report.defectiveQuantity]].map(([label, value]) => <div key={String(label)} className="rounded-lg bg-white p-2"><p className="text-[10px] text-slate-500">{label}</p><p className="text-base font-extrabold text-slate-900">{value}</p></div>)}</div>
+                    <div><p className="text-[11px] font-bold text-slate-700 mb-1">Checklist</p><div className="grid grid-cols-2 gap-1 text-[11px]">{Object.entries(report.checklist || {}).map(([key, passed]) => <span key={key} className={passed ? "text-emerald-700" : "text-rose-700"}>{passed ? "✓" : "✕"} {key.replace(/[A-Z]/g, (letter) => " " + letter.toLowerCase())}</span>)}</div></div>
+                    <div className="flex flex-wrap gap-2">{[...(report.photos || []), ...(report.defectivePhotos || [])].map((url, index) => <a key={url + index} href={url} target="_blank" rel="noreferrer" className="text-xs font-semibold text-[#5B13EC] underline">{index < (report.photos || []).length ? "QC Photo " + (index + 1) : "Defect Photo " + (index - (report.photos || []).length + 1)}</a>)}</div>
+                    {report.remarks && <p className="text-[11px] text-slate-600">Supplier remarks: {report.remarks}</p>}
+                    {report.buyerFeedback && <p className="rounded-lg bg-amber-50 p-2 text-[11px] text-amber-800">Buyer feedback: {report.buyerFeedback}</p>}
+                  </div>
+                )) : <p className="text-slate-400 text-xs italic">No QC reports submitted for this order.</p>}
               </div>
 
               <div>
