@@ -310,6 +310,36 @@ model PurchaseOrder {
   paymentTransactions PaymentTransaction[]
   samples        Sample[]
   events         OrderEvent[]
+  qcReports      QualityCheckReport[]
+}
+
+model QualityCheckReport {
+  id                 String   @id @default(cuid())
+  purchaseOrderId    String
+  supplierUserId     String
+  status             QualityCheckStatus @default(SUBMITTED)
+  totalQuantity      Int
+  inspectedQuantity  Int
+  passedQuantity     Int
+  defectiveQuantity  Int
+  checklist          Json
+  photos             Json
+  defectivePhotos    Json?
+  remarks            String?  @db.Text
+  buyerFeedback      String?  @db.Text
+  reviewedByUserId   String?
+  submittedAt        DateTime @default(now())
+  reviewedAt         DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  purchaseOrder      PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  @@index([purchaseOrderId, status, submittedAt])
+}
+
+enum QualityCheckStatus {
+  SUBMITTED
+  APPROVED
+  RECHECK_REQUESTED
 }
 
 model PurchaseOrderItem {

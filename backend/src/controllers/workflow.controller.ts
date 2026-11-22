@@ -17,6 +17,116 @@ async function orderAccess(orderId: string, userId: string) {
   return { order, memberships };
 }
 
+
+
+const qcChecklistSchema = z.object({
+  fabricQuality: z.boolean(),
+  stitching: z.boolean(),
+  measurements: z.boolean(),
+  colorAndFinishing: z.boolean(),
+  buttonsZippersAccessories: z.boolean(),
+  defectsInspected: z.boolean(),
+});
+
+export async function submitQualityCheck(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = z.object({
+      totalQuantity: z.number().int().positive(),
+      inspectedQuantity: z.number().int().positive(),
+      passedQuantity: z.number().int().min(0),
+      defectiveQuantity: z.number().int().min(0),
+      checklist: qcChecklistSchema,
+      photos: z.array(z.string().url()).min(1).max(12),
+      defectivePhotos: z.array(z.string().url()).max(8).optional(),
+      remarks: z.string().max(3000).optional(),
+    }).parse(req.body);
+    if (input.inspectedQuantity > input.totalQuantity ||
+        input.passedQuantity + input.defectiveQuantity !== input.inspectedQuantity) {
+      throw new AppError(400, "Quantity values must be consistent: passed + defective must equal inspected, and inspected cannot exceed total.");
+    }
+    if (Object.values(input.checklist).some(value => value !== true)) {
+      throw new AppError(400, "Please complete every required quality checklist item before submitting.");
+    }
+
+    const orderId = String(req.params.orderId);
+    const { order, memberships } = await orderAccess(orderId, req.auth!.userId);
+    if (!memberships.some(m => m.role === "SUPPLIER" && m.organizationId === order.supplierOrgId)) {
+      throw new AppError(403, "Only the supplier assigned to this order can submit its QC report.");
+    }
+    if (!["PRODUCTION_STARTED", "IN_PRODUCTION", "QC_PENDING", "QC"].includes(order.status)) {
+      throw new AppError(409, "The order must be in production before a QC report can be submitted.");
+    }
+
+    const report = await prisma.$transaction(async tx => {
+      const pendingReport = await tx.qualityCheckReport.findFirst({ where: { purchaseOrderId: order.id, status: "SUBMITTED" } });
+      if (pendingReport) throw new AppError(409, "A QC report is already awaiting buyer review for this order.");
+      const created = await tx.qualityCheckReport.create({
+        data: {
+          purchaseOrderId: order.id,
+          supplierUserId: req.auth!.userId,
+          totalQuantity: input.totalQuantity,
+          inspectedQuantity: input.inspectedQuantity,
+          passedQuantity: input.passedQuantity,
+          defectiveQuantity: input.defectiveQuantity,
+          checklist: input.checklist,
+          photos: input.photos,
+          defectivePhotos: input.defectivePhotos?.length ? input.defectivePhotos : undefined,
+          remarks: input.remarks?.trim() || null,
+        },
+      });
+      await tx.purchaseOrder.update({ where: { id: order.id }, data: { status: "QC_PENDING", qcNotes: input.remarks?.trim() || "Supplier submitted a detailed quality inspection report." } });
+      await tx.orderEvent.create({ data: { purchaseOrderId: order.id, eventType: "QC_REPORT_SUBMITTED", note: "Supplier submitted QC quantities, completed checklist and inspection photos.", actorUserId: req.auth!.userId } });
+      const buyers = await tx.organizationMember.findMany({ where: { organizationId: order.buyerOrgId, role: "BUYER", isActive: true }, select: { userId: true } });
+      if (buyers.length) await tx.notification.createMany({ data: buyers.map(b => ({ userId: b.userId, title: "QC report ready for review", body: `Supplier submitted the quality inspection report for PO #${order.poNumber}. Please review the quantities, checklist and photos.` })) });
+      return created;
+    });
+
+    await audit("QC_REPORT_SUBMITTED", "QualityCheckReport", report.id, req.auth!.userId, order.supplierOrgId, { purchaseOrderId: order.id });
+    emitToOrg(order.buyerOrgId, "qc:submitted", { orderId: order.id, reportId: report.id });
+    emitToOrg(order.supplierOrgId, "qc:submitted", { orderId: order.id, reportId: report.id });
+    emitToRole("ADMIN", "qc:submitted", { orderId: order.id, reportId: report.id });
+    return sendOk(res, report, 201);
+  } catch (error) { next(error); }
+}
+
+export async function reviewQualityCheck(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = z.object({
+      decision: z.enum(["APPROVE", "RECHECK"]),
+      feedback: z.string().trim().max(3000).optional(),
+    }).parse(req.body);
+    if (input.decision === "RECHECK" && (!input.feedback || input.feedback.length < 5)) {
+      throw new AppError(400, "Please provide at least 5 characters explaining what needs to be corrected.");
+    }
+    const reportId = String(req.params.reportId);
+    const report = await prisma.qualityCheckReport.findUnique({ where: { id: reportId }, include: { purchaseOrder: true } });
+    if (!report) throw new AppError(404, "QC report not found.");
+    const order = report.purchaseOrder;
+    const memberships = await prisma.organizationMember.findMany({ where: { userId: req.auth!.userId, organizationId: order.buyerOrgId, role: "BUYER", isActive: true } });
+    const isAdmin = req.auth!.role === "ADMIN";
+    if (!memberships.length && !isAdmin) throw new AppError(403, "Only the buyer for this order or an admin can review this QC report.");
+    if (report.status !== "SUBMITTED" || order.status !== "QC_PENDING") throw new AppError(409, "This QC report is no longer awaiting review.");
+
+    const nextStatus = input.decision === "APPROVE" ? "APPROVED" : "RECHECK_REQUESTED";
+    await prisma.$transaction(async tx => {
+      const changed = await tx.qualityCheckReport.updateMany({
+        where: { id: report.id, status: "SUBMITTED" },
+        data: { status: nextStatus, buyerFeedback: input.feedback || null, reviewedByUserId: req.auth!.userId, reviewedAt: new Date() },
+      });
+      if (changed.count !== 1) throw new AppError(409, "This QC report was already reviewed.");
+      await tx.purchaseOrder.update({ where: { id: order.id }, data: { status: input.decision === "APPROVE" ? "READY_TO_DISPATCH" : "IN_PRODUCTION", qcNotes: input.decision === "APPROVE" ? "Buyer approved the submitted quality inspection." : `Buyer requested QC recheck: ${input.feedback}` } });
+      await tx.orderEvent.create({ data: { purchaseOrderId: order.id, eventType: input.decision === "APPROVE" ? "QC_APPROVED" : "QC_RECHECK_REQUESTED", note: input.feedback || "Buyer approved quality inspection.", actorUserId: req.auth!.userId } });
+      const suppliers = await tx.organizationMember.findMany({ where: { organizationId: order.supplierOrgId, role: "SUPPLIER", isActive: true }, select: { userId: true } });
+      if (suppliers.length) await tx.notification.createMany({ data: suppliers.map(s => ({ userId: s.userId, title: input.decision === "APPROVE" ? "QC approved by buyer" : "QC recheck requested", body: input.decision === "APPROVE" ? `QC for PO #${order.poNumber} is approved. You can proceed to dispatch.` : `Buyer requested corrections for PO #${order.poNumber}: ${input.feedback}` })) });
+    });
+    await audit(input.decision === "APPROVE" ? "QC_REPORT_APPROVED" : "QC_RECHECK_REQUESTED", "QualityCheckReport", report.id, req.auth!.userId, order.buyerOrgId, { purchaseOrderId: order.id, feedback: input.feedback || null });
+    emitToOrg(order.buyerOrgId, "qc:reviewed", { orderId: order.id, reportId: report.id, decision: input.decision });
+    emitToOrg(order.supplierOrgId, "qc:reviewed", { orderId: order.id, reportId: report.id, decision: input.decision });
+    emitToRole("ADMIN", "qc:reviewed", { orderId: order.id, reportId: report.id, decision: input.decision });
+    return sendOk(res, { reportId: report.id, status: nextStatus, orderStatus: input.decision === "APPROVE" ? "READY_TO_DISPATCH" : "IN_PRODUCTION" });
+  } catch (error) { next(error); }
+}
+
 export async function uploadFile(req: Request, res: Response, next: NextFunction) {
   try {
     const input = z.object({

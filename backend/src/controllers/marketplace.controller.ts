@@ -841,7 +841,8 @@ export async function listPurchaseOrders(req: Request, res: Response, next: Next
         supplier: { select: { id: true, name: true, city: true } },
         items: true,
         milestones: { orderBy: { dueDate: "asc" } },
-        samples: true
+        samples: true,
+        qcReports: { orderBy: { submittedAt: "desc" } }
       },
       orderBy: { createdAt: "desc" }
     });
@@ -860,6 +861,7 @@ export async function getPurchaseOrderDetails(req: Request, res: Response, next:
         items: true,
         milestones: { orderBy: { dueDate: "asc" } },
         samples: true,
+        qcReports: { orderBy: { submittedAt: "desc" } },
         events: { orderBy: { createdAt: "desc" } }
       }
     });
@@ -1093,8 +1095,11 @@ export async function updateOrderStatus(req: Request, res: Response, next: NextF
       const productionPayment = plan?.milestones.find(item => item.title === "Production Payment");
       if (productionPayment?.status !== "PAID") throw new AppError(409, "Buyer production payment must be successful before bulk production can start.");
     }
-    if (supplier && input.status === "QC_PENDING" && !["PRODUCTION_STARTED", "IN_PRODUCTION", "QC_PENDING", "QC"].includes(order.status)) {
-      throw new AppError(409, "Order must be in production before submitting a quality inspection.");
+    if (supplier && input.status === "QC_PENDING") {
+      throw new AppError(409, "Submit the detailed QC report using the quality-check submission form.");
+    }
+    if (buyer && ["READY_TO_DISPATCH", "IN_PRODUCTION"].includes(input.status) && ["QC_PENDING", "QC"].includes(order.status)) {
+      throw new AppError(409, "Please review the submitted QC report using the QC review action.");
     }
     if (buyer && input.status === "READY_TO_DISPATCH" && !["QC_PENDING", "QC"].includes(order.status)) {
       throw new AppError(409, "Supplier must submit the quality inspection before buyer approval.");

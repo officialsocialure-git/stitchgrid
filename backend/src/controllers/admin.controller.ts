@@ -232,6 +232,7 @@ export async function adminOrders(req: Request, res: Response, next: NextFunctio
       items: true,
       milestones: true,
       samples: { orderBy: { createdAt: "desc" as const } },
+      qcReports: { orderBy: { submittedAt: "desc" as const } },
       paymentPlan: { include: { milestones: { orderBy: { sequence: "asc" as const } } } },
       paymentTransactions: { select: { id: true, amount: true, currency: true, status: true, createdAt: true } }
     };
@@ -264,6 +265,7 @@ export async function adminOrderDetails(req: Request, res: Response, next: NextF
         items: true,
         milestones: true,
         samples: { orderBy: { createdAt: "desc" } },
+        qcReports: { orderBy: { submittedAt: "desc" } },
         paymentPlan: { include: { milestones: { orderBy: { sequence: "asc" } } } },
         paymentTransactions: { include: { refunds: true }, orderBy: { createdAt: "desc" } },
         events: { orderBy: { createdAt: "desc" } }

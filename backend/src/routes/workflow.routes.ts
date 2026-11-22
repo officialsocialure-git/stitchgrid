@@ -4,11 +4,13 @@ import {
   adminAuditLogs, adminListOrganizations, createConversation, createDispute,
   createReview, createSample, getConversationMessages, listConversations, listNotifications,
   listPayments, listSamples, markNotificationRead, resolveDispute, sendMessage,
-  updateMilestone, updateSample, uploadFile
+  updateMilestone, updateSample, uploadFile, submitQualityCheck, reviewQualityCheck
 } from "../controllers/workflow.controller";
 const router = Router();
 router.use(authenticate);
 router.post("/upload", uploadFile);
+router.post("/orders/:orderId/quality-checks", submitQualityCheck);
+router.patch("/quality-checks/:reportId/review", reviewQualityCheck);
 router.get("/samples", listSamples);
 router.post("/orders/:orderId/samples", createSample);
 router.patch("/samples/:sampleId", updateSample);
