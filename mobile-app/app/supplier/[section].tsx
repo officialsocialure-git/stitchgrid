@@ -16,6 +16,7 @@ import SupplierBusinessProfileScreen from '@/features/supplier/SupplierBusinessP
 import SupplierBusinessGalleryScreen from '@/features/supplier/SupplierBusinessGalleryScreen';
 import SupplierProductsPortfolioScreen from '@/features/supplier/SupplierProductsPortfolioScreen';
 import SupplierCertificationsScreen from '@/features/supplier/SupplierCertificationsScreen';
+import SupplierReviewsManagementScreen from '@/features/supplier/SupplierReviewsManagementScreen';
 import SupplierCompanyInformationScreen from '@/features/supplier/SupplierCompanyInformationScreen';
 import SupplierManufacturingCapabilitiesScreen from '@/features/supplier/SupplierManufacturingCapabilitiesScreen';
 import SupplierPaymentsScreen from '@/features/supplier/SupplierPaymentsScreen';
@@ -39,6 +40,7 @@ export default function SupplierSectionScreen() {
   if (section === 'business-gallery') return <SupplierBusinessGalleryScreen />;
   if (section === 'catalog') return <SupplierProductsPortfolioScreen />;
   if (section === 'business-certifications') return <SupplierCertificationsScreen />;
+  if (section === 'supplier-reviews') return <SupplierReviewsManagementScreen />;
   if (section === 'company-information') return <SupplierCompanyInformationScreen />;
   if (section === 'manufacturing-capabilities') return <SupplierManufacturingCapabilitiesScreen />;
   if (section === 'organization-settings' || section === 'profile') return <OrganizationSettingsScreen />;

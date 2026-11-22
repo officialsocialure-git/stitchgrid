@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Layers3, Clock3, CheckCircle2, XCircle, Search, RefreshCw, Download,
-  ChevronLeft, ChevronRight, MoreHorizontal, Eye, X, LoaderCircle,
+  ChevronLeft, ChevronRight, Eye, X, LoaderCircle,
   ArrowUp, CheckSquare, Square
 } from "lucide-react";
 import { adminService } from "@/features/admin/admin.service";
@@ -64,8 +64,6 @@ export default function MarketplacePage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [activeListing, setActiveListing] = useState<Listing | null>(null);
-  const [busyId, setBusyId] = useState("");
-  const [menuId, setMenuId] = useState<string | null>(null);
 
   const refresh = useCallback(() => setRefreshKey((v) => v + 1), []);
   useRealtimeSync({
@@ -131,24 +129,6 @@ export default function MarketplacePage() {
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
-  };
-
-  const moderate = async (id: string, status: "APPROVED" | "REJECTED") => {
-    const note = status === "REJECTED" ? window.prompt("Reason for rejection:") : "";
-    if (status === "REJECTED" && note === null) return;
-    setBusyId(id);
-    setMenuId(null);
-    try {
-      await adminService.moderateCatalog(id, status, note || undefined);
-      refresh();
-      if (activeListing?.id === id) {
-        setActiveListing((prev) => (prev ? { ...prev, moderationStatus: status, moderationNote: note } : null));
-      }
-    } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Moderation failed.");
-    } finally {
-      setBusyId("");
-    }
   };
 
   const exportCsv = () => {
@@ -523,35 +503,9 @@ export default function MarketplacePage() {
                             Review
                           </button>
 
-                          <button
-                            disabled={busyId === item.id}
-                            onClick={() => setMenuId(menuId === item.id ? null : item.id)}
-                            className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-[#EBE4FF] hover:text-[#5B13EC] transition"
-                          >
-                            <MoreHorizontal size={17} />
-                          </button>
                         </div>
 
-                        {menuId === item.id && (
-                          <div className="absolute right-4 top-10 z-20 w-40 rounded-xl border border-slate-200 bg-white p-1.5 text-left shadow-xl">
-                            {item.moderationStatus !== "APPROVED" && (
-                              <button
-                                onClick={() => moderate(item.id, "APPROVED")}
-                                className="w-full rounded-lg px-3 py-1.5 text-left text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
-                              >
-                                Approve Listing
-                              </button>
-                            )}
-                            {item.moderationStatus !== "REJECTED" && (
-                              <button
-                                onClick={() => moderate(item.id, "REJECTED")}
-                                className="w-full rounded-lg px-3 py-1.5 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50"
-                              >
-                                Reject Listing
-                              </button>
-                            )}
-                          </div>
-                        )}
+
                       </td>
                     </tr>
                   );
@@ -683,32 +637,7 @@ export default function MarketplacePage() {
                 Close
               </button>
 
-              <div className="flex gap-2">
-                {activeListing.moderationStatus !== "REJECTED" && (
-                  <button
-                    onClick={async () => {
-                      const id = activeListing.id;
-                      setActiveListing(null);
-                      await moderate(id, "REJECTED");
-                    }}
-                    className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100"
-                  >
-                    Reject Listing
-                  </button>
-                )}
-                {activeListing.moderationStatus !== "APPROVED" && (
-                  <button
-                    onClick={async () => {
-                      const id = activeListing.id;
-                      setActiveListing(null);
-                      await moderate(id, "APPROVED");
-                    }}
-                    className="rounded-xl bg-[#5B13EC] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#4C0EC9]"
-                  >
-                    Approve Listing
-                  </button>
-                )}
-              </div>
+
             </div>
           </div>
         </div>

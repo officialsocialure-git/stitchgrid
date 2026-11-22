@@ -22,10 +22,42 @@ type OrganizationProfile = {
   country?: string | null;
   businessType?: string | null;
   verificationStatus?: string;
-  supplierProfile?: { yearsInBusiness?: number | null } | null;
+  supplierProfile?: { yearsInBusiness?: number | null; description?: string | null } | null;
 };
 
 const COUNTRIES = ['India', 'Nepal', 'Bangladesh', 'China', 'Vietnam', 'Sri Lanka', 'Pakistan', 'United States', 'United Kingdom', 'Other'];
+
+type FieldProps = {
+  label: string; value: string; onChangeText: (value: string) => void; placeholder: string;
+  required?: boolean; keyboardType?: 'default' | 'numeric' | 'email-address'; autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters'; valid?: boolean;
+  maxLength?: number;
+};
+
+function Field({ label, value, onChangeText, placeholder, required, keyboardType, autoCapitalize = 'sentences', valid, maxLength }: FieldProps) {
+  return (
+    <View style={s.field}>
+      <Text style={s.label}>{label}{required ? <Text style={s.required}> *</Text> : null}</Text>
+      <View style={s.inputWrap}>
+        <TextInput
+          accessibilityLabel={label}
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor="#98A2B3"
+          keyboardType={keyboardType || 'default'}
+          autoCapitalize={autoCapitalize}
+          autoCorrect={false}
+          editable={true}
+          selectTextOnFocus={false}
+          selectionColor={ui.accent}
+          maxLength={maxLength}
+          style={[s.input, valid && s.validInput]}
+        />
+        {valid ? <MaterialCommunityIcons name="check-circle" size={18} color="#20A464" style={s.validIcon} /> : null}
+      </View>
+    </View>
+  );
+}
 
 export default function SupplierCompanyInformationScreen() {
   const router = useRouter();
@@ -35,6 +67,7 @@ export default function SupplierCompanyInformationScreen() {
   const [legalName, setLegalName] = useState('');
   const [taxId, setTaxId] = useState('');
   const [years, setYears] = useState('');
+  const [description, setDescription] = useState('');
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
   const [country, setCountry] = useState('India');
@@ -59,6 +92,7 @@ export default function SupplierCompanyInformationScreen() {
       setLegalName(data.legalName || '');
       setTaxId(data.taxId || '');
       setYears(data.supplierProfile?.yearsInBusiness == null ? '' : String(data.supplierProfile.yearsInBusiness));
+      setDescription(data.supplierProfile?.description || '');
       setAddress(data.address || '');
       setCity(data.city || '');
       setCountry(data.country || 'India');
@@ -100,6 +134,7 @@ export default function SupplierCompanyInformationScreen() {
           legalName: legalName.trim(),
           taxId: taxId.trim().toUpperCase(),
           yearsInBusiness: Number(years),
+          description: description.trim(),
           address: address.trim(),
           city: city.trim(),
           country,
@@ -129,33 +164,6 @@ export default function SupplierCompanyInformationScreen() {
     }
   };
 
-  const Field = ({ label, value, onChangeText, placeholder, required, keyboardType, autoCapitalize = 'sentences', valid }: {
-    label: string; value: string; onChangeText: (value: string) => void; placeholder: string;
-    required?: boolean; keyboardType?: 'default' | 'numeric' | 'email-address'; autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters'; valid?: boolean;
-  }) => (
-    <View style={s.field}>
-      <Text style={s.label}>{label}{required ? <Text style={s.required}> *</Text> : null}</Text>
-      <View style={s.inputWrap}>
-        <TextInput
-          accessibilityLabel={label}
-          value={value}
-          onChangeText={onChangeText}
-          placeholder={placeholder}
-          placeholderTextColor="#98A2B3"
-          keyboardType={keyboardType || 'default'}
-          autoCapitalize={autoCapitalize}
-          autoCorrect={false}
-          editable={true}
-          selectTextOnFocus={false}
-          selectionColor={ui.accent}
-          maxLength={label === 'GSTIN / Tax Identification' && country === 'India' ? 15 : undefined}
-          style={[s.input, valid && s.validInput]}
-        />
-        {valid ? <MaterialCommunityIcons name="check-circle" size={18} color="#20A464" style={s.validIcon} /> : null}
-      </View>
-    </View>
-  );
-
   return (
     <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <AppHeader isBack role="SUPPLIER" title="Company Information" showLogo={false} />
@@ -167,8 +175,23 @@ export default function SupplierCompanyInformationScreen() {
           <View style={s.card}>
             <Field label="Organization / Company Name" value={name} onChangeText={setName} placeholder="Enter company name" required />
             <Field label="Legal Name" value={legalName} onChangeText={setLegalName} placeholder="Registered legal name" />
-            <Field label="GSTIN / Tax Identification" value={taxId} onChangeText={setTaxId} placeholder="Enter GSTIN / Tax ID" required autoCapitalize="characters" valid={taxValid} />
+            <Field label="GSTIN / Tax Identification" value={taxId} onChangeText={setTaxId} placeholder="Enter GSTIN / Tax ID" required autoCapitalize="characters" valid={taxValid} maxLength={country === 'India' ? 15 : undefined} />
             <Field label="Years in Business" value={years} onChangeText={setYears} placeholder="e.g. 5" required keyboardType="numeric" />
+            <View style={s.field}>
+              <Text style={s.label}>About the Company</Text>
+              <TextInput
+                accessibilityLabel="About the Company"
+                value={description}
+                onChangeText={setDescription}
+                placeholder="Introduce your company, experience, manufacturing strengths, quality standards and what makes your factory different."
+                placeholderTextColor="#98A2B3"
+                multiline
+                textAlignVertical="top"
+                maxLength={4000}
+                style={s.multilineInput}
+              />
+              <Text style={s.characterCount}>{description.length}/4000 characters</Text>
+            </View>
             <Field label="Registered Address / Factory Location" value={address} onChangeText={setAddress} placeholder="Enter registered / factory address" required />
             <Field label="Primary Operating City" value={city} onChangeText={setCity} placeholder="e.g. Noida" required />
             <View style={s.field}>
@@ -220,6 +243,8 @@ const s = StyleSheet.create({
   required: { color: '#E5484D' },
   inputWrap: { position: 'relative', justifyContent: 'center' },
   input: { minHeight: 42, borderWidth: 1, borderColor: '#E1E5EC', borderRadius: 9, paddingHorizontal: 11, paddingRight: 35, color: '#202B3C', fontSize: 13, backgroundColor: '#FFFFFF' },
+  multilineInput: { minHeight: 130, borderWidth: 1, borderColor: '#E1E5EC', borderRadius: 9, paddingHorizontal: 11, paddingVertical: 10, color: '#202B3C', fontSize: 13, backgroundColor: '#FFFFFF', lineHeight: 20 },
+  characterCount: { alignSelf: 'flex-end', color: '#98A2B3', fontSize: 10 },
   validInput: { borderColor: '#B6E5CC' },
   validIcon: { position: 'absolute', right: 10 },
   countryInput: { minHeight: 42, borderWidth: 1, borderColor: '#E1E5EC', borderRadius: 9, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

@@ -9,7 +9,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import { apiGet } from '@/services/api';
+import { apiGet, API_BASE_URL } from '@/services/api';
 import CreateRfqModal from '@/features/buyer/CreateRfqModal';
 import { AppHeader } from '@/components/AppHeader';
 
@@ -40,6 +40,7 @@ type Supplier = {
   fabricExpertise: string[];
   additionalCapabilities: string[];
   catalog: { name: string; price: string; moq?: number }[];
+  logoUrl?: string;
 };
 
 function parseSupplier(row: any): Supplier {
@@ -48,6 +49,9 @@ function parseSupplier(row: any): Supplier {
   const moqMatch = description.match(/MOQ:\s*([^|]+)/i);
   const capacityMatch = description.match(/Capacity:\s*([^|]+)/i);
   const firstCatalog = Array.isArray(row?.catalogItems) ? row.catalogItems[0] : undefined;
+  const logoMedia = Array.isArray(row?.businessMedia) ? row.businessMedia.find((item: any) => item.mediaType === 'COMPANY_LOGO' && item.url) : undefined;
+  const rawLogoUrl = String(logoMedia?.url || '');
+  const logoUrl = rawLogoUrl ? (rawLogoUrl.startsWith('http') ? rawLogoUrl : `${API_BASE_URL.replace('/api', '')}${rawLogoUrl.startsWith('/') ? '' : '/'}${rawLogoUrl}`) : undefined;
   const categories = Array.isArray(row?.categories) ? row.categories.map((item: any) => item.category).filter(Boolean) : [];
   const catalog = Array.isArray(row?.catalogItems) ? row.catalogItems.map((item: any) => ({
     name: item.name || 'Catalog item',
@@ -72,6 +76,7 @@ function parseSupplier(row: any): Supplier {
     fabricExpertise: Array.isArray(row?.capabilities) ? row.capabilities.filter((item: any) => item.capabilityGroup === 'FABRIC').map((item: any) => item.value) : [],
     additionalCapabilities: Array.isArray(row?.capabilities) ? row.capabilities.filter((item: any) => item.capabilityGroup === 'SERVICE').map((item: any) => item.value) : [],
     catalog,
+    logoUrl,
   };
 }
 
@@ -89,7 +94,7 @@ function SupplierCard({ supplier, onPress }: { supplier: Supplier; onPress: () =
 
       <View style={styles.supplierInfo}>
         <View style={styles.factoryIcon}>
-          <MaterialCommunityIcons name="factory" size={22} color={PURPLE} />
+          {supplier.logoUrl ? <Image source={{ uri: supplier.logoUrl }} style={styles.supplierLogo} resizeMode="contain" /> : <MaterialCommunityIcons name="factory" size={22} color={PURPLE} />}
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text numberOfLines={1} style={styles.supplierName}>{supplier.name}</Text>
@@ -309,7 +314,7 @@ export default function BuyerDashboard() {
             {selectedSupplier && (
               <ScrollView showsVerticalScrollIndicator={false}>
                 <View style={styles.profileSummary}>
-                  <View style={styles.factoryIcon}><MaterialCommunityIcons name="factory" size={22} color={PURPLE} /></View>
+                  <View style={styles.factoryIcon}>{selectedSupplier.logoUrl ? <Image source={{ uri: selectedSupplier.logoUrl }} style={styles.supplierLogo} resizeMode="contain" /> : <MaterialCommunityIcons name="factory" size={22} color={PURPLE} />}</View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.profileName}>{selectedSupplier.name}</Text>
                     <Text style={styles.locationText}>{selectedSupplier.city}{selectedSupplier.address ? ` · ${selectedSupplier.address}` : ''}</Text>
@@ -384,7 +389,8 @@ const styles = StyleSheet.create({
   statusText:{fontSize:13,fontWeight:'700'},
   categoryPill:{maxWidth:'52%',backgroundColor:'#F4EFFC',color:PURPLE,fontSize:13,fontWeight: '700',paddingHorizontal:12,paddingVertical:7,borderRadius:18,overflow:'hidden'},
   supplierInfo:{flexDirection:'row',alignItems:'center',gap:15,marginBottom:19},
-  factoryIcon:{width:54,height:54,borderRadius:16,backgroundColor:'#F8F3FF',borderWidth:1,borderColor:'#F0E7FA',alignItems:'center',justifyContent:'center'},
+  factoryIcon:{width:54,height:54,borderRadius:16,backgroundColor:'#F8F3FF',borderWidth:1,borderColor:'#F0E7FA',alignItems:'center',justifyContent:'center',overflow:'hidden'},
+  supplierLogo:{width:'100%',height:'100%'},
   supplierName:{fontSize:19,fontWeight: '700',color:ui.ink,letterSpacing:-.3},
   locationRow:{flexDirection:'row',alignItems:'center',gap:4,marginTop:3},
   locationText:{fontSize:14,color:ui.muted,flexShrink:1},
