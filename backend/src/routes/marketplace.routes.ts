@@ -1,11 +1,13 @@
 import { Router } from "express";
 import { authenticate, optionalAuthenticate, requireRole } from "../middleware/auth";
-import { createCatalogItem, listMyCatalogItems } from "../controllers/catalog.controller";
+import { createCatalogItem, listMyCatalogItems, updateCatalogItem, deleteCatalogItem } from "../controllers/catalog.controller";
+import { createCertification, listMyCertifications, updateCertification, deleteCertification } from "../controllers/certification.controller";
 import {
   adminVerification, createPurchaseOrder, createRfq, deleteRfq, getPurchaseOrderDetails,
   getRfqDetails, inviteSupplier, listAdminOrganizations, listMyRfqs, listPurchaseOrders,
   submitQuote, supplierSearch, updateOrderStatus, upsertSupplierProfile,
-  getOrganizationProfile, updateOrganizationProfile, updateQuotationStatus, reviseSupplierQuotation
+  getOrganizationProfile, updateOrganizationProfile, updateQuotationStatus, reviseSupplierQuotation,
+  listBusinessMedia, createBusinessMedia, deleteBusinessMedia
 } from "../controllers/marketplace.controller";
 const router = Router();
 
@@ -17,8 +19,17 @@ router.use(authenticate);
 router.put("/supplier-profile", upsertSupplierProfile);
 router.get("/catalog-items", listMyCatalogItems);
 router.post("/catalog-items", createCatalogItem);
+router.patch("/catalog-items/:itemId", updateCatalogItem);
+router.delete("/catalog-items/:itemId", deleteCatalogItem);
+router.get("/certifications", listMyCertifications);
+router.post("/certifications", createCertification);
+router.patch("/certifications/:certificationId", updateCertification);
+router.delete("/certifications/:certificationId", deleteCertification);
 router.get("/organization-profile", getOrganizationProfile);
 router.put("/organization-profile", updateOrganizationProfile);
+router.get("/business-gallery", listBusinessMedia);
+router.post("/business-gallery", createBusinessMedia);
+router.delete("/business-gallery/:mediaId", deleteBusinessMedia);
 router.post("/rfqs", createRfq);
 router.get("/rfqs", listMyRfqs);
 router.get("/rfqs/:rfqId", getRfqDetails);

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../config/prisma";
 import { AppError, sendOk } from "../utils/http";
 import { audit } from "../services/audit";
+import { invalidateCachePattern } from "../services/cache";
 import { emitToOrg, emitToRole } from "../services/realtime";
 
 const pageQuery = z.object({
@@ -38,7 +39,8 @@ export async function adminOrganizationDetails(req: Request, res: Response, next
       where: { id: String(req.params.organizationId) },
       include: {
         members: { include: { user: { select: { id: true, fullName: true, email: true, phone: true, isActive: true } } } },
-        supplierProfile: { include: { categories: true, catalogItems: true } },
+        supplierProfile: { include: { categories: true, capabilities: true, catalogItems: true, certifications: true } },
+        businessMedia: { orderBy: [{ mediaType: "asc" }, { sortOrder: "asc" }] },
         supplierPaymentProfile: { select: { status: true, kycStatus: true, settlementStatus: true, accountHolderName: true, bankName: true, bankAccountLast4: true, ifscMasked: true, rejectionReason: true, submittedAt: true, verifiedAt: true } },
         _count: { select: { rfqs: true, buyerOrders: true, supplierOrders: true } }
       }
@@ -116,6 +118,7 @@ export async function adminUpdateCatalogStatus(req: Request, res: Response, next
     const itemId = String(req.params.itemId);
     const item = await prisma.catalogItem.update({ where: { id: itemId }, data: { moderationStatus: input.status, moderationNote: input.note || null } });
     await audit("ADMIN_CATALOG_MODERATION", "CatalogItem", item.id, req.auth!.userId, undefined, { status: input.status, note: input.note });
+    await invalidateCachePattern("cache:suppliers:");
     return sendOk(res, item);
   } catch (error) { next(error); }
 }

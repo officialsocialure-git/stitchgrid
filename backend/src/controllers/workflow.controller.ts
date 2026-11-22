@@ -170,7 +170,8 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
     const apiSecret = env.CLOUDINARY_API_SECRET;
     if (cloudName && apiKey && apiSecret) {
       const timestamp = Math.floor(Date.now() / 1000);
-      const folder = "stitchgrid/sample-attachments";
+      const businessMediaLabels = ["COMPANY_LOGO", "COVER_PHOTO", "COMPANY_PHOTO", "FACTORY_PHOTO", "WORK_PROCESS"];
+      const folder = businessMediaLabels.includes(input.label || "") ? "stitchgrid/business-gallery" : input.label === "PRODUCT_PORTFOLIO" ? "stitchgrid/product-portfolio" : input.label === "SUPPLIER_CERTIFICATE" ? "stitchgrid/certifications" : "stitchgrid/sample-attachments";
       const signature = createHash("sha1")
         .update(`folder=${folder}&timestamp=${timestamp}${apiSecret}`)
         .digest("hex");
@@ -606,11 +607,13 @@ export async function listConversations(req: Request, res: Response, next: NextF
       orderBy: { createdAt: "desc" }
     });
 
+    const orderByOrgPair = new Map<string, (typeof linkedOrders)[number]>();
+    for (const order of linkedOrders) {
+      orderByOrgPair.set(`${order.buyerOrgId}:${order.supplierOrgId}`, order);
+    }
     const withOrgs = conversations.map(c => {
-      const order = linkedOrders.find(
-        o => (o.buyerOrgId === c.buyerOrgId && o.supplierOrgId === c.supplierOrgId) ||
-             (o.buyerOrgId === c.supplierOrgId && o.supplierOrgId === c.buyerOrgId)
-      );
+      const order = orderByOrgPair.get(`${c.buyerOrgId}:${c.supplierOrgId}`) ||
+        orderByOrgPair.get(`${c.supplierOrgId}:${c.buyerOrgId}`);
       return {
         ...c,
         buyer: orgMap.get(c.buyerOrgId) || { id: c.buyerOrgId, name: "Buyer Organization" },

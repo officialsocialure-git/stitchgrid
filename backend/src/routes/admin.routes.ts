@@ -6,6 +6,7 @@ import {
 } from "../controllers/admin.controller";
 import { adminAuditLogs } from "../controllers/workflow.controller";
 import { adminListPaymentRefunds, adminProcessPaymentRefund } from "../controllers/payment.controller";
+import { adminCertifications, adminReviewCertification } from "../controllers/admin-certification.controller";
 
 const router = Router();
 router.use(authenticate, requireRole("ADMIN"));
@@ -15,6 +16,8 @@ router.get("/organizations/:organizationId", adminOrganizationDetails);
 router.patch("/users/:userId/status", adminUpdateUserStatus);
 router.get("/marketplace", adminCatalog);
 router.patch("/marketplace/:itemId/moderation", adminUpdateCatalogStatus);
+router.get("/certifications", adminCertifications);
+router.patch("/certifications/:certificationId/review", adminReviewCertification);
 router.get("/rfqs", adminRfqs);
 router.get("/rfqs/:rfqId", adminRfqDetails);
 router.patch("/rfqs/:rfqId/status", adminUpdateRfqStatus);

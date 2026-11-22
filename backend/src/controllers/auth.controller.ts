@@ -277,7 +277,10 @@ export async function login(req: Request, res: Response, next: NextFunction) {
       (user.memberships.length > 0 ? user.memberships[0] : null);
 
     const accessToken = issueAccessToken(user.id, membership?.organizationId, membership?.role);
-    await audit("AUTH_LOGIN", "User", user.id, user.id, membership?.organizationId);
+    // Audit logging is non-critical for the login response; do not make users wait for this extra DB write.
+    void audit("AUTH_LOGIN", "User", user.id, user.id, membership?.organizationId).catch((error) => {
+      console.warn("[AUTH AUDIT] Login audit could not be saved:", error instanceof Error ? error.message : error);
+    });
 
     return sendOk(res, {
       accessToken,

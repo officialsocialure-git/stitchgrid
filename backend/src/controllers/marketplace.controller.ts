@@ -83,9 +83,12 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
         supplierProfile: {
           include: {
             categories: true,
-            catalogItems: { where: { moderationStatus: "APPROVED" } },
+            capabilities: true,
+            catalogItems: { where: { moderationStatus: "APPROVED" }, orderBy: { createdAt: "desc" } },
+            certifications: { where: { status: "VERIFIED" }, orderBy: { createdAt: "desc" } },
           },
         },
+        businessMedia: { orderBy: [{ mediaType: "asc" }, { sortOrder: "asc" }] },
       },
       orderBy: { createdAt: "desc" },
       take: 250,
@@ -267,7 +270,12 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
             verificationStatus: organization.verificationStatus,
           },
           categories: profile?.categories ?? [],
+          capabilities: (profile as any)?.capabilities ?? [],
+          minimumOrderQuantity: (profile as any)?.minimumOrderQuantity ?? null,
+          sampleDevelopment: (profile as any)?.sampleDevelopment ?? false,
           catalogItems: profile?.catalogItems ?? [],
+          certifications: profile?.certifications ?? [],
+          businessMedia: (organization as any).businessMedia ?? [],
         };
       });
 
@@ -344,79 +352,228 @@ export async function getOrganizationProfile(req: Request, res: Response, next: 
     if (!membership) throw new AppError(403, "Membership in organization required");
     const organization = await prisma.organization.findUnique({
       where: { id: organizationId },
-      include: { supplierProfile: { include: { categories: true } } }
+      include: {
+        supplierProfile: {
+          include: {
+            categories: true,
+            capabilities: true,
+            catalogItems: { where: { moderationStatus: "APPROVED" }, orderBy: { createdAt: "desc" } },
+            certifications: { where: { status: "VERIFIED" }, orderBy: { createdAt: "desc" } }
+          }
+        },
+        businessMedia: { orderBy: [{ mediaType: "asc" }, { sortOrder: "asc" }] }
+      }
     });
     if (!organization) throw new AppError(404, "Organization not found");
-    return sendOk(res, organization);
+    const [ratingSummary, recentReviews, ratingBreakdown] = await Promise.all([
+      prisma.review.aggregate({ where: { reviewedOrgId: organizationId }, _avg: { rating: true }, _count: { _all: true } }),
+      prisma.review.findMany({ where: { reviewedOrgId: organizationId }, orderBy: { createdAt: "desc" }, take: 10 }),
+      prisma.review.groupBy({ by: ["rating"], where: { reviewedOrgId: organizationId }, _count: { _all: true } })
+    ]);
+    const reviewerIds = [...new Set(recentReviews.map(review => review.reviewerOrgId))];
+    const reviewers = reviewerIds.length ? await prisma.organization.findMany({
+      where: { id: { in: reviewerIds } }, select: { id: true, name: true }
+    }) : [];
+    const reviewerNames = new Map(reviewers.map(item => [item.id, item.name]));
+    return sendOk(res, {
+      ...organization,
+      publicRating: { average: ratingSummary._avg.rating ?? null, count: ratingSummary._count._all, breakdown: ratingBreakdown.map(row => ({ rating: row.rating, count: row._count._all })) },
+      publicReviews: recentReviews.map(review => ({
+        id: review.id, rating: review.rating, comment: review.comment, createdAt: review.createdAt,
+        reviewerName: reviewerNames.get(review.reviewerOrgId) || "Verified buyer"
+      }))
+    });
   } catch (e) { next(e); }
 }
 
 export async function updateOrganizationProfile(req: Request, res: Response, next: NextFunction) {
   try {
     const input = z.object({
-      organizationId: z.string(),
-      name: z.string().min(2).max(150).optional(),
-      legalName: z.string().max(150).optional(),
-      businessType: z.string().max(80).optional(),
-      taxId: z.string().max(30).optional(),
-      city: z.string().max(100).optional(),
-      address: z.string().max(300).optional(),
-      country: z.string().max(80).optional(),
+      organizationId: z.string().min(1),
+      name: z.string().trim().min(2).max(150).optional(),
+      legalName: z.string().trim().max(150).optional(),
+      businessType: z.string().trim().max(80).optional(),
+      taxId: z.string().trim().max(30).optional(),
+      city: z.string().trim().max(100).optional(),
+      address: z.string().trim().max(300).optional(),
+      country: z.string().trim().max(80).optional(),
       description: z.string().max(4000).optional(),
-      yearsInBusiness: z.number().int().min(0).optional(),
+      yearsInBusiness: z.number().int().min(0).max(150).optional(),
       productionCapacity: z.number().int().min(0).optional(),
-      categories: z.array(z.string().min(1).max(100)).max(30).optional(),
+      minimumOrderQuantity: z.number().int().min(1).max(10000000).optional(),
+      sampleDevelopment: z.boolean().optional(),
+      categories: z.array(z.string().trim().min(1).max(100)).max(30).optional(),
+      fabricExpertise: z.array(z.string().trim().min(1).max(60)).max(30).optional(),
+      additionalCapabilities: z.array(z.string().trim().min(1).max(80)).max(40).optional(),
     }).parse(req.body);
 
     const membership = await prisma.organizationMember.findFirst({
-      where: { userId: req.auth!.userId, organizationId: input.organizationId, isActive: true }
+      where: { userId: req.auth!.userId, organizationId: input.organizationId, role: "SUPPLIER", isActive: true },
+      select: { id: true, role: true }
     });
-    if (!membership) throw new AppError(403, "Membership in organization required");
+    if (!membership) throw new AppError(403, "Active supplier membership required to edit company information");
 
     const orgUpdateData: any = {};
-    if (input.name) orgUpdateData.name = input.name;
-    if (input.legalName !== undefined) orgUpdateData.legalName = input.legalName;
-    if (input.businessType !== undefined) orgUpdateData.businessType = input.businessType;
-    if (input.taxId !== undefined) orgUpdateData.taxId = input.taxId;
-    if (input.city !== undefined) orgUpdateData.city = input.city;
-    if (input.address !== undefined) orgUpdateData.address = input.address;
-    if (input.country !== undefined) orgUpdateData.country = input.country;
+    if (input.name !== undefined) orgUpdateData.name = input.name;
+    if (input.legalName !== undefined) orgUpdateData.legalName = input.legalName || null;
+    if (input.businessType !== undefined) orgUpdateData.businessType = input.businessType || null;
+    if (input.taxId !== undefined) orgUpdateData.taxId = input.taxId || null;
+    if (input.city !== undefined) orgUpdateData.city = input.city || null;
+    if (input.address !== undefined) orgUpdateData.address = input.address || null;
+    if (input.country !== undefined) orgUpdateData.country = input.country || null;
 
-    const org = await prisma.organization.update({
-      where: { id: input.organizationId },
-      data: orgUpdateData
-    });
-
-    if (membership.role === "SUPPLIER" || input.description || input.yearsInBusiness || input.productionCapacity || input.categories) {
-      const profile = await prisma.supplierProfile.upsert({
-        where: { organizationId: input.organizationId },
-        create: {
-          organizationId: input.organizationId,
-          description: input.description,
-          yearsInBusiness: input.yearsInBusiness,
-          productionCapacity: input.productionCapacity,
-        },
-        update: {
-          description: input.description,
-          yearsInBusiness: input.yearsInBusiness,
-          productionCapacity: input.productionCapacity,
-        }
-      });
-
-      if (input.categories) {
-        await prisma.supplierCategory.deleteMany({ where: { supplierProfileId: profile.id } });
-        await prisma.supplierCategory.createMany({
-          data: input.categories.map(category => ({ supplierProfileId: profile.id, category })),
-          skipDuplicates: true
+    const org = await prisma.$transaction(async (tx) => {
+      if (Object.keys(orgUpdateData).length > 0) {
+        await tx.organization.update({
+          where: { id: input.organizationId },
+          data: orgUpdateData
         });
       }
-    }
 
-    await invalidateCachePattern("cache:suppliers:");
-    await audit("ORGANIZATION_PROFILE_UPDATED", "Organization", org.id, req.auth!.userId, org.id);
+      if (membership.role === "SUPPLIER") {
+        const profile = await tx.supplierProfile.upsert({
+          where: { organizationId: input.organizationId },
+          create: {
+            organizationId: input.organizationId,
+            description: input.description,
+            yearsInBusiness: input.yearsInBusiness,
+            productionCapacity: input.productionCapacity,
+            minimumOrderQuantity: input.minimumOrderQuantity,
+            sampleDevelopment: input.sampleDevelopment ?? false,
+          },
+          update: {
+            ...(input.description !== undefined ? { description: input.description } : {}),
+            ...(input.yearsInBusiness !== undefined ? { yearsInBusiness: input.yearsInBusiness } : {}),
+            ...(input.productionCapacity !== undefined ? { productionCapacity: input.productionCapacity } : {}),
+            ...(input.minimumOrderQuantity !== undefined ? { minimumOrderQuantity: input.minimumOrderQuantity } : {}),
+            ...(input.sampleDevelopment !== undefined ? { sampleDevelopment: input.sampleDevelopment } : {}),
+          }
+        });
+
+        if (input.categories !== undefined) {
+          await tx.supplierCategory.deleteMany({ where: { supplierProfileId: profile.id } });
+          if (input.categories.length > 0) {
+            await tx.supplierCategory.createMany({
+              data: [...new Set(input.categories)].map(category => ({ supplierProfileId: profile.id, category })),
+              skipDuplicates: true
+            });
+          }
+        }
+
+        if (input.fabricExpertise !== undefined || input.additionalCapabilities !== undefined) {
+          const groups = [
+            ...(input.fabricExpertise !== undefined ? ["FABRIC"] : []),
+            ...(input.additionalCapabilities !== undefined ? ["SERVICE"] : []),
+          ];
+          if (groups.length) {
+            await tx.supplierCapability.deleteMany({
+              where: { supplierProfileId: profile.id, capabilityGroup: { in: groups } }
+            });
+          }
+          const capabilityRows = [
+            ...(input.fabricExpertise || []).map(value => ({ supplierProfileId: profile.id, capabilityGroup: "FABRIC", value })),
+            ...(input.additionalCapabilities || []).map(value => ({ supplierProfileId: profile.id, capabilityGroup: "SERVICE", value })),
+          ];
+          if (capabilityRows.length) {
+            await tx.supplierCapability.createMany({ data: capabilityRows, skipDuplicates: true });
+          }
+        }
+      }
+
+      return tx.organization.findUnique({
+        where: { id: input.organizationId },
+        include: { supplierProfile: { include: { categories: true, capabilities: true, certifications: { orderBy: { createdAt: "desc" } } } } }
+      });
+    });
+
+    if (!org) throw new AppError(404, "Organization not found");
+    try {
+      await invalidateCachePattern("cache:suppliers:");
+    } catch (cacheError) {
+      console.warn("[SUPPLIER PROFILE] Cache invalidation failed:", cacheError instanceof Error ? cacheError.message : cacheError);
+    }
+    void audit("ORGANIZATION_PROFILE_UPDATED", "Organization", org.id, req.auth!.userId, org.id).catch((auditError) => {
+      console.warn("[SUPPLIER PROFILE] Audit log could not be saved:", auditError instanceof Error ? auditError.message : auditError);
+    });
     emitToMarketplace("supplier:updated", { organizationId: org.id });
     emitToRole("BUYER", "supplier:updated", { organizationId: org.id });
     return sendOk(res, org);
+  } catch (e) { next(e); }
+}
+
+export async function listBusinessMedia(req: Request, res: Response, next: NextFunction) {
+  try {
+    const organizationId = String(req.query.organizationId || "");
+    if (!organizationId) throw new AppError(400, "Organization ID is required");
+    const membership = await prisma.organizationMember.findFirst({
+      where: { userId: req.auth!.userId, organizationId, role: "SUPPLIER", isActive: true },
+      select: { id: true }
+    });
+    if (!membership) throw new AppError(403, "Active supplier membership required");
+    const items = await prisma.businessMedia.findMany({
+      where: { organizationId },
+      orderBy: [{ mediaType: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }]
+    });
+    return sendOk(res, items);
+  } catch (e) { next(e); }
+}
+
+export async function createBusinessMedia(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = z.object({
+      organizationId: z.string().min(1),
+      mediaType: z.enum(["COMPANY_LOGO", "COVER_PHOTO", "COMPANY_PHOTO", "FACTORY_PHOTO", "WORK_PROCESS"]),
+      url: z.string().url().max(2000),
+      fileName: z.string().max(255).optional(),
+    }).parse(req.body);
+    const membership = await prisma.organizationMember.findFirst({
+      where: { userId: req.auth!.userId, organizationId: input.organizationId, role: "SUPPLIER", isActive: true },
+      select: { id: true }
+    });
+    if (!membership) throw new AppError(403, "Active supplier membership required");
+
+    const result = await prisma.$transaction(async tx => {
+      if (input.mediaType === "COMPANY_LOGO" || input.mediaType === "COVER_PHOTO") {
+        await tx.businessMedia.deleteMany({ where: { organizationId: input.organizationId, mediaType: input.mediaType } });
+      } else {
+        const count = await tx.businessMedia.count({ where: { organizationId: input.organizationId, mediaType: input.mediaType } });
+        const limit = input.mediaType === "COMPANY_PHOTO" ? 10 : 20;
+        if (count >= limit) throw new AppError(400, `Maximum ${limit} images allowed for this gallery.`);
+      }
+      return tx.businessMedia.create({
+        data: {
+          organizationId: input.organizationId,
+          mediaType: input.mediaType,
+          url: input.url,
+          fileName: input.fileName || null,
+          sortOrder: await tx.businessMedia.count({ where: { organizationId: input.organizationId, mediaType: input.mediaType } })
+        }
+      });
+    });
+    await audit("BUSINESS_MEDIA_ADDED", "BusinessMedia", result.id, req.auth!.userId, input.organizationId, { mediaType: input.mediaType });
+    await invalidateCachePattern("cache:suppliers:");
+    emitToMarketplace("supplier:updated", { organizationId: input.organizationId });
+    emitToRole("BUYER", "supplier:updated", { organizationId: input.organizationId });
+    return sendOk(res, result, 201);
+  } catch (e) { next(e); }
+}
+
+export async function deleteBusinessMedia(req: Request, res: Response, next: NextFunction) {
+  try {
+    const mediaId = String(req.params.mediaId || "");
+    const media = await prisma.businessMedia.findUnique({ where: { id: mediaId } });
+    if (!media) throw new AppError(404, "Gallery image not found");
+    const membership = await prisma.organizationMember.findFirst({
+      where: { userId: req.auth!.userId, organizationId: media.organizationId, role: "SUPPLIER", isActive: true },
+      select: { id: true }
+    });
+    if (!membership) throw new AppError(403, "Active supplier membership required");
+    await prisma.businessMedia.delete({ where: { id: mediaId } });
+    await audit("BUSINESS_MEDIA_DELETED", "BusinessMedia", mediaId, req.auth!.userId, media.organizationId, { mediaType: media.mediaType });
+    await invalidateCachePattern("cache:suppliers:");
+    emitToMarketplace("supplier:updated", { organizationId: media.organizationId });
+    emitToRole("BUYER", "supplier:updated", { organizationId: media.organizationId });
+    return sendOk(res, { deleted: true, id: mediaId });
   } catch (e) { next(e); }
 }
 

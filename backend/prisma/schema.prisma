@@ -135,6 +135,7 @@ model Organization {
   updatedAt          DateTime @updatedAt
   members            OrganizationMember[]
   supplierProfile    SupplierProfile?
+  businessMedia      BusinessMedia[]
   supplierPaymentProfile SupplierPaymentProfile?
   rfqs               Rfq[]
   quotes             Quotation[]
@@ -174,10 +175,46 @@ model SupplierProfile {
   description        String? @db.Text
   yearsInBusiness    Int?
   productionCapacity Int?
+  minimumOrderQuantity Int?
+  sampleDevelopment Boolean @default(false)
   verificationStatus VerificationStatus @default(PENDING)
   organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   categories         SupplierCategory[]
+  capabilities      SupplierCapability[]
   catalogItems       CatalogItem[]
+  certifications     SupplierCertification[]
+}
+
+model SupplierCapability {
+  id                String @id @default(cuid())
+  supplierProfileId String
+  capabilityGroup   String @db.VarChar(30)
+  value             String @db.VarChar(100)
+  createdAt         DateTime @default(now())
+  supplierProfile   SupplierProfile @relation(fields: [supplierProfileId], references: [id], onDelete: Cascade)
+  @@unique([supplierProfileId, capabilityGroup, value])
+  @@index([supplierProfileId, capabilityGroup])
+}
+
+enum BusinessMediaType {
+  COMPANY_LOGO
+  COVER_PHOTO
+  COMPANY_PHOTO
+  FACTORY_PHOTO
+  WORK_PROCESS
+}
+
+model BusinessMedia {
+  id             String @id @default(cuid())
+  organizationId String
+  mediaType      BusinessMediaType
+  url            String @db.VarChar(2000)
+  fileName       String? @db.VarChar(255)
+  sortOrder      Int @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@index([organizationId, mediaType, sortOrder])
 }
 
 model SupplierCategory {
@@ -205,8 +242,35 @@ model CatalogItem {
   currency          String @default("INR")
   moderationStatus  CatalogModerationStatus @default(PENDING)
   moderationNote    String? @db.Text
+  imageUrl          String? @db.VarChar(2000)
   createdAt         DateTime @default(now())
   supplierProfile   SupplierProfile @relation(fields: [supplierProfileId], references: [id], onDelete: Cascade)
+  @@index([supplierProfileId, createdAt])
+}
+
+enum CertificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+model SupplierCertification {
+  id                String @id @default(cuid())
+  supplierProfileId String
+  name              String @db.VarChar(180)
+  issuer            String? @db.VarChar(180)
+  category          String? @db.VarChar(120)
+  certificateNumber String? @db.VarChar(120)
+  documentUrl       String? @db.VarChar(2000)
+  issuedAt          DateTime?
+  expiresAt         DateTime?
+  status            CertificationStatus @default(PENDING)
+  reviewNote        String? @db.Text
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  supplierProfile   SupplierProfile @relation(fields: [supplierProfileId], references: [id], onDelete: Cascade)
+  @@index([supplierProfileId, status, createdAt])
+  @@index([status, createdAt])
 }
 
 model Rfq {
@@ -311,6 +375,8 @@ model PurchaseOrder {
   samples        Sample[]
   events         OrderEvent[]
   qcReports      QualityCheckReport[]
+  @@index([buyerOrgId, createdAt])
+  @@index([supplierOrgId, createdAt])
 }
 
 model QualityCheckReport {
@@ -398,6 +464,8 @@ model Conversation {
   createdAt      DateTime @default(now())
   messages       Message[]
   @@unique([buyerOrgId, supplierOrgId])
+  @@index([buyerOrgId, createdAt])
+  @@index([supplierOrgId, createdAt])
 }
 
 model Message {
@@ -407,6 +475,7 @@ model Message {
   body           String @db.Text
   createdAt      DateTime @default(now())
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  @@index([conversationId, createdAt])
 }
 
 model PaymentTransaction {
