@@ -86,7 +86,7 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
             capabilities: true,
             workforceResources: { orderBy: { resource: "asc" } },
             catalogItems: { orderBy: { createdAt: "desc" } },
-            certifications: { where: { status: "VERIFIED" }, orderBy: { createdAt: "desc" } },
+            certifications: { orderBy: { createdAt: "desc" } },
           },
         },
         businessMedia: { orderBy: [{ mediaType: "asc" }, { sortOrder: "asc" }] },
@@ -318,7 +318,6 @@ export async function getPublicSupplierProfile(req: Request, res: Response, next
               orderBy: { createdAt: "desc" },
             },
             certifications: {
-              where: { status: "VERIFIED" },
               select: { id: true, name: true, issuer: true, category: true, status: true },
               orderBy: { createdAt: "desc" },
             },
@@ -463,7 +462,7 @@ export async function getOrganizationProfile(req: Request, res: Response, next: 
             capabilities: true,
             workforceResources: { orderBy: { resource: "asc" } },
             catalogItems: { orderBy: { createdAt: "desc" } },
-            certifications: { where: { status: "VERIFIED" }, orderBy: { createdAt: "desc" } }
+            certifications: { orderBy: { createdAt: "desc" } }
           }
         },
         businessMedia: { orderBy: [{ mediaType: "asc" }, { sortOrder: "asc" }] }

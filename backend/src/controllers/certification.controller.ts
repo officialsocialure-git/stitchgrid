@@ -35,7 +35,7 @@ export async function createCertification(req: Request, res: Response, next: Nex
     const created = await prisma.supplierCertification.create({ data: {
       supplierProfileId: profile.id, name: input.name, issuer: input.issuer || null, category: input.category || null,
       certificateNumber: input.certificateNumber || null, documentUrl: input.documentUrl || null,
-      issuedAt: input.issuedAt || null, expiresAt: input.expiresAt || null, status: "PENDING"
+      issuedAt: input.issuedAt || null, expiresAt: input.expiresAt || null, status: "VERIFIED"
     } });
     await audit("CERTIFICATION_SUBMITTED", "SupplierCertification", created.id, req.auth!.userId, input.organizationId);
     await invalidateCachePattern("cache:suppliers:");
@@ -55,7 +55,7 @@ export async function updateCertification(req: Request, res: Response, next: Nex
     if (!item) throw new AppError(404, "Certification not found");
     const profile = await getSupplierProfile(req.auth!.userId, item.supplierProfile.organizationId);
     if (profile.id !== item.supplierProfileId) throw new AppError(403, "Certification access denied");
-    const updated = await prisma.supplierCertification.update({ where: { id: item.id }, data: { ...input, status: "PENDING", reviewNote: null } });
+    const updated = await prisma.supplierCertification.update({ where: { id: item.id }, data: { ...input, status: "VERIFIED", reviewNote: null } });
     await audit("CERTIFICATION_UPDATED", "SupplierCertification", item.id, req.auth!.userId, item.supplierProfile.organizationId);
     await invalidateCachePattern("cache:suppliers:");
     return sendOk(res, updated);
