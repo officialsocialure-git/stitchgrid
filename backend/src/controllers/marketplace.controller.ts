@@ -68,12 +68,11 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
     const region = typeof req.query.region === "string" ? req.query.region.trim().toLowerCase() : "";
     const businessType = typeof req.query.businessType === "string" ? req.query.businessType.trim().toLowerCase() : "";
     const minMoq = typeof req.query.minMoq === "string" && req.query.minMoq.trim() ? Number(req.query.minMoq) : null;
-    const garmentTypes = typeof req.query.garmentTypes === "string"
-      ? req.query.garmentTypes.split(",").map((value) => value.trim().toLowerCase()).filter(Boolean)
-      : [];
+    const itemTypesParam = typeof req.query.itemTypes === "string" ? req.query.itemTypes : typeof req.query.garmentTypes === "string" ? req.query.garmentTypes : "";
+    const itemTypes = itemTypesParam.split(",").map((value) => value.trim().toLowerCase()).filter(Boolean);
 
     // 1. Check Redis / Memory Cache first (sub-5ms response)
-    const cacheKey = `cache:suppliers:${category || "all"}:${city || "all"}:${region || "all"}:${businessType || "all"}:${minMoq ?? "all"}:${garmentTypes.join(",") || "all"}:${q || "all"}`;
+    const cacheKey = `cache:suppliers:${category || "all"}:${city || "all"}:${region || "all"}:${businessType || "all"}:${minMoq ?? "all"}:${itemTypes.join(",") || "all"}:${q || "all"}`;
     const cachedRows = await getCache<any[]>(cacheKey);
     if (cachedRows) {
       return sendOk(res, cachedRows);
@@ -258,15 +257,19 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
           const capabilityValues = ((profile as any)?.capabilities ?? []).map((item: any) => String(item.value || "")).join(" ");
           const businessText = [organization.businessType || "", profile?.description || "", capabilityValues, ...categoryNames].join(" ").toLowerCase();
           if (businessType.includes("job")) {
-            if (!/job.?work|stitch|cutting|printing|washing|embroidery|finishing|packing|dyeing/.test(businessText)) return false;
+            if (!/job.?work|stitch|cutting|printing|washing|embroidery|finishing|packing|dyeing|weaving|knitting/.test(businessText)) return false;
           } else if (businessType.includes("garment")) {
             if (!matchesCategoryFilter("Garment", categoryNames, organization.businessType, profile?.description)) return false;
+          } else if (businessType.includes("fabric") && businessType.includes("manufactur")) {
+            if (!matchesCategoryFilter("Fabric", categoryNames, organization.businessType, profile?.description) || !/manufactur|manufacturer|mill|weav|loom|knit|textile|factory|production/.test(businessText)) return false;
+          } else if (businessType.includes("trading") || businessType.includes("wholesale")) {
+            if (!matchesCategoryFilter("Fabric", categoryNames, organization.businessType, profile?.description) || !/trad|wholesale|distribut|stockist|supplier|merchant/.test(businessText)) return false;
           }
         }
-        if (garmentTypes.length) {
+        if (itemTypes.length) {
           const catalogText = (profile?.catalogItems ?? []).map((item: any) => [item.name, item.description].filter(Boolean).join(" ")).join(" ").toLowerCase();
-          const availableGarments = [...categoryNames, catalogText];
-          if (!garmentTypes.some((type) => availableGarments.some((value) => value.includes(type)))) return false;
+          const availableItems = [...categoryNames, catalogText, profile?.description?.toLowerCase() ?? ""];
+          if (!itemTypes.some((type) => availableItems.some((value) => value.includes(type)))) return false;
         }
         if (minMoq !== null && Number.isFinite(minMoq)) {
           const profileMoq = Number((profile as any)?.minimumOrderQuantity || 0);
