@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { apiGet, API_BASE_URL } from '@/services/api';
 import { AppHeader } from '@/components/AppHeader';
 import { AppBottomNav } from '@/components/AppBottomNav';
+import { getSupplierProfileCompletion } from '@/services/supplierProfileCompletion';
 
 type SupplierProfile = {
   id: string;
@@ -24,6 +25,7 @@ type SupplierProfile = {
     yearsInBusiness?: number | null;
     productionCapacity?: number | null;
     minimumOrderQuantity?: number | null;
+    fabricMinimumOrderQuantity?: number | null;
     sampleDevelopment?: boolean;
     workforceResources?: { id: string; resource: string; availability: 'IN_HOUSE' | 'OUTSOURCED' | 'NOT_AVAILABLE'; headcount?: number | null }[];
     capabilities?: { id: string; capabilityGroup: string; value: string }[];
@@ -100,18 +102,10 @@ export default function SupplierBusinessProfileScreen() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const completion = useMemo(() => {
-    if (!profile) return 0;
-    const p = profile.supplierProfile;
-    const checks = [
-      !!profile.name, !!profile.legalName, !!profile.taxId, !!profile.city,
-      !!profile.address, !!profile.businessType, !!p?.description,
-      p?.productionCapacity != null, p?.minimumOrderQuantity != null, p?.yearsInBusiness != null,
-      !!p?.categories?.length, !!p?.capabilities?.some(item => item.capabilityGroup === 'FABRIC'),
-      !!p?.capabilities?.some(item => item.capabilityGroup === 'SERVICE'), catalog.length > 0,
-    ];
-    return Math.round((checks.filter(Boolean).length / checks.length) * 100);
-  }, [profile, catalog]);
+  const completion = useMemo(
+    () => getSupplierProfileCompletion(profile, catalog.length),
+    [profile, catalog],
+  );
 
   const navigate = (section: string) => {
     if (section === 'home') {
@@ -233,7 +227,8 @@ export default function SupplierBusinessProfileScreen() {
               <View style={s.capabilityGrid}>{(profile?.supplierProfile?.categories || []).map(c => <View key={c.id} style={s.capabilityCard}>{c.imageUrl ? <Image source={{ uri: absoluteMediaUrl(c.imageUrl) }} style={s.capabilityImage} resizeMode="contain" /> : <View style={s.capabilityImageFallback}><MaterialCommunityIcons name="image-outline" size={25} color={PURPLE} /></View>}<Text style={s.capabilityText}>{c.category}</Text></View>)}</View>
               <View style={s.publicInfoCard}>
                 <Text style={s.publicInfoTitle}>Production Capacity</Text><Text style={s.publicInfoValue}>{profile?.supplierProfile?.productionCapacity ? `${Number(profile.supplierProfile.productionCapacity).toLocaleString('en-IN')} pcs / month` : 'Not provided'}</Text>
-                <Text style={s.publicInfoTitle}>Minimum Order Quantity (MOQ)</Text><Text style={s.publicInfoValue}>{profile?.supplierProfile?.minimumOrderQuantity ? `${Number(profile.supplierProfile.minimumOrderQuantity).toLocaleString('en-IN')} pcs` : 'Not provided'}</Text>
+                <Text style={s.publicInfoTitle}>Minimum Order Quantity – Pieces (PCS)</Text><Text style={s.publicInfoValue}>{profile?.supplierProfile?.minimumOrderQuantity ? `${Number(profile.supplierProfile.minimumOrderQuantity).toLocaleString('en-IN')} pcs` : 'Not provided'}</Text>
+                <Text style={s.publicInfoTitle}>Minimum Order Quantity – Fabric (Meters)</Text><Text style={s.publicInfoValue}>{profile?.supplierProfile?.fabricMinimumOrderQuantity ? `${Number(profile.supplierProfile.fabricMinimumOrderQuantity).toLocaleString('en-IN')} meters` : 'Not provided'}</Text>
                 <Text style={s.publicInfoTitle}>Years in Business</Text><Text style={s.publicInfoValue}>{profile?.supplierProfile?.yearsInBusiness ?? 'Not provided'} years</Text>
                 <Text style={s.publicInfoTitle}>Sample Development</Text><Text style={s.publicInfoValue}>{profile?.supplierProfile?.sampleDevelopment ? 'Available' : 'Not available'}</Text>
               </View>

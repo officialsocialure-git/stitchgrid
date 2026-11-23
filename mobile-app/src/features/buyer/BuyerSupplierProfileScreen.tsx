@@ -18,7 +18,7 @@ type PublicProfile = {
   address?: string | null; verificationStatus: string;
   supplierProfile?: {
     description?: string | null; yearsInBusiness?: number | null; productionCapacity?: number | null;
-    minimumOrderQuantity?: number | null; sampleDevelopment?: boolean;
+    minimumOrderQuantity?: number | null; fabricMinimumOrderQuantity?: number | null; sampleDevelopment?: boolean;
     categories: { id: string; category: string; imageUrl?: string | null }[];
     capabilities: { id: string; capabilityGroup: string; value: string }[];
     workforceResources?: WorkforceResource[];
@@ -133,7 +133,8 @@ export default function BuyerSupplierProfileScreen() {
           <View style={s.capGrid}>{categories.map(c=><View key={c.id} style={s.capCard}>{c.imageUrl ? <Image source={{uri:mediaUrl(c.imageUrl)}} style={s.capImage} resizeMode="contain"/> : <View style={s.capImageFallback}><MaterialCommunityIcons name="image-outline" size={25} color={P}/></View>}<Text style={s.capText}>{c.category}</Text></View>)}</View>
           <View style={s.infoCard}>
             <Text style={s.statLabel}>Production Capacity</Text><Text style={s.statValue}>{profile.supplierProfile?.productionCapacity ? `${Number(profile.supplierProfile.productionCapacity).toLocaleString('en-IN')} pcs / month` : 'Not provided'}</Text>
-            <Text style={s.statLabel}>Minimum Order Quantity (MOQ)</Text><Text style={s.statValue}>{profile.supplierProfile?.minimumOrderQuantity ? `${Number(profile.supplierProfile.minimumOrderQuantity).toLocaleString('en-IN')} pcs` : 'Not provided'}</Text>
+            <Text style={s.statLabel}>Minimum Order Quantity – Pieces (PCS)</Text><Text style={s.statValue}>{profile.supplierProfile?.minimumOrderQuantity ? `${Number(profile.supplierProfile.minimumOrderQuantity).toLocaleString('en-IN')} pcs` : 'Not provided'}</Text>
+            <Text style={s.statLabel}>Minimum Order Quantity – Fabric (Meters)</Text><Text style={s.statValue}>{profile.supplierProfile?.fabricMinimumOrderQuantity ? `${Number(profile.supplierProfile.fabricMinimumOrderQuantity).toLocaleString('en-IN')} meters` : 'Not provided'}</Text>
             <Text style={s.statLabel}>Sample Development</Text><Text style={s.statValue}>{profile.supplierProfile?.sampleDevelopment ? 'Available' : 'Not available'}</Text>
           </View>
           <Text style={s.sectionTitle}>FABRIC EXPERTISE</Text><View style={s.chips}>{capabilities.filter(c=>c.capabilityGroup==='FABRIC').map(c=><Text key={c.id} style={s.chip}>{c.value}</Text>)}</View>

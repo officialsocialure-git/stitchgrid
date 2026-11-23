@@ -5,19 +5,13 @@ import Link from "next/link";
 import { authService } from "@/services/auth.service";
 import { StitchgridLogo } from "@/components/common/StitchgridLogo";
 
-const AVAILABLE_CAPABILITIES = [
-  "T-Shirts",
-  "Shirts",
-  "Hoodies",
-  "Activewear",
-  "Polo Shirts",
-  "Denim & Jeans",
-  "Trousers",
-  "Dresses",
-  "Kids Wear",
-  "Knitwear",
-  "Woven Fabric",
-];
+const CATEGORY_CAPABILITIES: Record<string, string[]> = {
+  Garments: ["T-Shirts", "Shirts", "Hoodies", "Activewear", "Polo Shirts", "Denim & Jeans", "Trousers", "Dresses", "Kids Wear", "Knitwear"],
+  Fabrics: ["Cotton", "Polyester", "Linen", "Silk", "Denim Fabric", "Knitted Fabric", "Woven Fabric", "Rayon", "Blended Fabric"],
+  Trims: ["Buttons", "Zippers", "Labels", "Threads", "Elastic", "Laces", "Hooks & Eyes", "Ribbons", "Interlining"],
+  Sampling: ["Proto Sample", "Fit Sample", "Size Set Sample", "Pre-production Sample", "Fabric Sample", "Print / Embroidery Sample"],
+};
+const CATEGORY_NAMES = Object.keys(CATEGORY_CAPABILITIES);
 
 const AVAILABLE_PROCESSES = [
   "Cutting",
@@ -69,12 +63,8 @@ export default function RegisterPage() {
   const [establishmentYear, setEstablishmentYear] = useState<number>(2018);
   const [factoryLocation, setFactoryLocation] = useState("");
   const [serviceableRegion, setServiceableRegion] = useState("Delhi NCR, UP, Haryana");
-  const [selectedCapabilities, setSelectedCapabilities] = useState<string[]>([
-    "T-Shirts",
-    "Shirts",
-    "Hoodies",
-    "Activewear",
-  ]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(["Garments"]);
+  const [selectedCapabilities, setSelectedCapabilities] = useState<string[]>(["T-Shirts", "Shirts", "Hoodies", "Activewear"]);
   const [selectedProcesses, setSelectedProcesses] = useState<string[]>([
     "Cutting",
     "Stitching",
@@ -145,6 +135,10 @@ export default function RegisterPage() {
   const executeRegistration = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setError(null);
+    if ((role === "Manufacturer" || role === "Both") && selectedCategories.length === 0) {
+      setError("Please select at least one supplier category.");
+      return;
+    }
     setLoading(true);
 
     const accountTypeMapped: "BUYER" | "SUPPLIER" | "BOTH" =
@@ -163,6 +157,7 @@ export default function RegisterPage() {
         establishmentYear: establishmentYear || undefined,
         factoryLocation: factoryLocation.trim() || undefined,
         serviceableRegions: serviceableRegion || undefined,
+        categories: selectedCategories,
         capabilities: selectedCapabilities,
         keyProcesses: selectedProcesses,
         monthlyCapacity: monthlyCapacity.trim() || undefined,
@@ -481,14 +476,42 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {/* Section 2: Manufacturing Capabilities */}
+            {/* Section 2: Supplier Categories */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-xs font-bold text-slate-900 uppercase tracking-wider">
-                  Manufacturing Capabilities *
-                </label>
-                <span className="text-[10px] text-slate-400 font-medium">Click tags to select or remove</span>
+              <div className="mb-2">
+                <label className="block text-xs font-bold text-slate-900 uppercase tracking-wider">What do you manufacture / supply? *</label>
+                <p className="text-[11px] text-slate-500 mt-1">Select all categories that apply to your business.</p>
               </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {CATEGORY_NAMES.map((category) => {
+                  const active = selectedCategories.includes(category);
+                  return <button key={category} type="button" onClick={() => {
+                    setSelectedCategories((current) => active ? current.filter((item) => item !== category) : [...current, category]);
+                    if (active) setSelectedCapabilities((current) => current.filter((cap) => !CATEGORY_CAPABILITIES[category].includes(cap)));
+                  }} className={`min-h-16 rounded-xl border px-3 py-3 text-sm font-bold transition-all ${active ? "border-[#4f14e2] bg-[#ede8ff] text-[#4f14e2] shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:border-[#4f14e2]"}`}>
+                    <span className="block text-lg mb-1">{category === "Garments" ? "👕" : category === "Fabrics" ? "🧵" : category === "Trims" ? "🪡" : "✂️"}</span>{category}
+                    <span className="block text-[10px] font-medium mt-1">{active ? "Selected ✓" : "Select category"}</span>
+                  </button>;
+                })}
+              </div>
+              {selectedCategories.length === 0 && <p className="text-xs text-rose-600 mt-2">Select at least one supplier category.</p>}
+              <div className="flex items-center justify-between mt-4 mb-2">
+                <label className="block text-xs font-bold text-slate-900 uppercase tracking-wider">Category Capabilities *</label>
+                <span className="text-[10px] text-slate-400 font-medium">Select relevant products / services</span>
+              </div>
+              {selectedCategories.map((category) => <div key={category} className="mb-3 rounded-xl border border-slate-200 p-3">
+                <p className="text-xs font-bold text-slate-800 mb-2">{category}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {CATEGORY_CAPABILITIES[category].map((cap) => {
+                    const active = selectedCapabilities.includes(cap);
+                    return <button key={cap} type="button" onClick={() => toggleCapability(cap)} className={`px-2.5 py-1.5 rounded-full border text-[11px] font-medium ${active ? "border-[#4f14e2] bg-[#ede8ff] text-[#4f14e2]" : "border-slate-200 bg-white text-slate-600"}`}>{active ? "✓ " : "+ "}{cap}</button>;
+                  })}
+                </div>
+              </div>)}
+            </div>
+
+            {/* Legacy selected capability tags retained for clear review */}
+            <div className="hidden">
               <div className="p-3 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-wrap gap-2">
                 {selectedCapabilities.map((cap) => (
                   <span
@@ -499,20 +522,6 @@ export default function RegisterPage() {
                     <span>{cap}</span>
                     <span className="text-[13px] font-bold">✕</span>
                   </span>
-                ))}
-              </div>
-
-              {/* Other capability suggestions */}
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {AVAILABLE_CAPABILITIES.filter((c) => !selectedCapabilities.includes(c)).map((cap) => (
-                  <button
-                    key={cap}
-                    type="button"
-                    onClick={() => toggleCapability(cap)}
-                    className="px-2.5 py-1 rounded-full bg-white border border-slate-200 text-slate-600 text-[11px] font-medium hover:border-[#4f14e2] hover:text-[#4f14e2] transition-colors"
-                  >
-                    + {cap}
-                  </button>
                 ))}
               </div>
             </div>

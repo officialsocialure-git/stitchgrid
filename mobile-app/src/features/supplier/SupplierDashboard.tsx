@@ -13,6 +13,7 @@ import { apiGet, apiRequest } from '@/services/api';
 import { AppHeader } from '@/components/AppHeader';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 import { disconnectRealtime } from '@/services/realtime';
+import { getSupplierProfileCompletion } from '@/services/supplierProfileCompletion';
 
 const PURPLE = ui.accent;
 const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparent.png';
@@ -31,7 +32,9 @@ type OrgProfile = {
   city?: string | null; address?: string | null; businessType?: string | null;
   verificationStatus?: string; supplierProfile?: {
     description?: string | null; yearsInBusiness?: number | null;
-    productionCapacity?: number | null; categories?: { category: string }[];
+    productionCapacity?: number | null; minimumOrderQuantity?: number | null; fabricMinimumOrderQuantity?: number | null;
+    categories?: { category: string }[];
+    capabilities?: { capabilityGroup?: string | null; value?: string }[];
   } | null;
 };
 type Order = { id: string; status?: string; createdAt?: string };
@@ -192,7 +195,10 @@ export default function SupplierDashboard() {
   );
   const pendingSamples = useMemo(() => samplesInRange.filter(s => ['REQUESTED', 'IN_PROGRESS', 'REVISION_REQUIRED', 'DISPATCHED'].includes(String(s.status))).length, [samplesInRange]);
 
-  const profileCompletion = useMemo(() => {
+  const profileCompletion = useMemo(() => getSupplierProfileCompletion(profile, catalogItems.length), [profile, catalogItems]);
+
+  /* legacy completion calculation removed */
+  const legacyProfileCompletion = useMemo(() => {
     if (!profile) return 0;
     const fields = [
       profile.name, profile.legalName, profile.taxId, profile.city, profile.address,
@@ -240,10 +246,11 @@ export default function SupplierDashboard() {
   };
 
   const openQuote = (rfq: Rfq) => {
-    setSelectedRfq(rfq);
+
     setQuoteAmount('');
     setLeadDays('21');
-    setQuoteOpen(true);
+    // Open the same Sourcing quote form instead of the old simplified dashboard-only form.
+    router.push({ pathname: '/supplier/[section]', params: { section: 'requests', quoteRfqId: rfq.id } } as any);
   };
 
   const submitQuote = async () => {
@@ -421,7 +428,7 @@ export default function SupplierDashboard() {
                   <Text style={styles.rfqTitle}>{rfq.title || rfq.garmentType || 'Garment Order'}</Text>
                   <Text style={styles.buyerText}>Buyer: <Text style={styles.buyerName}>{rfq.buyer?.name || 'Enterprise Buyer'}</Text></Text>
                   <View style={styles.rfqMeta}><Text style={styles.metaText}>Quantity: <Text style={styles.metaStrong}>{Number(rfq.targetQuantity || rfq.items?.[0]?.quantity || 0).toLocaleString('en-IN')} {rfq.items?.[0]?.unit || 'pcs'}</Text></Text><Text style={styles.metaText}>Delivery: <Text style={styles.metaStrong}>{dateLabel(rfq.targetDate)}</Text></Text></View>
-                  <Pressable style={[styles.detailsButton, !alreadyQuoted && rfq.status === 'OPEN' && styles.sendQuoteButton]} onPress={() => { setSelectedRfq(rfq); alreadyQuoted || rfq.status !== 'OPEN' ? setQuoteOpen(false) : openQuote(rfq); }}>
+                  <Pressable style={[styles.detailsButton, !alreadyQuoted && rfq.status === 'OPEN' && styles.sendQuoteButton]} onPress={() => { alreadyQuoted || rfq.status !== 'OPEN' ? setSelectedRfq(rfq) : openQuote(rfq); }}>
                     <Text style={[styles.detailsButtonText, !alreadyQuoted && rfq.status === 'OPEN' && styles.sendQuoteText]}>{alreadyQuoted || rfq.status !== 'OPEN' ? 'View Details' : 'Send Quote'}</Text>
                   </Pressable>
                 </View>

@@ -31,6 +31,7 @@ const signupSchema = z
     productionCapacity: z.coerce.number().int().min(0).optional(),
     monthlyCapacity: z.union([z.string(), z.number()]).optional(),
     moq: z.union([z.string(), z.number()]).optional(),
+    fabricMoq: z.union([z.string(), z.number()]).optional(),
     categories: z.array(z.enum(["Garments", "Fabrics", "Trims", "Sampling"])).max(4).optional(),
     capabilities: z.array(z.string().trim().min(1).max(100)).max(80).optional(),
     keyProcesses: z.array(z.string().min(1).max(60)).max(30).optional(),
@@ -174,7 +175,8 @@ export async function signup(req: Request, res: Response, next: NextFunction) {
       const descDetails = [
         input.description,
         input.keyProcesses?.length ? `Key Operations: ${input.keyProcesses.join(", ")}` : null,
-        input.moq ? `MOQ: ${input.moq}` : null,
+        input.moq ? `Piece MOQ: ${input.moq}` : null,
+        input.fabricMoq ? `Fabric MOQ: ${input.fabricMoq}` : null,
         input.serviceableRegions ? `Regions: ${input.serviceableRegions}` : null,
         input.establishmentYear ? `Est. ${input.establishmentYear}` : null,
       ]
@@ -187,6 +189,8 @@ export async function signup(req: Request, res: Response, next: NextFunction) {
           description: descDetails || undefined,
           yearsInBusiness: calculatedYears,
           productionCapacity: parsedCapacity,
+          minimumOrderQuantity: input.moq ? parseInt(String(input.moq).replace(/\D/g, ""), 10) || undefined : undefined,
+          fabricMinimumOrderQuantity: input.fabricMoq ? parseInt(String(input.fabricMoq).replace(/\D/g, ""), 10) || undefined : undefined,
           categories: allCategories.length
             ? { create: allCategories.map((category) => ({ category })) }
             : undefined,

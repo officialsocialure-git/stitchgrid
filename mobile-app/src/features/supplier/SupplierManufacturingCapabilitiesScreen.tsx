@@ -23,6 +23,7 @@ type ProfileResponse = {
     yearsInBusiness?: number | null;
     productionCapacity?: number | null;
     minimumOrderQuantity?: number | null;
+    fabricMinimumOrderQuantity?: number | null;
     sampleDevelopment?: boolean;
     categories?: { category: string; imageUrl?: string | null }[];
     capabilities?: CapabilityTag[];
@@ -49,6 +50,7 @@ export default function SupplierManufacturingCapabilitiesScreen() {
   const [imagePromptCategory, setImagePromptCategory] = useState<string | null>(null);
   const [capacity, setCapacity] = useState('');
   const [moq, setMoq] = useState('');
+  const [fabricMoq, setFabricMoq] = useState('');
   const [years, setYears] = useState('');
   const [sampleDevelopment, setSampleDevelopment] = useState(false);
   const [fabrics, setFabrics] = useState<string[]>([]);
@@ -74,6 +76,7 @@ export default function SupplierManufacturingCapabilitiesScreen() {
       setCategoryImages(Object.fromEntries((profile?.categories || []).filter(item => item.imageUrl).map(item => [item.category, item.imageUrl as string])));
       setCapacity(profile?.productionCapacity == null ? '' : String(profile.productionCapacity));
       setMoq(profile?.minimumOrderQuantity == null ? '' : String(profile.minimumOrderQuantity));
+      setFabricMoq(profile?.fabricMinimumOrderQuantity == null ? '' : String(profile.fabricMinimumOrderQuantity));
       setYears(profile?.yearsInBusiness == null ? '' : String(profile.yearsInBusiness));
       setSampleDevelopment(Boolean(profile?.sampleDevelopment));
       const tags = profile?.capabilities || [];
@@ -152,7 +155,9 @@ export default function SupplierManufacturingCapabilitiesScreen() {
     if (!organizationId) return Alert.alert('Session expired', 'Please sign in again.');
     if (!categories.length) return Alert.alert('Select product categories', 'Choose at least one product category you manufacture.');
     if (!capacity.trim() || !Number.isSafeInteger(Number(capacity)) || Number(capacity) < 1) return Alert.alert('Check production capacity', 'Enter a valid monthly production capacity in pieces.');
-    if (!moq.trim() || !Number.isSafeInteger(Number(moq)) || Number(moq) < 1) return Alert.alert('Check MOQ', 'Enter a valid minimum order quantity.');
+    if (moq.trim() && (!Number.isSafeInteger(Number(moq)) || Number(moq) < 1)) return Alert.alert('Check PCS MOQ', 'Enter a valid pieces MOQ.');
+    if (fabricMoq.trim() && (!Number.isSafeInteger(Number(fabricMoq)) || Number(fabricMoq) < 1)) return Alert.alert('Check Fabric MOQ', 'Enter a valid meters MOQ.');
+
     if (!years.trim() || !Number.isInteger(Number(years)) || Number(years) < 0 || Number(years) > 150) return Alert.alert('Check experience', 'Enter years in business from 0 to 150.');
     setSaving(true);
     setError('');
@@ -164,7 +169,8 @@ export default function SupplierManufacturingCapabilitiesScreen() {
           categories,
           categoryImages: categories.filter(category => categoryImages[category]).map(category => ({ category, imageUrl: categoryImages[category] })),
           productionCapacity: Number(capacity),
-          minimumOrderQuantity: Number(moq),
+          minimumOrderQuantity: moq.trim() ? Number(moq) : null,
+          fabricMinimumOrderQuantity: fabricMoq.trim() ? Number(fabricMoq) : null,
           yearsInBusiness: Number(years),
           sampleDevelopment,
           fabricExpertise: fabrics,
@@ -243,7 +249,9 @@ export default function SupplierManufacturingCapabilitiesScreen() {
               </View>
               <View style={[s.card, s.halfCard]}>
                 <View style={s.sectionHead}><MaterialCommunityIcons name="package-variant-closed" size={24} color={ui.accent} /><View style={s.sectionCopy}><Text style={s.sectionTitle}>Minimum Order Quantity (MOQ)</Text><Text style={s.sectionHint}>Smallest order accepted</Text></View></View>
-                <View style={s.inputWithSuffix}><TextInput value={moq} onChangeText={setMoq} keyboardType="number-pad" placeholder="e.g. 100" style={s.numberInput} /><Text style={s.suffix}>pcs</Text></View>
+                <View style={s.inputWithSuffix}><TextInput value={moq} onChangeText={setMoq} keyboardType="number-pad" placeholder="Optional" style={s.numberInput} /><Text style={s.suffix}>pcs</Text></View>
+                <Text style={s.sectionHint}>Fabric MOQ (optional)</Text>
+                <View style={s.inputWithSuffix}><TextInput value={fabricMoq} onChangeText={setFabricMoq} keyboardType="number-pad" placeholder="Optional" style={s.numberInput} /><Text style={s.suffix}>meters</Text></View>
               </View>
               <View style={[s.card, s.halfCard]}>
                 <View style={s.sectionHead}><MaterialCommunityIcons name="calendar-check-outline" size={24} color={ui.accent} /><View style={s.sectionCopy}><Text style={s.sectionTitle}>Years in Business</Text><Text style={s.sectionHint}>Manufacturing experience</Text></View></View>

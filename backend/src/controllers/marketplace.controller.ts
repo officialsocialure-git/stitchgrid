@@ -121,6 +121,7 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
             description: "Leading OEKO-TEX certified garment export house specializing in premium single jersey, piqué and terry fabrics. | MOQ: 250 pcs | Capacity: 50,000 pcs / month | Tags: Knits · Cotton Hosiery · Bio-Washed",
             yearsInBusiness: 14,
             productionCapacity: 50000,
+            minimumOrderQuantity: 250,
             verificationStatus: "APPROVED",
             createdAt: new Date(),
             updatedAt: new Date(),
@@ -153,6 +154,7 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
             description: "State-of-the-art waterjet looms mill producing dyed & printed synthetic, rayon and blended apparel fabrics. | MOQ: 500 meters | Capacity: 120,000 meters / month | Tags: Viscose · Polyester Silk · Georgette",
             yearsInBusiness: 18,
             productionCapacity: 120000,
+            fabricMinimumOrderQuantity: 500,
             verificationStatus: "APPROVED",
             createdAt: new Date(),
             updatedAt: new Date(),
@@ -184,6 +186,7 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
             description: "Specialized winterwear manufacturer with Shima Seiki computer flat knitting machines and computerized embroidery. | MOQ: 300 pcs | Capacity: 35,000 pcs / month | Tags: Woollens · Flat-Knit Sweaters · Thermals",
             yearsInBusiness: 22,
             productionCapacity: 35000,
+            minimumOrderQuantity: 300,
             verificationStatus: "APPROVED",
             createdAt: new Date(),
             updatedAt: new Date(),
@@ -272,8 +275,8 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
           if (!itemTypes.some((type) => availableItems.some((value) => value.includes(type)))) return false;
         }
         if (minMoq !== null && Number.isFinite(minMoq)) {
-          const profileMoq = Number((profile as any)?.minimumOrderQuantity || 0);
-          const catalogMoqs = (profile?.catalogItems ?? []).map((item: any) => Number(item.moq ?? item.minOrderQty ?? 0)).filter((value: number) => value > 0);
+          const profileMoq = Number(category.includes('fabric') ? (profile as any)?.fabricMinimumOrderQuantity || 0 : (profile as any)?.minimumOrderQuantity || 0);
+          const catalogMoqs = category.includes("fabric") ? [] : (profile?.catalogItems ?? []).map((item: any) => Number(item.moq ?? item.minOrderQty ?? 0)).filter((value: number) => value > 0);
           const supplierMoq = profileMoq > 0 ? profileMoq : catalogMoqs.length ? Math.min(...catalogMoqs) : 0;
           if (!supplierMoq || supplierMoq > minMoq) return false;
         }
@@ -304,6 +307,7 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
           categories: profile?.categories ?? [],
           capabilities: (profile as any)?.capabilities ?? [],
           minimumOrderQuantity: (profile as any)?.minimumOrderQuantity ?? null,
+          fabricMinimumOrderQuantity: (profile as any)?.fabricMinimumOrderQuantity ?? null,
           sampleDevelopment: (profile as any)?.sampleDevelopment ?? false,
           catalogItems: profile?.catalogItems ?? [],
           certifications: profile?.certifications ?? [],
@@ -563,7 +567,8 @@ export async function updateOrganizationProfile(req: Request, res: Response, nex
       description: z.string().max(4000).optional(),
       yearsInBusiness: z.number().int().min(0).max(150).optional(),
       productionCapacity: z.number().int().min(0).optional(),
-      minimumOrderQuantity: z.number().int().min(1).max(10000000).optional(),
+      minimumOrderQuantity: z.number().int().min(1).max(10000000).nullable().optional(),
+      fabricMinimumOrderQuantity: z.number().int().min(1).max(100000000).nullable().optional(),
       sampleDevelopment: z.boolean().optional(),
       categories: z.array(z.string().trim().min(1).max(100)).max(30).optional(),
       categoryImages: z.array(z.object({ category: z.string().trim().min(1).max(100), imageUrl: z.string().url().max(2000) })).max(30).optional(),
@@ -609,6 +614,7 @@ export async function updateOrganizationProfile(req: Request, res: Response, nex
             yearsInBusiness: input.yearsInBusiness,
             productionCapacity: input.productionCapacity,
             minimumOrderQuantity: input.minimumOrderQuantity,
+            fabricMinimumOrderQuantity: input.fabricMinimumOrderQuantity,
             sampleDevelopment: input.sampleDevelopment ?? false,
           },
           update: {
@@ -616,6 +622,7 @@ export async function updateOrganizationProfile(req: Request, res: Response, nex
             ...(input.yearsInBusiness !== undefined ? { yearsInBusiness: input.yearsInBusiness } : {}),
             ...(input.productionCapacity !== undefined ? { productionCapacity: input.productionCapacity } : {}),
             ...(input.minimumOrderQuantity !== undefined ? { minimumOrderQuantity: input.minimumOrderQuantity } : {}),
+            ...(input.fabricMinimumOrderQuantity !== undefined ? { fabricMinimumOrderQuantity: input.fabricMinimumOrderQuantity } : {}),
             ...(input.sampleDevelopment !== undefined ? { sampleDevelopment: input.sampleDevelopment } : {}),
           }
         });

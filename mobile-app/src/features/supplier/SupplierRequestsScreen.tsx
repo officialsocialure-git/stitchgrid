@@ -1,14 +1,14 @@
 import { ui } from '@/theme/ui';
 import { SourcingTabs } from '@/components/SourcingTabs';
 import { AppBottomNav } from '@/components/AppBottomNav';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, FlatList, Alert, Image, Modal, Pressable, RefreshControl, ScrollView,
   StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiGet, apiRequest } from '@/services/api';
 import { AppHeader } from '@/components/AppHeader';
@@ -39,6 +39,8 @@ const statusColor = (s: string) => s === 'Quote Sent'
 
 export default function SupplierRequestsScreen() {
   const router = useRouter();
+  const { quoteRfqId } = useLocalSearchParams<{ quoteRfqId?: string }>();
+  const autoOpenedQuoteRef = useRef<string | null>(null);
   const insets = useSafeAreaInsets();
   const [membership, setMembership] = useState<any>(null);
   const [rfqs, setRfqs] = useState<Rfq[]>([]);
@@ -128,6 +130,16 @@ export default function SupplierRequestsScreen() {
     setTerms(existing?.terms || '50% Advance, 50% on QC Pass');
     setNote('');
   };
+
+  // Dashboard shortcut: select the requested RFQ and open this screen's existing quote form.
+  useEffect(() => {
+    const requestedId = Array.isArray(quoteRfqId) ? quoteRfqId[0] : quoteRfqId;
+    if (!requestedId || loading || autoOpenedQuoteRef.current === requestedId) return;
+    const requestedRfq = rfqs.find(item => item.id === requestedId);
+    if (!requestedRfq) return;
+    autoOpenedQuoteRef.current = requestedId;
+    openQuoteForm(requestedRfq);
+  }, [quoteRfqId, loading, rfqs, orgId]);
 
   const submitQuote = async () => {
     if (!selected || !orgId) return;

@@ -179,7 +179,8 @@ model SupplierProfile {
   description          String?                     @db.Text
   yearsInBusiness      Int?
   productionCapacity   Int?
-  minimumOrderQuantity Int?
+  minimumOrderQuantity Int? // Piece-based MOQ (PCS)
+  fabricMinimumOrderQuantity Int? // Fabric MOQ (meters)
   sampleDevelopment    Boolean                     @default(false)
   verificationStatus   VerificationStatus          @default(PENDING)
   organization         Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)

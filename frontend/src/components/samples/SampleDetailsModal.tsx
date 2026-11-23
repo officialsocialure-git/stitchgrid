@@ -29,6 +29,7 @@ export function SampleDetailsModal({
 
   const po = sample.purchaseOrder || {};
   const item = po.items?.[0] || {};
+  const supplierName = po.supplier?.name || "Supplier";
 
   // Extract clean name
   let sampleName = sample.sampleName || sample.parsedMeta?.sampleName || item.name || "Apparel Sample";

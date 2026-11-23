@@ -193,7 +193,7 @@ export default function MessagesPage() {
         </div>
       </div>
 
-      {/* Chat view opens full-screen on mobile after selecting a conversation. */
+      {/* Chat view opens full-screen on mobile after selecting a conversation. */}
       <div className={`min-w-0 flex-1 flex-col bg-surface-container-lowest ${isMobileChatOpen ? "fixed inset-0 z-[60] flex h-[100dvh] w-full md:relative md:inset-auto md:z-auto md:h-auto md:w-auto" : "hidden md:flex"}`}>
         {activeChat ? (
           <>

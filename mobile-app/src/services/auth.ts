@@ -73,10 +73,12 @@ export type SignupPayload = {
   establishmentYear?: number;
   factoryLocation?: string;
   serviceableRegions?: string;
+  categories?: string[];
   capabilities?: string[];
   keyProcesses?: string[];
   monthlyCapacity?: string;
   moq?: string;
+  fabricMoq?: string;
 };
 
 export async function signup(payload: SignupPayload) {
