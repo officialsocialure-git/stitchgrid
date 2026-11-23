@@ -85,7 +85,7 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
             categories: true,
             capabilities: true,
             workforceResources: { orderBy: { resource: "asc" } },
-            catalogItems: { orderBy: { createdAt: "desc" } },
+            catalogItems: { include: { images: { orderBy: { sortOrder: "asc" } } }, orderBy: { createdAt: "desc" } },
             certifications: { orderBy: { createdAt: "desc" } },
           },
         },
@@ -314,7 +314,7 @@ export async function getPublicSupplierProfile(req: Request, res: Response, next
             capabilities: true,
             workforceResources: { orderBy: { resource: "asc" } },
             catalogItems: {
-              select: { id: true, name: true, itemType: true, imageUrl: true },
+              select: { id: true, name: true, itemType: true, imageUrl: true, images: { orderBy: { sortOrder: "asc" }, select: { id: true, imageUrl: true, sortOrder: true } } },
               orderBy: { createdAt: "desc" },
             },
             certifications: {
@@ -463,7 +463,7 @@ export async function getOrganizationProfile(req: Request, res: Response, next: 
             categories: true,
             capabilities: true,
             workforceResources: { orderBy: { resource: "asc" } },
-            catalogItems: { orderBy: { createdAt: "desc" } },
+            catalogItems: { include: { images: { orderBy: { sortOrder: "asc" } } }, orderBy: { createdAt: "desc" } },
             certifications: { orderBy: { createdAt: "desc" } }
           }
         },

@@ -267,8 +267,20 @@ model CatalogItem {
   imageUrl          String?                 @db.VarChar(2000)
   createdAt         DateTime                @default(now())
   supplierProfile   SupplierProfile         @relation(fields: [supplierProfileId], references: [id], onDelete: Cascade)
+  images            CatalogItemImage[]
 
   @@index([supplierProfileId, createdAt])
+}
+
+model CatalogItemImage {
+  id           String      @id @default(cuid())
+  catalogItemId String
+  imageUrl     String      @db.VarChar(2000)
+  sortOrder    Int         @default(0)
+  createdAt    DateTime    @default(now())
+  catalogItem  CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+
+  @@index([catalogItemId, sortOrder])
 }
 
 enum CertificationStatus {

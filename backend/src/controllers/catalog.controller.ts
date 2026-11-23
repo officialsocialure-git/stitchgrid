@@ -19,7 +19,7 @@ export async function listMyCatalogItems(req: Request, res: Response, next: Next
     const profile = await prisma.supplierProfile.findUnique({ where: { organizationId }, select: { id: true } });
     if (!profile) return sendOk(res, []);
     await prisma.catalogItem.updateMany({ where: { supplierProfileId: profile.id, moderationStatus: { not: "APPROVED" } }, data: { moderationStatus: "APPROVED", moderationNote: null } });
-    const items = await prisma.catalogItem.findMany({ where: { supplierProfileId: profile.id }, orderBy: { createdAt: "desc" } });
+    const items = await prisma.catalogItem.findMany({ where: { supplierProfileId: profile.id }, include: { images: { orderBy: { sortOrder: "asc" } } }, orderBy: { createdAt: "desc" } });
     return sendOk(res, items);
   } catch (error) { next(error); }
 }
@@ -35,6 +35,7 @@ export async function createCatalogItem(req: Request, res: Response, next: NextF
       unitPrice: z.coerce.number().positive().optional(),
       currency: z.string().length(3).default("INR"),
       imageUrl: z.string().url().max(2000).optional(),
+      additionalImageUrls: z.array(z.string().url().max(2000)).max(5).optional().default([]),
     }).parse(req.body);
 
     const membership = await prisma.organizationMember.findFirst({
@@ -64,8 +65,10 @@ export async function createCatalogItem(req: Request, res: Response, next: NextF
           unitPrice: input.unitPrice,
           currency: input.currency,
           imageUrl: input.imageUrl,
-          moderationStatus: "APPROVED"
-        }
+          moderationStatus: "APPROVED",
+          images: input.additionalImageUrls.length ? { create: input.additionalImageUrls.map((imageUrl, index) => ({ imageUrl, sortOrder: index + 1 })) } : undefined
+        },
+        include: { images: { orderBy: { sortOrder: "asc" } } }
       });
     });
 
