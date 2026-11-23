@@ -3,7 +3,7 @@ import { authenticate, requireRole } from "../middleware/auth";
 import {
   adminAuditLogs, adminListOrganizations, createConversation, createDispute,
   createReview, createSample, getConversationMessages, listConversations, listNotifications,
-  listPayments, listSamples, markNotificationRead, resolveDispute, sendMessage,
+  listPayments, listSamples, markNotificationRead, markAllNotificationsRead, clearAllNotifications, resolveDispute, sendMessage,
   updateMilestone, updateSample, uploadFile, submitQualityCheck, reviewQualityCheck
 } from "../controllers/workflow.controller";
 const router = Router();
@@ -22,6 +22,8 @@ router.post("/conversations/:conversationId/messages", sendMessage);
 router.get("/payments", listPayments);
 // Legacy simulated payment creation removed; use verified Razorpay milestone checkout.
 router.get("/notifications", listNotifications);
+router.patch("/notifications/read-all", markAllNotificationsRead);
+router.delete("/notifications", clearAllNotifications);
 router.patch("/notifications/:notificationId/read", markNotificationRead);
 router.post("/orders/:orderId/disputes", createDispute);
 router.patch("/admin/disputes/:disputeId", requireRole("ADMIN"), resolveDispute);

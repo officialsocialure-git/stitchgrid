@@ -1,6 +1,6 @@
 import { ui } from '@/theme/ui';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useRouter } from 'expo-router';
@@ -36,7 +36,7 @@ type SupplierProfile = {
   publicReviews?: { id: string; rating: number; comment?: string | null; createdAt: string; reviewerName: string }[];
   supplierTestimonials?: { id: string; customerName: string; rating: number; comment: string; createdAt: string }[];
 };
-type CatalogItem = { id: string; name: string; itemType: string; imageUrl?: string | null; moderationStatus?: string };
+type CatalogItem = { id: string; name: string; itemType: string; imageUrl?: string | null; images?: { id: string; imageUrl: string; sortOrder: number }[]; moderationStatus?: string };
 type Certificate = { id: string; name: string; issuer?: string | null; category?: string | null; documentUrl?: string | null; status: string };
 type PreviewTab = 'Overview' | 'Products' | 'Capabilities' | 'Factory' | 'Reviews';
 const PREVIEW_TABS: PreviewTab[] = ['Overview', 'Products', 'Capabilities', 'Factory', 'Reviews'];
@@ -67,6 +67,7 @@ export default function SupplierBusinessProfileScreen() {
   const [error, setError] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewTab, setPreviewTab] = useState<PreviewTab>('Overview');
+  const [selectedProductImages, setSelectedProductImages] = useState<string[]>([]);
   const previewContentRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const selectPreviewTab = (tab: PreviewTab) => {
     setPreviewTab(tab);
@@ -217,19 +218,19 @@ export default function SupplierBusinessProfileScreen() {
               <Text style={s.publicDescription}>{profile?.supplierProfile?.description || 'Add a company description to introduce your business to buyers.'}</Text>
               <View style={s.publicMiniStats}><View style={s.publicMiniStat}><Text style={s.publicStatLabel}>Years in Business</Text><Text style={s.publicStatValue}>{profile?.supplierProfile?.yearsInBusiness ?? '—'}</Text></View><View style={s.publicMiniStat}><Text style={s.publicStatLabel}>Monthly Capacity</Text><Text style={s.publicStatValue}>{profile?.supplierProfile?.productionCapacity ? `${Number(profile.supplierProfile.productionCapacity).toLocaleString('en-IN')} pcs` : '—'}</Text></View></View>
               <Pressable onPress={() => selectPreviewTab('Products')} style={s.publicSectionLink}><Text style={s.publicSectionTitle}>PRODUCTS</Text><Text style={s.publicLinkText}>View all</Text></Pressable>
-              <View style={s.publicProductGrid}>{approvedProducts.slice(0, 4).map(item => <View key={item.id} style={s.publicProductCard}>{item.imageUrl ? <Image source={{ uri: absoluteMediaUrl(item.imageUrl) }} style={s.publicProductImage} /> : <View style={s.publicProductPlaceholder}><MaterialCommunityIcons name="tshirt-crew-outline" size={31} color="#A9A2B6" /></View>}<Text style={s.publicProductName} numberOfLines={1}>{item.name}</Text><Text style={s.publicProductType}>{item.itemType}</Text></View>)}</View>
+              <View style={s.publicProductGrid}>{approvedProducts.slice(0, 4).map(item => <View key={item.id} style={s.publicProductCard}>{item.imageUrl ? <Pressable onPress={() => setSelectedProductImages([item.imageUrl!, ...(item.images || []).map(image => image.imageUrl)].filter(Boolean).map(url => absoluteMediaUrl(url)))}><Image source={{ uri: absoluteMediaUrl(item.imageUrl) }} style={s.publicProductImage} resizeMode="contain" /></Pressable> : <View style={s.publicProductPlaceholder}><MaterialCommunityIcons name="tshirt-crew-outline" size={31} color="#A9A2B6" /></View>}<Text style={s.publicProductName} numberOfLines={1}>{item.name}</Text><Text style={s.publicProductType}>{item.itemType}</Text></View>)}</View>
               {!approvedProducts.length && <Text style={s.publicEmpty}>No products added yet.</Text>}
               {!!pendingProducts.length && <Text style={s.moderationNotice}>{pendingProducts.length} product(s) are under review and will appear to buyers after approval.</Text>}
             </>}
             {previewTab === 'Products' && <>
               <Text style={s.publicSectionTitle}>Products ({approvedProducts.length})</Text>
-              <View style={s.publicProductGrid}>{approvedProducts.map(item => <View key={item.id} style={s.publicProductCard}>{item.imageUrl ? <Image source={{ uri: absoluteMediaUrl(item.imageUrl) }} style={s.publicProductImage} /> : <View style={s.publicProductPlaceholder}><MaterialCommunityIcons name="tshirt-crew-outline" size={31} color="#A9A2B6" /></View>}<Text style={s.publicProductName} numberOfLines={1}>{item.name}</Text><Text style={s.publicProductType}>{item.itemType}</Text></View>)}</View>
+              <View style={s.publicProductGrid}>{approvedProducts.map(item => <View key={item.id} style={s.publicProductCard}>{item.imageUrl ? <Pressable onPress={() => setSelectedProductImages([item.imageUrl!, ...(item.images || []).map(image => image.imageUrl)].filter(Boolean).map(url => absoluteMediaUrl(url)))}><Image source={{ uri: absoluteMediaUrl(item.imageUrl) }} style={s.publicProductImage} resizeMode="contain" /></Pressable> : <View style={s.publicProductPlaceholder}><MaterialCommunityIcons name="tshirt-crew-outline" size={31} color="#A9A2B6" /></View>}<Text style={s.publicProductName} numberOfLines={1}>{item.name}</Text><Text style={s.publicProductType}>{item.itemType}</Text></View>)}</View>
               {!approvedProducts.length && <Text style={s.publicEmpty}>No products added yet.</Text>}
               {!!pendingProducts.length && <View style={s.moderationNoticeBox}><MaterialCommunityIcons name="clock-outline" size={16} color="#9A6700"/><Text style={s.moderationNotice}>{pendingProducts.length} product(s) are awaiting admin approval. They will appear to buyers once approved.</Text></View>}
             </>}
             {previewTab === 'Capabilities' && <>
               <Text style={s.publicSectionTitle}>Manufacturing Capabilities</Text>
-              <View style={s.capabilityGrid}>{(profile?.supplierProfile?.categories || []).map(c => <View key={c.id} style={s.capabilityCard}>{c.imageUrl ? <Image source={{ uri: absoluteMediaUrl(c.imageUrl) }} style={s.capabilityImage} resizeMode="cover" /> : <View style={s.capabilityImageFallback}><MaterialCommunityIcons name="image-outline" size={25} color={PURPLE} /></View>}<Text style={s.capabilityText}>{c.category}</Text></View>)}</View>
+              <View style={s.capabilityGrid}>{(profile?.supplierProfile?.categories || []).map(c => <View key={c.id} style={s.capabilityCard}>{c.imageUrl ? <Image source={{ uri: absoluteMediaUrl(c.imageUrl) }} style={s.capabilityImage} resizeMode="contain" /> : <View style={s.capabilityImageFallback}><MaterialCommunityIcons name="image-outline" size={25} color={PURPLE} /></View>}<Text style={s.capabilityText}>{c.category}</Text></View>)}</View>
               <View style={s.publicInfoCard}>
                 <Text style={s.publicInfoTitle}>Production Capacity</Text><Text style={s.publicInfoValue}>{profile?.supplierProfile?.productionCapacity ? `${Number(profile.supplierProfile.productionCapacity).toLocaleString('en-IN')} pcs / month` : 'Not provided'}</Text>
                 <Text style={s.publicInfoTitle}>Minimum Order Quantity (MOQ)</Text><Text style={s.publicInfoValue}>{profile?.supplierProfile?.minimumOrderQuantity ? `${Number(profile.supplierProfile.minimumOrderQuantity).toLocaleString('en-IN')} pcs` : 'Not provided'}</Text>
@@ -282,6 +283,12 @@ export default function SupplierBusinessProfileScreen() {
             </>}
             <Text style={s.publicPreviewNote}>This is a preview of the public information buyers can see. RFQ and messaging actions are disabled in preview mode.</Text>
           </ScrollView>
+          <Modal visible={selectedProductImages.length > 0} transparent animationType="fade" onRequestClose={() => setSelectedProductImages([])}>
+            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.94)', justifyContent: 'center', alignItems: 'center', paddingVertical: 40 }}>
+              <Pressable onPress={() => setSelectedProductImages([])} style={{ position: 'absolute', top: 48, right: 22, zIndex: 2, width: 42, height: 42, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' }}><MaterialCommunityIcons name="close" size={28} color="#FFFFFF" /></Pressable>
+              <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={{ width: '100%' }} contentContainerStyle={{ alignItems: 'center' }}>{selectedProductImages.map((uri, index) => <View key={`${uri}-${index}`} style={{ width: Dimensions.get('window').width, height: '100%', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 12 }}><Image source={{ uri }} style={{ width: '100%', height: '85%' }} resizeMode="contain" /><Text style={{ color: '#FFFFFF', fontSize: 13, marginTop: 10 }}>{index + 1} / {selectedProductImages.length}</Text></View>)}</ScrollView>
+            </View>
+          </Modal>
         </View>
       </Modal>
     </View>
@@ -383,19 +390,19 @@ const s = StyleSheet.create({
   publicStatValue: { color: '#263044', fontSize: 14, fontWeight: '900' },
   publicSectionLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 5 },
   publicLinkText: { color: PURPLE, fontSize: 12, fontWeight: '800' },
-  publicProductGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 9 },
-  publicProductCard: { width: '47%', backgroundColor: '#FFFFFF', borderRadius: 10, borderWidth: 1, borderColor: '#E8EAF0', padding: 7, gap: 4 },
-  publicProductImage: { width: '100%', height: 125, borderRadius: 7, resizeMode: 'cover' },
-  publicProductPlaceholder: { width: '100%', height: 125, borderRadius: 7, backgroundColor: '#F0F1F5', alignItems: 'center', justifyContent: 'center' },
+  publicProductGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between' },
+  publicProductCard: { width: '48%', backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E8EAF0', padding: 8, gap: 5 },
+  publicProductImage: { width: '100%', height: 175, borderRadius: 8, backgroundColor: '#F7F7FA' },
+  publicProductPlaceholder: { width: '100%', height: 175, borderRadius: 8, backgroundColor: '#F0F1F5', alignItems: 'center', justifyContent: 'center' },
   publicProductName: { color: '#263044', fontSize: 12, fontWeight: '900' },
   publicProductType: { color: '#8992A0', fontSize: 11 },
   publicEmpty: { color: '#8A93A1', fontSize: 10, lineHeight: 16, paddingVertical: 12 },
   moderationNoticeBox: { flexDirection: 'row', alignItems: 'center', gap: 7, padding: 10, borderRadius: 9, backgroundColor: '#FFF7E8', borderWidth: 1, borderColor: '#F5DCA8' },
   moderationNotice: { color: '#8A5A0A', fontSize: 9, lineHeight: 14, flex: 1 },
-  capabilityGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  capabilityCard: { width: '31.5%', backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#ECEEF2', overflow: 'hidden', paddingBottom: 8, gap: 6 },
-  capabilityImage: { width: '100%', aspectRatio: 1.18, backgroundColor: '#F2F3F7' },
-  capabilityImageFallback: { width: '100%', aspectRatio: 1.18, backgroundColor: '#F5F1FF', alignItems: 'center', justifyContent: 'center' },
+  capabilityGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between' },
+  capabilityCard: { width: '48%', backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#ECEEF2', overflow: 'hidden', paddingBottom: 9, gap: 7 },
+  capabilityImage: { width: '100%', height: 175, backgroundColor: '#F7F7FA' },
+  capabilityImageFallback: { width: '100%', height: 175, backgroundColor: '#F5F1FF', alignItems: 'center', justifyContent: 'center' },
   capabilityText: { color: '#4B5567', fontSize: 12, fontWeight: '800', textAlign: 'center', paddingHorizontal: 4 },
   publicInfoCard: { backgroundColor: '#FFFFFF', borderRadius: 10, borderWidth: 1, borderColor: '#ECEEF2', padding: 12, gap: 5 },
   publicInfoTitle: { color: '#8992A0', fontSize: 11, fontWeight: '700', marginTop: 3 },
@@ -403,19 +410,19 @@ const s = StyleSheet.create({
   workforcePreviewCard: { backgroundColor: '#FFFFFF', borderRadius: 17, overflow: 'hidden', borderWidth: 1, borderColor: '#E9E2FF', marginTop: 8, shadowColor: '#5B21B6', shadowOpacity: 0.08, shadowRadius: 9, elevation: 2 },
   workforcePreviewHeader: { minHeight: 68, backgroundColor: '#5B20D6', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 13, paddingVertical: 11, gap: 10 },
   workforceHeaderIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
-  workforceHeaderTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' }, workforceHeaderSubtitle: { color: '#EEE7FF', fontSize: 10, marginTop: 3 },
+  workforceHeaderTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' }, workforceHeaderSubtitle: { color: '#EEE7FF', fontSize: 13, marginTop: 4 },
   workforcePreviewBody: { padding: 9, gap: 9 },
   workforceSummary: { minHeight: 72, backgroundColor: '#FFFFFF', borderRadius: 12, padding: 10, flexDirection: 'row', alignItems: 'center', gap: 9 },
   workforceSummaryIcon: { width: 36, height: 36, borderRadius: 11, backgroundColor: '#F3EDFF', alignItems: 'center', justifyContent: 'center' },
-  workforceSummaryLabel: { color: '#222B3C', fontSize: 10, fontWeight: '900' }, workforceOptional: { color: '#8992A0', fontSize: 8, fontWeight: '500' }, workforceSummaryHint: { color: '#8992A0', fontSize: 8, marginTop: 3 },
-  workforceTotalValue: { width: 112, minHeight: 42, borderRadius: 10, borderWidth: 1.5, borderColor: '#6424D6', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, backgroundColor: '#FFFFFF' }, workforceSummaryValue: { color: '#21113E', fontSize: 16, fontWeight: '900', marginTop: 0 },
+  workforceSummaryLabel: { color: '#222B3C', fontSize: 13, fontWeight: '900' }, workforceOptional: { color: '#8992A0', fontSize: 11, fontWeight: '500' }, workforceSummaryHint: { color: '#8992A0', fontSize: 11, marginTop: 3 },
+  workforceTotalValue: { width: 112, minHeight: 42, borderRadius: 10, borderWidth: 1.5, borderColor: '#6424D6', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, backgroundColor: '#FFFFFF' }, workforceSummaryValue: { color: '#21113E', fontSize: 19, fontWeight: '900', marginTop: 0 },
   workforceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   workforceTile: { width: '48.8%', minHeight: 74, borderRadius: 12, borderWidth: 1, borderColor: '#EEE8FF', backgroundColor: '#FFFFFF', padding: 8, justifyContent: 'space-between', gap: 6 },
   workforceTileTop: { flexDirection: 'row', alignItems: 'center', gap: 6 }, workforceRoleIcon: { width: 30, height: 30, borderRadius: 10, backgroundColor: '#F3EDFF', alignItems: 'center', justifyContent: 'center' },
-  workforceTileRole: { flex: 1, color: '#222B3C', fontSize: 9, fontWeight: '900' }, workforceTileBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 3 },
-  workforceTileCount: { color: '#737B8C', fontSize: 8, fontWeight: '700', flexShrink: 1 }, workforceStatusBadge: { borderRadius: 12, paddingHorizontal: 5, paddingVertical: 4 }, workforceStatusText: { fontSize: 7, fontWeight: '900' },
+  workforceTileRole: { flex: 1, color: '#222B3C', fontSize: 12, fontWeight: '900' }, workforceTileBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 3 },
+  workforceTileCount: { color: '#737B8C', fontSize: 10, fontWeight: '700', flexShrink: 1 }, workforceStatusBadge: { borderRadius: 12, paddingHorizontal: 6, paddingVertical: 5 }, workforceStatusText: { fontSize: 9, fontWeight: '900' },
   workforceStatusHome: { backgroundColor: '#D9F8E5' }, workforceStatusHomeText: { color: '#13733D' }, workforceStatusOut: { backgroundColor: '#FFF0C2' }, workforceStatusOutText: { color: '#925500' }, workforceStatusUnavailable: { backgroundColor: '#FFE1E3' }, workforceStatusUnavailableText: { color: '#B4232C' },
-  workforceFootStats: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4, paddingTop: 2 }, workforceFootText: { color: '#6D55A8', fontSize: 8, fontWeight: '800' },
+  workforceFootStats: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4, paddingTop: 2 }, workforceFootText: { color: '#6D55A8', fontSize: 10, fontWeight: '800' },
   factoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   factoryImage: { width: '47%', height: 112, borderRadius: 9, resizeMode: 'cover' },
   certificateRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

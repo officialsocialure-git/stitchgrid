@@ -5,7 +5,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
-import { apiGet, apiPatch } from '@/services/api';
+import { apiGet, apiPatch, apiRequest } from '@/services/api';
 import { AppHeader } from '@/components/AppHeader';
 
 const PURPLE = ui.accent;
@@ -45,6 +45,37 @@ export default function BuyerNotificationsScreen() {
     const timer = setInterval(() => void load(true), 25000);
     return () => { active = false; clearInterval(timer); };
   }, [load]);
+
+  const markAllRead = () => {
+    if (!items.some(item => !item.readAt)) return;
+    Alert.alert('Mark all as read?', 'All notifications will be marked as read.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Mark All Read', onPress: async () => {
+        try {
+          await apiPatch('/notifications/read-all', {});
+          const readAt = new Date().toISOString();
+          setItems(current => current.map(item => ({ ...item, readAt: item.readAt || readAt })));
+        } catch (e) {
+          Alert.alert('Unable to update', e instanceof Error ? e.message : 'Please try again.');
+        }
+      } },
+    ]);
+  };
+
+  const clearAll = () => {
+    if (!items.length) return;
+    Alert.alert('Clear all notifications?', 'All your notifications will be permanently deleted. This action cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete All', style: 'destructive', onPress: async () => {
+        try {
+          await apiRequest('/notifications', { method: 'DELETE' });
+          setItems([]);
+        } catch (e) {
+          Alert.alert('Unable to delete', e instanceof Error ? e.message : 'Please try again.');
+        }
+      } },
+    ]);
+  };
 
   const openNotification = async (item: NotificationItem) => {
     try {
@@ -103,6 +134,16 @@ export default function BuyerNotificationsScreen() {
         ListHeaderComponent={<>
           <Text style={styles.heading}>Your Updates</Text>
           <Text style={styles.subheading}>Order, sample and supplier activity from STITCHGRID.</Text>
+          {items.length > 0 && <View style={styles.managementRow}>
+            <Pressable onPress={markAllRead} disabled={!items.some(item => !item.readAt)} style={[styles.manageButton, !items.some(item => !item.readAt) && styles.manageButtonDisabled]}>
+              <MaterialCommunityIcons name="check-all" size={16} color={ui.accent} />
+              <Text style={styles.markReadText}>Mark All Read</Text>
+            </Pressable>
+            <Pressable onPress={clearAll} style={styles.clearButton}>
+              <MaterialCommunityIcons name="delete-outline" size={16} color="#B42318" />
+              <Text style={styles.clearText}>Clear All</Text>
+            </Pressable>
+          </View>}
         </>}
         ListEmptyComponent={
           loading ? <View style={styles.state}><ActivityIndicator color={PURPLE} /><Text style={styles.muted}>Loading notifications...</Text></View>
@@ -132,6 +173,12 @@ const styles = StyleSheet.create({
   content:{padding:17,gap:12,width:'100%',maxWidth:840,alignSelf:'center'},
   heading:{fontSize:22,fontWeight: '700',color:ui.ink},
   subheading:{fontSize:14,color:ui.muted,lineHeight:21,marginBottom:8},
+  managementRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginTop:4,marginBottom:4},
+  manageButton:{flexDirection:'row',alignItems:'center',gap:6,paddingVertical:9,paddingHorizontal:12,borderRadius:10,backgroundColor:'#F2ECFF'},
+  manageButtonDisabled:{opacity:0.45},
+  markReadText:{fontSize:12,fontWeight:'700',color:ui.accent},
+  clearButton:{flexDirection:'row',alignItems:'center',gap:6,paddingVertical:9,paddingHorizontal:12,borderRadius:10,backgroundColor:'#FFF1F0'},
+  clearText:{fontSize:12,fontWeight:'700',color:'#B42318'},
   card:{backgroundColor:ui.surface,borderWidth:1,borderColor:'#E5E8EE',borderRadius:16,padding:14,flexDirection:'row',alignItems:'flex-start',gap:11},
   unread:{backgroundColor:'#F8F5FF',borderColor:'#DCCFF7'},
   icon:{width:40,height:40,borderRadius:13,backgroundColor:ui.accentSoft,alignItems:'center',justifyContent:'center'},

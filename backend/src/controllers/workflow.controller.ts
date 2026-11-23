@@ -806,6 +806,23 @@ export async function markNotificationRead(req: Request, res: Response, next: Ne
   } catch (e) { next(e); }
 }
 
+export async function markAllNotificationsRead(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await prisma.notification.updateMany({
+      where: { userId: req.auth!.userId, readAt: null },
+      data: { readAt: new Date() },
+    });
+    return sendOk(res, { markedRead: result.count });
+  } catch (e) { next(e); }
+}
+
+export async function clearAllNotifications(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await prisma.notification.deleteMany({ where: { userId: req.auth!.userId } });
+    return sendOk(res, { deleted: result.count });
+  } catch (e) { next(e); }
+}
+
 export async function createDispute(req: Request, res: Response, next: NextFunction) {
   try {
     const input = z.object({ reason: z.string().min(5).max(4000) }).parse(req.body);

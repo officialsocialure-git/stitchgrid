@@ -29,7 +29,7 @@ type ProfileResponse = {
     workforceResources?: WorkforceResource[];
   } | null;
 };
-const PRODUCT_CATEGORIES = ['T-Shirts', 'Hoodies & Sweatshirts', 'Shirts', 'Jackets', 'Bottom Wear', 'Activewear', 'Kids Wear', 'Workwear', 'Others'];
+const PRODUCT_CATEGORIES = ['T-Shirts', 'Hoodies & Sweatshirts', 'Shirts', 'Jackets', 'Bottom Wear', 'Activewear', 'Kids Wear', 'Workwear', 'Dresses', 'Suits', 'Others'];
 const FABRICS = ['Cotton', 'Polyester', 'Denim', 'Linen', 'Blends', 'Others'];
 const SERVICES = ['Fabric Sourcing', 'Pattern Making', 'Sampling', 'Cutting', 'Stitching', 'Printing', 'Embroidery', 'Quality Control (QC)'];
 const WORKFORCE_ROLES = ['Cutting Masters', 'Pattern Masters', 'Sampling Team', 'Stitching Operators', 'Embroidery Team', 'Printing Team', 'Quality Inspectors', 'Production Supervisors'];
@@ -97,6 +97,12 @@ export default function SupplierManufacturingCapabilitiesScreen() {
     setter(values.includes(value) ? values.filter(item => item !== value) : [...values, value]);
   };
 
+  const removeCategory = (category: string) => {
+    setCategories(current => current.filter(item => item !== category));
+    setCategoryImages(current => { const next = { ...current }; delete next[category]; return next; });
+    if (imagePromptCategory === category) setImagePromptCategory(null);
+  };
+
   const pickCategoryImage = async (category: string) => {
     if (uploadingCategory) return;
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -104,7 +110,7 @@ export default function SupplierManufacturingCapabilitiesScreen() {
       Alert.alert('Photo permission required', 'Allow photo library access to upload category images.');
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [4, 3], quality: 0.82, base64: true });
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: false, quality: 0.82, base64: true });
     if (result.canceled || !result.assets?.[0]) return;
     const asset = result.assets[0];
     if (!asset.base64) return Alert.alert('Image unavailable', 'Please select another photo.');
@@ -183,15 +189,9 @@ export default function SupplierManufacturingCapabilitiesScreen() {
         const active = selected.includes(option);
         return (
           <Pressable key={option} onPress={() => {
-            if (!compact && options === PRODUCT_CATEGORIES) {
-              if (active) {
-                setCategories(current => current.filter(item => item !== option));
-                setCategoryImages(current => { const next = { ...current }; delete next[option]; return next; });
-                if (imagePromptCategory === option) setImagePromptCategory(null);
-              } else {
-                setCategories(current => [...current, option]);
-                setImagePromptCategory(option);
-              }
+            if (!compact) {
+              setCategories(current => current.includes(option) ? current : [...current, option]);
+              setImagePromptCategory(option);
             } else toggle(option, selected, setter);
           }} style={[compact ? s.compactChoice : s.categoryChoice, active && s.choiceActive, !compact && index === options.length - 1 && s.lastChoice]}>
             {compact ? <MaterialCommunityIcons name={active ? 'checkbox-marked' : 'checkbox-blank-outline'} size={18} color={active ? ui.accent : '#A8AFBC'} /> : <><MaterialCommunityIcons name={active ? 'checkbox-marked' : 'checkbox-blank-outline'} size={19} color={active ? ui.accent : '#B8BFCA'} /><Text style={[s.choiceText, active && s.choiceTextActive]}>{option}</Text></>}
@@ -215,21 +215,25 @@ export default function SupplierManufacturingCapabilitiesScreen() {
             {!!error && <View style={s.errorBox}><MaterialCommunityIcons name="alert-circle-outline" size={18} color="#B42318" /><Text style={s.errorText}>{error}</Text><Pressable onPress={() => void load()}><Text style={s.retryText}>Retry</Text></Pressable></View>}
 
             <View style={s.card}>
-              <View style={s.sectionHead}><MaterialCommunityIcons name="tshirt-crew-outline" size={25} color={ui.accent} /><View style={s.sectionCopy}><Text style={s.sectionTitle}>Product Categories <Text style={s.required}>*</Text></Text><Text style={s.sectionHint}>Select the products you manufacture.</Text></View></View>
-              {renderChoices(PRODUCT_CATEGORIES, categories, setCategories)}
-              {!!categories.length && <View style={s.categoryImageSection}>
-                <Text style={s.imageSectionTitle}>Category Images</Text>
-                <Text style={s.imageSectionHint}>Upload a representative photo for each category. Buyers will see these images on your public profile.</Text>
-                <View style={s.categoryImageGrid}>
-                  {categories.map(category => <View key={category} style={s.categoryImageCard}>
-                    {categoryImages[category] ? <Image source={{ uri: absoluteMediaUrl(categoryImages[category]) }} style={s.categoryImagePreview} resizeMode="cover" /> : <View style={s.categoryImagePlaceholder}><MaterialCommunityIcons name="image-plus" size={25} color={ui.accent} /></View>}
-                    <Text numberOfLines={1} style={s.categoryImageName}>{category}</Text>
-                    <Pressable onPress={() => setImagePromptCategory(category)} disabled={!!uploadingCategory} style={s.categoryImageButton}>
-                      {uploadingCategory === category ? <ActivityIndicator size="small" color={ui.accent} /> : <><MaterialCommunityIcons name="camera-plus-outline" size={14} color={ui.accent} /><Text style={s.categoryImageButtonText}>{categoryImages[category] ? 'Change Image' : 'Upload Image'}</Text></>}
-                    </Pressable>
-                  </View>)}
-                </View>
-              </View>}
+              <View style={s.sectionHead}><MaterialCommunityIcons name="tshirt-crew-outline" size={25} color={ui.accent} /><View style={s.sectionCopy}><Text style={s.sectionTitle}>Product Categories <Text style={s.required}>*</Text></Text><Text style={s.sectionHint}>Choose the products you manufacture. Selected categories will appear below.</Text></View></View>
+              {renderChoices(PRODUCT_CATEGORIES.filter(category => !categories.includes(category)), categories, setCategories)}
+              {!PRODUCT_CATEGORIES.some(category => !categories.includes(category)) && <Text style={s.emptyCategoriesText}>All product categories selected.</Text>}
+            </View>
+
+            <View style={s.card}>
+              <View style={s.sectionHead}><MaterialCommunityIcons name="image-multiple-outline" size={24} color={ui.accent} /><View style={s.sectionCopy}><Text style={s.sectionTitle}>Selected Categories</Text><Text style={s.sectionHint}>Upload a representative image for each selected category. Buyers will see these images on your public profile.</Text></View></View>
+              {!!categories.length ? <View style={s.categoryImageGrid}>
+                {categories.map(category => <View key={category} style={s.categoryImageCard}>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${category}`} onPress={() => removeCategory(category)} style={s.categoryRemoveButton} hitSlop={6}>
+                    <MaterialCommunityIcons name="close-circle" size={19} color="#98A2B3" />
+                  </Pressable>
+                  {categoryImages[category] ? <Image source={{ uri: absoluteMediaUrl(categoryImages[category]) }} style={s.categoryImagePreview} resizeMode="contain" /> : <View style={s.categoryImagePlaceholder}><MaterialCommunityIcons name="image-plus" size={25} color={ui.accent} /></View>}
+                  <Text numberOfLines={1} style={s.categoryImageName}>{category}</Text>
+                  <Pressable onPress={() => setImagePromptCategory(category)} disabled={!!uploadingCategory} style={s.categoryImageButton}>
+                    {uploadingCategory === category ? <ActivityIndicator size="small" color={ui.accent} /> : <><MaterialCommunityIcons name="camera-plus-outline" size={14} color={ui.accent} /><Text style={s.categoryImageButtonText}>{categoryImages[category] ? 'Change Image' : 'Upload Image'}</Text></>}
+                  </Pressable>
+                </View>)}
+              </View> : <Text style={s.emptyCategoriesText}>No categories selected yet. Select a product category above to add its image here.</Text>}
             </View>
 
             <View style={s.twoColumn}>
@@ -323,7 +327,9 @@ const s = StyleSheet.create({
   imageSectionTitle: { color: '#30394A', fontSize: 12, fontWeight: '900' },
   imageSectionHint: { color: '#7B8493', fontSize: 10, lineHeight: 15 },
   categoryImageGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 9 },
-  categoryImageCard: { width: '31.5%', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E6E8EF', borderRadius: 11, padding: 6, gap: 5 },
+  categoryImageCard: { width: '31.5%', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E6E8EF', borderRadius: 11, padding: 6, paddingTop: 24, gap: 5, position: 'relative' },
+  categoryRemoveButton: { position: 'absolute', top: 3, right: 3, zIndex: 2, width: 22, height: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF', borderRadius: 12 },
+  emptyCategoriesText: { color: '#7B8493', fontSize: 11, lineHeight: 16, paddingVertical: 8 },
   categoryImagePreview: { width: '100%', aspectRatio: 1.15, borderRadius: 7, backgroundColor: '#F2F3F7' },
   categoryImagePlaceholder: { width: '100%', aspectRatio: 1.15, borderRadius: 7, backgroundColor: '#F5F1FF', alignItems: 'center', justifyContent: 'center' },
   categoryImageName: { color: '#30394A', fontSize: 10, fontWeight: '800', textAlign: 'center' },
