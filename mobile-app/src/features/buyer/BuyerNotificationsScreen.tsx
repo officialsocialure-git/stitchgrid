@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import { apiGet, apiPatch, apiRequest } from '@/services/api';
 import { AppHeader } from '@/components/AppHeader';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 
 const PURPLE = ui.accent;
 type NotificationItem = { id: string; title: string; body: string; readAt?: string | null; createdAt: string };
@@ -42,9 +43,11 @@ export default function BuyerNotificationsScreen() {
       if (membership?.role) setRole(membership.role);
     }).catch(() => {});
     void load();
-    const timer = setInterval(() => void load(true), 25000);
+    const timer = setInterval(() => void load(true), 60000);
     return () => { active = false; clearInterval(timer); };
   }, [load]);
+
+  useRealtimeRefresh(load, ['notification:new', '*']);
 
   const markAllRead = () => {
     if (!items.some(item => !item.readAt)) return;

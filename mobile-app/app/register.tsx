@@ -15,7 +15,7 @@ const PURPLE = ui.accent;
 const CAPABILITIES = ['T-Shirts','Shirts','Hoodies','Activewear','Polo Shirts','Denim & Jeans','Trousers','Dresses','Kids Wear','Knitwear','Woven Fabric'];
 const PROCESSES = ['Cutting','Stitching','Printing','Embroidery','Washing','Finishing','Packing'];
 const REGIONS = ['Delhi NCR, UP, Haryana','Tamil Nadu & South India','Gujarat & Western India','Punjab & North India','Bengal & Eastern India','Pan-India (Domestic)','Pan-India & Global Export'];
-const MOQ_OPTIONS = ['100 pcs','200 pcs','300 pcs','500 pcs','1,000 pcs','2,500 pcs','5,000 pcs'];
+const MOQ_OPTIONS = ['30 pcs','50 pcs','100 pcs','200 pcs','300 pcs','500 pcs','1,000 pcs','2,500 pcs','5,000 pcs'];
 const YEARS = Array.from({ length: 45 }, (_, i) => String(2026 - i));
 
 type Role = 'Brand / Buyer' | 'Manufacturer';

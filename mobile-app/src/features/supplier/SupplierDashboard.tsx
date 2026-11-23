@@ -11,6 +11,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import { apiGet, apiRequest } from '@/services/api';
 import { AppHeader } from '@/components/AppHeader';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
+import { disconnectRealtime } from '@/services/realtime';
 
 const PURPLE = ui.accent;
 const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparent.png';
@@ -211,6 +213,7 @@ export default function SupplierDashboard() {
             SecureStore.deleteItemAsync('sg_user'),
             SecureStore.deleteItemAsync('sg_membership'),
           ]);
+          disconnectRealtime();
           router.replace('/' as any);
         } catch {
           Alert.alert('Logout failed', 'Please try again.');
@@ -223,6 +226,8 @@ export default function SupplierDashboard() {
     setProfileMenuOpen(false);
     router.push({ pathname: '/supplier/[section]', params: { section: item === 'profile' ? 'business-profile' : 'account-settings' } } as any);
   };
+
+  useRealtimeRefresh(loadDashboard, ['*']);
 
   const navigate = (section: string) => {
     setMenuOpen(false);
@@ -616,7 +621,7 @@ const styles = StyleSheet.create({
   input: { minHeight: 51, borderWidth: 1, borderColor: '#E1E4EA', borderRadius: 12, paddingHorizontal: 14, fontSize: 15, color: ui.ink, backgroundColor: ui.surface },
   accountMenuRoot: { flex: 1 },
   accountMenuBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.08)' },
-  accountMenu: { position: 'absolute', right: 16, width: 238, backgroundColor: ui.surface, borderRadius: 20, paddingVertical: 5, paddingHorizontal: 7, elevation: 0, shadowColor: ui.ink, shadowOpacity: 0, shadowRadius: 18, shadowOffset: { width: 0, height: 7 }, borderWidth: 1, borderColor: '#EEF0F4' },
+  accountMenu: { position: 'absolute', right: 16, width: '85%', maxWidth: 238, backgroundColor: ui.surface, borderRadius: 20, paddingVertical: 5, paddingHorizontal: 7, elevation: 0, shadowColor: ui.ink, shadowOpacity: 0, shadowRadius: 18, shadowOffset: { width: 0, height: 7 }, borderWidth: 1, borderColor: '#EEF0F4' },
   accountMenuItem: { minHeight: 47, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 10 },
   accountMenuText: { color: '#303846', fontSize: 13, fontWeight: '600' },
   accountMenuLogout: { color: '#DC2626' },

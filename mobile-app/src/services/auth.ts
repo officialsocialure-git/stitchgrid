@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { apiPost } from './api';
+import { connectRealtime } from './realtime';
 
 export type Membership = {
   organizationId: string;
@@ -25,6 +26,7 @@ async function persistSession(result: AuthResponse) {
       ? SecureStore.setItemAsync('sg_membership', JSON.stringify(result.activeMembership))
       : SecureStore.deleteItemAsync('sg_membership'),
   ]);
+  connectRealtime(result.accessToken);
   return result;
 }
 
@@ -56,6 +58,7 @@ export async function completeGoogleOnboarding(payload: {
   }
   await SecureStore.setItemAsync('sg_token', result.accessToken);
   await SecureStore.setItemAsync('sg_membership', JSON.stringify(result.activeMembership));
+  connectRealtime(result.accessToken);
   return result;
 }
 

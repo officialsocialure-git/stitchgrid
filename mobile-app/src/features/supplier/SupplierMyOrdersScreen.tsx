@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import { apiGet, apiRequest } from '@/services/api';
 import { AppHeader } from '@/components/AppHeader';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 import SupplierQcSubmitModal from './SupplierQcSubmitModal';
 
 const PURPLE = ui.accent;
@@ -138,9 +139,11 @@ export default function SupplierMyOrdersScreen() {
 
   useEffect(() => {
     void loadOrders();
-    const timer = setInterval(() => { void loadOrders(true); }, 25000);
+    const timer = setInterval(() => { void loadOrders(true); }, 60000);
     return () => clearInterval(timer);
   }, [loadOrders]);
+
+  useRealtimeRefresh(loadOrders, ['*']);
 
   const navigate = (section: string, orderId?: string) => {
     setMenuOpen(false);

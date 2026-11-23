@@ -18,6 +18,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import { apiGet } from '@/services/api';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 
 export const HEADER_PURPLE = ui.accent;
 
@@ -155,6 +156,17 @@ export function AppHeader({
       clearInterval(timer);
     };
   }, [role]);
+
+  useRealtimeRefresh(async () => {
+    if (propUnread === undefined) {
+      const notifications = await apiGet<any[]>('/notifications').catch(() => []);
+      if (Array.isArray(notifications)) setDetectedUnread(notifications.filter(item => !item.readAt).length);
+    }
+    if (role === 'BUYER') {
+      const samples = await apiGet<any[]>('/samples').catch(() => []);
+      if (Array.isArray(samples)) setPendingSampleCount(samples.filter(sample => String(sample.status).toUpperCase() === 'DISPATCHED').length);
+    }
+  }, ['*']);
 
   const displayUnread = propUnread !== undefined ? propUnread : detectedUnread;
 
@@ -497,7 +509,7 @@ const styles = StyleSheet.create({
   accountMenuRoot: { flex: 1 },
   accountMenuBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'transparent' },
   accountMenu: {
-    position: 'absolute', right: 14, width: 250, backgroundColor: ui.surface,
+    position: 'absolute', right: 14, width: '85%', maxWidth: 250, backgroundColor: ui.surface,
     borderRadius: 20, borderWidth: 1, borderColor: '#E9EBF0', paddingVertical: 8,
     paddingHorizontal: 8, shadowColor: '#1E1B4B', shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0, shadowRadius: 18, elevation: 0,
@@ -520,7 +532,8 @@ const styles = StyleSheet.create({
   drawerCard: {
     position: 'absolute',
     left: 14,
-    width: 275,
+    width: '88%',
+    maxWidth: 275,
     backgroundColor: ui.surface,
     borderRadius: 20,
     borderWidth: 1,

@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiGet } from '@/services/api';
 import { AppHeader } from '@/components/AppHeader';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 
 const PURPLE = ui.accent;
 const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparent.png';
@@ -79,9 +80,11 @@ export default function SupplierMyOffersScreen() {
 
   useEffect(() => {
     void load();
-    const timer = setInterval(() => { void load(true); }, 20000);
+    const timer = setInterval(() => { void load(true); }, 60000);
     return () => clearInterval(timer);
   }, [load]);
+
+  useRealtimeRefresh(load, ['*']);
 
   const active = rfqs.find(r => r.id === activeId) || null;
   const quote = useMemo(() => active?.quotations?.find(q => q.supplierOrgId === orgId) || null, [active, orgId]);

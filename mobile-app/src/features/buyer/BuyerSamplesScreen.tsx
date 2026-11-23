@@ -2,7 +2,7 @@ import { ui } from '@/theme/ui';
 import { AppBottomNav } from '@/components/AppBottomNav';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, RefreshControl,
+  ActivityIndicator, Alert, Dimensions, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, RefreshControl,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -10,8 +10,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { apiGet, apiPatch, apiPost, API_BASE_URL } from '@/services/api';
 import { AppHeader } from '@/components/AppHeader';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 
 const PURPLE = ui.accent;
 const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparent.png';
@@ -111,6 +113,9 @@ export default function BuyerSamplesScreen() {
   const [detailsTab, setDetailsTab] = useState<'Sample Photos' | 'Details' | 'Supplier Note' | 'Buyer Note' | 'Files' | 'History'>('Sample Photos');
   const [localPhotos, setLocalPhotos] = useState<Attachment[]>([]);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
+  const [imageViewerOpen, setImageViewerOpen] = useState(false);
+  const [viewerPhotoIndex, setViewerPhotoIndex] = useState(0);
+  const viewerWidth = Dimensions.get('window').width;
   const [requestOpen, setRequestOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState('');
   const [orderPickerOpen, setOrderPickerOpen] = useState(false);
@@ -172,7 +177,7 @@ export default function BuyerSamplesScreen() {
 
   useEffect(() => {
     let active = true;
-    const timer = setInterval(() => { if (active) void loadData(true); }, 25000);
+    const timer = setInterval(() => { if (active) void loadData(true); }, 60000);
     SecureStore.getItemAsync('sg_membership').then(raw => {
       if (active && raw) setMembership(JSON.parse(raw) as Membership);
     }).catch(() => { }).finally(() => {
@@ -201,6 +206,42 @@ export default function BuyerSamplesScreen() {
         ? new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         : new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   }, [samples, search, sampleTypeFilter, statusFilter, sortBy, isSupplier]);
+
+  const openImageViewer = () => {
+    if (!localPhotos.length) return;
+    setViewerPhotoIndex(activePhotoIndex);
+    setImageViewerOpen(true);
+  };
+
+  const downloadSamplePhoto = async () => {
+    const photo = localPhotos[viewerPhotoIndex];
+    if (!photo?.url) return;
+    const sourceUrl = absoluteUrl(photo.url);
+    const safeLabel = (photo.label || 'sample-photo').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const rawExtension = (photo.filename || sourceUrl.split('?')[0].split('/').pop() || '').split('.').pop()?.toLowerCase();
+    const extension = rawExtension === 'png' || rawExtension === 'webp' ? rawExtension : 'jpg';
+    const mimeType = extension === 'png' ? 'image/png' : extension === 'webp' ? 'image/webp' : 'image/jpeg';
+    const filename = `stitchgrid-${safeLabel || 'sample-photo'}-${viewerPhotoIndex + 1}.${extension}`;
+    try {
+      const downloaded = await FileSystem.downloadAsync(sourceUrl, `${FileSystem.cacheDirectory}${filename}`);
+      if (Platform.OS === 'android' && FileSystem.StorageAccessFramework) {
+        const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert('Download cancelled', 'Choose a folder to save the sample photo.');
+          return;
+        }
+        const base64 = await FileSystem.readAsStringAsync(downloaded.uri, { encoding: FileSystem.EncodingType.Base64 });
+        const destination = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, filename, mimeType);
+        await FileSystem.writeAsStringAsync(destination, base64, { encoding: FileSystem.EncodingType.Base64 });
+        Alert.alert('Photo downloaded', 'The sample photo has been saved to your selected folder.');
+      } else {
+        await Linking.openURL(sourceUrl);
+        Alert.alert('Sample photo opened', 'Use the browser or system share menu to save this photo.');
+      }
+    } catch (error) {
+      Alert.alert('Download failed', error instanceof Error ? error.message : 'Unable to download this sample photo.');
+    }
+  };
 
   const openDetails = (sample: Sample) => {
     setSelected(sample);
@@ -400,6 +441,8 @@ export default function BuyerSamplesScreen() {
       Alert.alert('Notification error', e instanceof Error ? e.message : 'Unable to open notification.');
     }
   };
+
+  useRealtimeRefresh(loadData, ['*']);
 
   const navigate = (section: string) => {
     setDrawerOpen(false);
@@ -628,13 +671,41 @@ export default function BuyerSamplesScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      <Modal visible={!!selected} transparent animationType="slide" onRequestClose={() => setSelected(null)}>
+      <Modal visible={imageViewerOpen} animationType="fade" onRequestClose={() => setImageViewerOpen(false)} statusBarTranslucent>
+        <View style={styles.imageViewer}>
+          <View style={styles.imageViewerHeader}>
+            <Pressable style={styles.viewerIconButton} onPress={() => setImageViewerOpen(false)} accessibilityRole="button" accessibilityLabel="Close photo viewer">
+              <MaterialCommunityIcons name="close" size={25} color="#FFFFFF" />
+            </Pressable>
+            <Text style={styles.viewerCounter}>{localPhotos.length ? `${viewerPhotoIndex + 1} / ${localPhotos.length}` : '0 / 0'}</Text>
+            <Pressable style={styles.viewerIconButton} onPress={() => void downloadSamplePhoto()} disabled={!localPhotos[viewerPhotoIndex]?.url} accessibilityRole="button" accessibilityLabel="Download current sample photo">
+              <MaterialCommunityIcons name="download" size={23} color="#FFFFFF" />
+            </Pressable>
+          </View>
+          <ScrollView horizontal pagingEnabled contentOffset={{ x: viewerPhotoIndex * viewerWidth, y: 0 }} showsHorizontalScrollIndicator={false} onMomentumScrollEnd={event => {
+            const nextIndex = Math.round(event.nativeEvent.contentOffset.x / event.nativeEvent.layoutMeasurement.width);
+            const safeIndex = Math.max(0, Math.min(localPhotos.length - 1, nextIndex));
+            setViewerPhotoIndex(safeIndex);
+            setActivePhotoIndex(safeIndex);
+          }}>
+            {localPhotos.map((photo, index) => (
+              <View key={photo.url + index} style={[styles.viewerPage, { width: viewerWidth }]}>
+                <Image source={{ uri: absoluteUrl(photo.url) }} style={styles.viewerImage} resizeMode="contain" />
+                <Text style={styles.viewerPhotoLabel}>{photo.label || 'Sample Photo'}</Text>
+              </View>
+            ))}
+          </ScrollView>
+          {localPhotos.length > 1 && <View style={styles.viewerHint}><Text style={styles.viewerHintText}>Swipe to view more photos</Text></View>}
+        </View>
+      </Modal>
+
+      <Modal visible={!!selected && !imageViewerOpen} transparent animationType="slide" onRequestClose={() => setSelected(null)}>
         <View style={styles.modalBackdrop}>
           <View style={[styles.detailsSheet, { paddingBottom: Math.max(insets.bottom, 14) }]}>
             <View style={styles.sheetHeader}><Pressable style={styles.detailBackButton} onPress={() => setSelected(null)}><MaterialCommunityIcons name="arrow-left" size={24} color="#273244" /><Text style={styles.sheetTitle}>Sample Details</Text></Pressable><View style={[styles.statusBadge, { backgroundColor: selected ? statusColors(selected.status).bg : '#FFF8E7', borderColor: selected ? statusColors(selected.status).border : '#F1E1A5' }]}><Text style={[styles.statusBadgeText, { color: selected ? statusColors(selected.status).text : '#8B5A00' }]}>{selected ? statusLabel(selected.status, !!isSupplier) : ''}</Text></View></View>
             {selected && <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <View style={styles.photoHero}>
-                {localPhotos[activePhotoIndex]?.url ? <Image source={{ uri: absoluteUrl(localPhotos[activePhotoIndex].url) }} style={styles.heroImage} resizeMode="cover" /> : <View style={styles.photoPlaceholder}><MaterialCommunityIcons name="hanger" size={34} color="#A8B1BE" /><Text style={styles.photoPlaceholderTitle}>Sample View (0/0)</Text><Text style={styles.photoPlaceholderText}>Photos pending from supplier</Text></View>}
+                {localPhotos[activePhotoIndex]?.url ? <Pressable onPress={openImageViewer} accessibilityRole="button" accessibilityLabel="View sample photo full screen"><Image source={{ uri: absoluteUrl(localPhotos[activePhotoIndex].url) }} style={styles.heroImage} resizeMode="cover" /></Pressable> : <View style={styles.photoPlaceholder}><MaterialCommunityIcons name="hanger" size={34} color="#A8B1BE" /><Text style={styles.photoPlaceholderTitle}>Sample View (0/0)</Text><Text style={styles.photoPlaceholderText}>Photos pending from supplier</Text></View>}
                 {localPhotos.length > 1 && <><Pressable style={styles.photoPrev} accessibilityRole="button" accessibilityLabel="Previous sample photo" onPress={() => setActivePhotoIndex(index => (index - 1 + localPhotos.length) % localPhotos.length)}><MaterialCommunityIcons name="chevron-left" size={28} color="#fff" /></Pressable><Pressable style={styles.photoNext} accessibilityRole="button" accessibilityLabel="Next sample photo" onPress={() => setActivePhotoIndex(index => (index + 1) % localPhotos.length)}><MaterialCommunityIcons name="chevron-right" size={28} color="#fff" /></Pressable></>}
                 {localPhotos.length > 0 && <View style={styles.photoCounter}><Text style={styles.photoCounterText}>{localPhotos[activePhotoIndex]?.label || 'Sample View'} ({activePhotoIndex + 1}/{localPhotos.length})</Text></View>}
               </View>
@@ -861,6 +932,15 @@ const styles = StyleSheet.create({
   formInput: { minHeight: 47, borderWidth: 1, borderColor: ui.border, borderRadius: 13, paddingHorizontal: 13, fontSize: 14, color: '#26313F', backgroundColor: ui.surface },
   notesInput: { minHeight: 100, paddingTop: 12, textAlignVertical: 'top' },
   photoHero: { height: 210, borderRadius: 19, overflow: 'hidden', backgroundColor: ui.ink, marginBottom: 17 },
+  imageViewer: { flex: 1, backgroundColor: '#090A0F', justifyContent: 'center' },
+  imageViewerHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2, paddingTop: 48, paddingHorizontal: 18, paddingBottom: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(0,0,0,.35)' },
+  viewerIconButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,.16)' },
+  viewerCounter: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  viewerPage: { height: '100%', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  viewerImage: { width: '100%', height: '78%' },
+  viewerPhotoLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '600', marginTop: 18 },
+  viewerHint: { position: 'absolute', bottom: 32, alignSelf: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, backgroundColor: 'rgba(255,255,255,.14)' },
+  viewerHintText: { color: '#FFFFFF', fontSize: 12 },
   heroImage: { width: '100%', height: '100%' },
   photoPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 7 },
   photoPlaceholderTitle: { fontSize: 16, fontWeight: '700', color: '#F4F5F7' },

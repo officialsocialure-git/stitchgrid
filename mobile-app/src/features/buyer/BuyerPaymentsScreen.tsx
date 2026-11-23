@@ -1,6 +1,7 @@
 import { ui } from '@/theme/ui';
 import { AppBottomNav } from '@/components/AppBottomNav';
 import { AppHeader } from '@/components/AppHeader';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Image, Modal, Pressable, RefreshControl, ScrollView,
@@ -109,11 +110,8 @@ export default function BuyerPaymentsScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    void loadPayments();
-    const interval = setInterval(() => { void loadPayments(true); }, 25000);
-    return () => clearInterval(interval);
-  }, [loadPayments]);
+  useEffect(() => { void loadPayments(); }, [loadPayments]);
+  useRealtimeRefresh(loadPayments, ['*']);
 
   const visibleOrders = useMemo(
     () => requestedOrderId ? orders.filter(order => order.id === requestedOrderId) : orders,

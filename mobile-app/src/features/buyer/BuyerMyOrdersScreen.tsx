@@ -2,15 +2,17 @@ import { ui } from '@/theme/ui';
 import { AppBottomNav } from '@/components/AppBottomNav';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl,
+  ActivityIndicator, Alert, Dimensions, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, Share,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
+import * as FileSystem from 'expo-file-system/legacy';
 import { apiGet, apiPost, apiRequest } from '@/services/api';
 import { AppHeader } from '@/components/AppHeader';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 
 const PURPLE = ui.accent;
 const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparent.png';
@@ -98,6 +100,10 @@ export default function BuyerMyOrdersScreen() {
   const [samplePaymentBusy, setSamplePaymentBusy] = useState(false);
   const [qcReviewOrder, setQcReviewOrder] = useState<Order | null>(null);
   const [qcFeedback, setQcFeedback] = useState('');
+  const [qcPhotoViewerOpen, setQcPhotoViewerOpen] = useState(false);
+  const [qcViewerPhotos, setQcViewerPhotos] = useState<string[]>([]);
+  const [qcViewerIndex, setQcViewerIndex] = useState(0);
+  const qcViewerWidth = Dimensions.get('window').width;
 
 
   const loadOrders = useCallback(async (quiet = false) => {
@@ -145,9 +151,11 @@ export default function BuyerMyOrdersScreen() {
 
   useEffect(() => {
     void loadOrders();
-    const interval = setInterval(() => { void loadOrders(true); }, 25000);
+    const interval = setInterval(() => { void loadOrders(true); }, 60000);
     return () => clearInterval(interval);
   }, [loadOrders]);
+
+  useRealtimeRefresh(loadOrders, ['*']);
 
   const navigate = (section: string) => {
     setDrawerOpen(false);
@@ -174,6 +182,39 @@ export default function BuyerMyOrdersScreen() {
         }
       },
     ]);
+  };
+
+  const openQcPhotoViewer = (photos: string[], index: number) => {
+    if (!photos.length) return;
+    setQcViewerPhotos(photos);
+    setQcViewerIndex(index);
+    setQcPhotoViewerOpen(true);
+  };
+
+  const downloadQcPhoto = async () => {
+    const sourceUrl = qcViewerPhotos[qcViewerIndex];
+    if (!sourceUrl) return;
+    const cleanUrl = sourceUrl.split('?')[0];
+    const extension = cleanUrl.split('.').pop()?.toLowerCase();
+    const safeExtension = extension && ['jpg', 'jpeg', 'png', 'webp'].includes(extension) ? extension : 'jpg';
+    const mimeType = safeExtension === 'png' ? 'image/png' : safeExtension === 'webp' ? 'image/webp' : 'image/jpeg';
+    const filename = `stitchgrid-qc-inspection-${qcViewerIndex + 1}.${safeExtension}`;
+    try {
+      if (!FileSystem.cacheDirectory) throw new Error('Photo storage is unavailable on this device.');
+      const downloaded = await FileSystem.downloadAsync(sourceUrl, `${FileSystem.cacheDirectory}${filename}`);
+      if (Platform.OS === 'android' && FileSystem.StorageAccessFramework) {
+        const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+        if (!permission.granted) return;
+        const base64 = await FileSystem.readAsStringAsync(downloaded.uri, { encoding: FileSystem.EncodingType.Base64 });
+        const destination = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, filename, mimeType);
+        await FileSystem.writeAsStringAsync(destination, base64, { encoding: FileSystem.EncodingType.Base64 });
+        Alert.alert('Photo downloaded', 'The QC inspection photo has been saved to your selected folder.');
+      } else {
+        await Share.share({ url: downloaded.uri, message: filename });
+      }
+    } catch (error) {
+      Alert.alert('Download failed', error instanceof Error ? error.message : 'Unable to download this QC photo.');
+    }
   };
 
   const reviewQualityCheck = async (decision: 'APPROVE' | 'REJECT') => {
@@ -494,8 +535,8 @@ export default function BuyerMyOrdersScreen() {
                   <Text style={styles.ratingPrompt}>Quality checklist</Text>
                   {Object.entries(checks).map(([key, label]) => <View key={key} style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}><MaterialCommunityIcons name={report.checklist?.[key] ? 'check-circle' : 'close-circle'} size={17} color={report.checklist?.[key] ? '#087653' : '#B42318'} /><Text style={{ color: '#344054', fontSize: 12 }}>{label}</Text></View>)}
                   <Text style={styles.ratingPrompt}>QC inspection photos</Text>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{(report.photos || []).map((url, index) => <Image key={url + index} source={{ uri: url }} style={{ width: 88, height: 88, borderRadius: 9, backgroundColor: '#EAECF0' }} />)}</View>
-                  {!!report.defectivePhotos?.length && <><Text style={styles.ratingPrompt}>Defective-item photos</Text><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{report.defectivePhotos.map((url, index) => <Image key={url + index} source={{ uri: url }} style={{ width: 88, height: 88, borderRadius: 9 }} />)}</View></>}
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{(report.photos || []).map((url, index) => <Pressable key={url + index} onPress={() => openQcPhotoViewer(report.photos || [], index)} accessibilityRole="button" accessibilityLabel={`View QC inspection photo ${index + 1} full screen`}><Image source={{ uri: url }} style={{ width: 88, height: 88, borderRadius: 9, backgroundColor: '#EAECF0' }} /></Pressable>)}</View>
+                  {!!report.defectivePhotos?.length && <><Text style={styles.ratingPrompt}>Defective-item photos</Text><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{report.defectivePhotos.map((url, index) => <Pressable key={url + index} onPress={() => openQcPhotoViewer(report.defectivePhotos || [], index)} accessibilityRole="button" accessibilityLabel={`View defective-item photo ${index + 1} full screen`}><Image source={{ uri: url }} style={{ width: 88, height: 88, borderRadius: 9 }} /></Pressable>)}</View></>}
                   {!!report.remarks && <Text style={styles.qcReportText}>Supplier remarks: {report.remarks}</Text>}
                 </View>;
               })()}
@@ -508,6 +549,32 @@ export default function BuyerMyOrdersScreen() {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={qcPhotoViewerOpen} animationType="fade" onRequestClose={() => setQcPhotoViewerOpen(false)} statusBarTranslucent>
+        <View style={styles.qcPhotoViewer}>
+          <View style={styles.qcPhotoViewerHeader}>
+            <Pressable style={styles.qcViewerIconButton} onPress={() => setQcPhotoViewerOpen(false)} accessibilityRole="button" accessibilityLabel="Close QC photo viewer">
+              <MaterialCommunityIcons name="close" size={25} color="#FFFFFF" />
+            </Pressable>
+            <Text style={styles.qcViewerCounter}>{qcViewerPhotos.length ? `${qcViewerIndex + 1} / ${qcViewerPhotos.length}` : '0 / 0'}</Text>
+            <Pressable style={styles.qcViewerIconButton} onPress={() => void downloadQcPhoto()} disabled={!qcViewerPhotos[qcViewerIndex]} accessibilityRole="button" accessibilityLabel="Download QC photo">
+              <MaterialCommunityIcons name="download" size={23} color="#FFFFFF" />
+            </Pressable>
+          </View>
+          <ScrollView horizontal pagingEnabled contentOffset={{ x: qcViewerIndex * qcViewerWidth, y: 0 }} showsHorizontalScrollIndicator={false} onMomentumScrollEnd={event => {
+            const nextIndex = Math.round(event.nativeEvent.contentOffset.x / event.nativeEvent.layoutMeasurement.width);
+            setQcViewerIndex(Math.max(0, Math.min(qcViewerPhotos.length - 1, nextIndex)));
+          }}>
+            {qcViewerPhotos.map((url, index) => (
+              <View key={url + index} style={[styles.qcViewerPage, { width: qcViewerWidth }]}>
+                <Image source={{ uri: url }} style={styles.qcViewerImage} resizeMode="contain" />
+                <Text style={styles.qcViewerPhotoLabel}>QC Inspection Photo</Text>
+              </View>
+            ))}
+          </ScrollView>
+          {qcViewerPhotos.length > 1 && <View style={styles.qcViewerHint}><Text style={styles.qcViewerHintText}>Swipe to view more photos</Text></View>}
+        </View>
       </Modal>
 
       <Modal visible={!!reviewOrder} transparent animationType="fade" onRequestClose={() => setReviewOrder(null)}>
@@ -628,6 +695,15 @@ const styles = StyleSheet.create({
   samplePaidNoticeText: { flex: 1, fontSize: 12, color: '#087653', lineHeight: 18, fontWeight: '600' },
   samplePayNowButton: { minHeight: 49, backgroundColor: PURPLE, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 16 },
   samplePayNowText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  qcPhotoViewer: { flex: 1, backgroundColor: '#090A0F', justifyContent: 'center' },
+  qcPhotoViewerHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2, paddingTop: 48, paddingHorizontal: 18, paddingBottom: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(0,0,0,.35)' },
+  qcViewerIconButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,.16)' },
+  qcViewerCounter: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  qcViewerPage: { height: '100%', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  qcViewerImage: { width: '100%', height: '78%' },
+  qcViewerPhotoLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '600', marginTop: 18 },
+  qcViewerHint: { position: 'absolute', bottom: 32, alignSelf: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, backgroundColor: 'rgba(255,255,255,.14)' },
+  qcViewerHintText: { color: '#FFFFFF', fontSize: 12 },
   qcReportText: { fontSize: 13, color: ui.ink, lineHeight: 20, backgroundColor: '#F6F4F9', borderRadius: 12, padding: 12, marginTop: 8 },
   qcRejectButton: { minHeight: 46, borderWidth: 1, borderColor: '#E6B8B4', borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
   qcRejectText: { color: '#B42318', fontSize: 13, fontWeight: '700' },

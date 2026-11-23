@@ -1,6 +1,7 @@
 import { ui } from '@/theme/ui';
 import { AppBottomNav } from '@/components/AppBottomNav';
 import { AppHeader } from '@/components/AppHeader';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -116,11 +117,8 @@ export default function SupplierPaymentsScreen() {
     }
   }, [requestedOrderId]);
 
-  useEffect(() => {
-    void load();
-    const timer = setInterval(() => { void load(true); }, 25000);
-    return () => clearInterval(timer);
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
+  useRealtimeRefresh(load, ['*']);
 
   const visibleOrders = useMemo(() => [...orders].sort((a, b) => (b.poNumber || '').localeCompare(a.poNumber || '')), [orders]);
   const allMilestones = useMemo(() => visibleOrders.flatMap(order =>

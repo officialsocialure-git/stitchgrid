@@ -7,6 +7,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { apiGet } from '@/services/api';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 
 type Refund = { id: string; amount: number | string; status: string; reason?: string | null; createdAt: string };
 type Transaction = {
@@ -74,6 +75,7 @@ export default function BuyerPaymentHistoryScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+  useRealtimeRefresh(load, ['*']);
 
   const navigate = (section: string) => {
     if (section === 'home') router.replace('/workspace?role=BUYER' as any);

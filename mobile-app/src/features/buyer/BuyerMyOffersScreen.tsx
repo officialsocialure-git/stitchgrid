@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import { apiGet, apiPost } from '@/services/api';
 import { AppHeader } from '@/components/AppHeader';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 
 const PURPLE = ui.accent;
 const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparent.png';
@@ -98,9 +99,11 @@ export default function BuyerMyOffersScreen() {
 
   useEffect(() => {
     void load();
-    const interval = setInterval(() => { void load(true); }, 20000);
+    const interval = setInterval(() => { void load(true); }, 60000);
     return () => clearInterval(interval);
   }, [load]);
+
+  useRealtimeRefresh(load, ['*']);
 
   const activeRfq = rfqs.find(r => r.id === activeRfqId) || null;
   const quotes = activeRfq?.quotations || [];

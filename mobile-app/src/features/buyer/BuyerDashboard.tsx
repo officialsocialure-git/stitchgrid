@@ -12,6 +12,8 @@ import * as SecureStore from 'expo-secure-store';
 import { apiGet, API_BASE_URL } from '@/services/api';
 import CreateRfqModal from '@/features/buyer/CreateRfqModal';
 import { AppHeader } from '@/components/AppHeader';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
+import { disconnectRealtime } from '@/services/realtime';
 
 const PURPLE = ui.accent;
 const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparent.png';
@@ -171,6 +173,7 @@ export default function BuyerDashboard() {
     const timer = setTimeout(() => { void loadSuppliers(); }, 400);
     return () => clearTimeout(timer);
   }, [loadSuppliers]);
+  useRealtimeRefresh(loadSuppliers, ['*']);
 
   const visibleSuppliers = useMemo(() => suppliers, [suppliers]);
 
@@ -184,6 +187,7 @@ export default function BuyerDashboard() {
             SecureStore.deleteItemAsync('sg_user'),
             SecureStore.deleteItemAsync('sg_membership'),
           ]);
+          disconnectRealtime();
           router.replace('/' as any);
         } catch {
           Alert.alert('Logout failed', 'Please try again.');

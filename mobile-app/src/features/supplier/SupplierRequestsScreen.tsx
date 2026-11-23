@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiGet, apiRequest } from '@/services/api';
 import { AppHeader } from '@/components/AppHeader';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 
 const PURPLE = ui.accent;
 const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparent.png';
@@ -82,6 +83,7 @@ export default function SupplierRequestsScreen() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+  useRealtimeRefresh(load, ['*']);
 
   const getQuote = useCallback((rfq: Rfq) =>
     (rfq.quotations || []).find(q => q.supplierOrgId === orgId) || null, [orgId]);

@@ -1,12 +1,13 @@
 import { ui } from '@/theme/ui';
 import { AppBottomNav } from '@/components/AppBottomNav';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, FlatList, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { apiGet, apiPost } from '@/services/api';
 import { AppHeader } from '@/components/AppHeader';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 
 const P = ui.accent;
 const LOGO = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparent.png';
@@ -44,8 +45,10 @@ export default function BuyerChatScreen(){
    setThreadError('');
   }catch(e){if(!quiet)setThreadError(e instanceof Error?e.message:'Unable to load messages.');}
  },[]);
- useEffect(()=>{let live=true;SecureStore.getItemAsync('sg_user').then(v=>{if(live&&v)try{setUser(JSON.parse(v));}catch{}});SecureStore.getItemAsync('sg_membership').then(v=>{if(live&&v)try{const m=JSON.parse(v);if(m.role==='SUPPLIER')setActiveRole('SUPPLIER');}catch{}});void loadConvs();const t=setInterval(()=>{if(AppState.currentState==='active')void loadConvs(true);},20000);return()=>{live=false;clearInterval(t);};},[loadConvs]);
- useEffect(()=>{stickToBottom.current=true;if(!activeId){setMessages([]);return;}void loadMessages(activeId);const t=setInterval(()=>{if(AppState.currentState==='active')void loadMessages(activeId,true);},5000);return()=>clearInterval(t);},[activeId,loadMessages]);
+ useEffect(()=>{let live=true;SecureStore.getItemAsync('sg_user').then(v=>{if(live&&v)try{setUser(JSON.parse(v));}catch{}});SecureStore.getItemAsync('sg_membership').then(v=>{if(live&&v)try{const m=JSON.parse(v);if(m.role==='SUPPLIER')setActiveRole('SUPPLIER');}catch{}});void loadConvs();return()=>{live=false;};},[loadConvs]);
+ useEffect(()=>{stickToBottom.current=true;if(!activeId){setMessages([]);return;}void loadMessages(activeId);},[activeId,loadMessages]);
+ useRealtimeRefresh(loadConvs, ['*']);
+ useRealtimeRefresh(()=>{if(activeId) return loadMessages(activeId,true);}, ['message:new']);
 
  const send=async()=>{const body=draft.trim();if(!body||!activeId||sending)return;const id=activeId;const temp:Msg={id:`local-${Date.now()}`,conversationId:id,senderUserId:user?.id||'',body,createdAt:new Date().toISOString()};setDraft('');stickToBottom.current=true;setMessages(v=>[...v,temp]);setSending(true);setThreadError('');
   try{const saved=await apiPost<Msg>(`/conversations/${id}/messages`,{body});setMessages(v=>v.map(m=>m.id===temp.id?saved:m));void loadConvs(true);}
