@@ -65,9 +65,15 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
         ? req.query.category.trim().toLowerCase()
         : "";
     const city = typeof req.query.city === "string" ? req.query.city.trim().toLowerCase() : "";
+    const region = typeof req.query.region === "string" ? req.query.region.trim().toLowerCase() : "";
+    const businessType = typeof req.query.businessType === "string" ? req.query.businessType.trim().toLowerCase() : "";
+    const minMoq = typeof req.query.minMoq === "string" && req.query.minMoq.trim() ? Number(req.query.minMoq) : null;
+    const garmentTypes = typeof req.query.garmentTypes === "string"
+      ? req.query.garmentTypes.split(",").map((value) => value.trim().toLowerCase()).filter(Boolean)
+      : [];
 
     // 1. Check Redis / Memory Cache first (sub-5ms response)
-    const cacheKey = `cache:suppliers:${category || "all"}:${city || "all"}:${q || "all"}`;
+    const cacheKey = `cache:suppliers:${category || "all"}:${city || "all"}:${region || "all"}:${businessType || "all"}:${minMoq ?? "all"}:${garmentTypes.join(",") || "all"}:${q || "all"}`;
     const cachedRows = await getCache<any[]>(cacheKey);
     if (cachedRows) {
       return sendOk(res, cachedRows);
@@ -244,8 +250,29 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
           .toLowerCase();
 
         if (city && !(organization.city ?? "").toLowerCase().includes(city)) return false;
+        if (region && !(String((organization as any).serviceableRegions || "").toLowerCase().includes(region) || (organization.city ?? "").toLowerCase().includes(region))) return false;
         if (category && !matchesCategoryFilter(category, categoryNames, organization.businessType, profile?.description)) {
           return false;
+        }
+        if (businessType) {
+          const capabilityValues = ((profile as any)?.capabilities ?? []).map((item: any) => String(item.value || "")).join(" ");
+          const businessText = [organization.businessType || "", profile?.description || "", capabilityValues, ...categoryNames].join(" ").toLowerCase();
+          if (businessType.includes("job")) {
+            if (!/job.?work|stitch|cutting|printing|washing|embroidery|finishing|packing|dyeing/.test(businessText)) return false;
+          } else if (businessType.includes("garment")) {
+            if (!matchesCategoryFilter("Garment", categoryNames, organization.businessType, profile?.description)) return false;
+          }
+        }
+        if (garmentTypes.length) {
+          const catalogText = (profile?.catalogItems ?? []).map((item: any) => [item.name, item.description].filter(Boolean).join(" ")).join(" ").toLowerCase();
+          const availableGarments = [...categoryNames, catalogText];
+          if (!garmentTypes.some((type) => availableGarments.some((value) => value.includes(type)))) return false;
+        }
+        if (minMoq !== null && Number.isFinite(minMoq)) {
+          const profileMoq = Number((profile as any)?.minimumOrderQuantity || 0);
+          const catalogMoqs = (profile?.catalogItems ?? []).map((item: any) => Number(item.moq ?? item.minOrderQty ?? 0)).filter((value: number) => value > 0);
+          const supplierMoq = profileMoq > 0 ? profileMoq : catalogMoqs.length ? Math.min(...catalogMoqs) : 0;
+          if (!supplierMoq || supplierMoq > minMoq) return false;
         }
         if (q && !searchable.includes(q)) return false;
         return true;
@@ -267,6 +294,7 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
             taxId: organization.taxId,
             address: organization.address,
             city: organization.city,
+            serviceableRegions: (organization as any).serviceableRegions ?? null,
             country: organization.country,
             verificationStatus: organization.verificationStatus,
           },
@@ -280,10 +308,29 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
         };
       });
 
-    // Cache the filtered supplier results for 60 seconds
-    await setCache(cacheKey, rows, 60);
+    // Attach real review aggregates for supplier cards (no fabricated ratings).
+    const organizationIds = rows.map((row: any) => row.organizationId).filter(Boolean);
+    const ratingRows = organizationIds.length
+      ? await prisma.review.groupBy({
+          by: ["reviewedOrgId"],
+          where: { reviewedOrgId: { in: organizationIds } },
+          _avg: { rating: true },
+          _count: { _all: true },
+        })
+      : [];
+    const ratingByOrganization = new Map(ratingRows.map((item) => [item.reviewedOrgId, {
+      rating: item._avg.rating ? Number(item._avg.rating) : null,
+      reviewCount: item._count._all,
+    }]));
+    const results = rows.map((row: any) => ({
+      ...row,
+      ...(ratingByOrganization.get(row.organizationId) || { rating: null, reviewCount: 0 }),
+    }));
 
-    return sendOk(res, rows);
+    // Cache the filtered supplier results for 60 seconds
+    await setCache(cacheKey, results, 60);
+
+    return sendOk(res, results);
   } catch (e) {
     next(e);
   }
@@ -306,6 +353,7 @@ export async function getPublicSupplierProfile(req: Request, res: Response, next
         businessType: true,
         address: true,
         city: true,
+        serviceableRegions: true,
         country: true,
         verificationStatus: true,
         supplierProfile: {
@@ -394,16 +442,19 @@ export async function upsertSupplierProfile(req: Request, res: Response, next: N
       taxId: z.string().max(30).optional(),
       city: z.string().max(100).optional(),
       address: z.string().max(300).optional(),
+      serviceableRegions: z.string().max(1000).optional(),
     }).parse(req.body);
     const membership = await prisma.organizationMember.findFirst({ where: { userId: req.auth!.userId, organizationId: input.organizationId, role: "SUPPLIER", isActive: true } });
     if (!membership) throw new AppError(403, "Supplier membership required");
 
-    if (input.name || input.taxId !== undefined || input.city !== undefined || input.address !== undefined) {
+    if (input.name || input.taxId !== undefined || input.city !== undefined || input.address !== undefined || input.serviceableRegions !== undefined) {
       const orgData: any = {};
       if (input.name) orgData.name = input.name;
       if (input.taxId !== undefined) orgData.taxId = input.taxId;
       if (input.city !== undefined) orgData.city = input.city;
       if (input.address !== undefined) orgData.address = input.address;
+      if (input.serviceableRegions !== undefined) orgData.serviceableRegions = input.serviceableRegions;
+      if (input.serviceableRegions !== undefined) orgData.serviceableRegions = input.serviceableRegions;
       await prisma.organization.update({
         where: { id: input.organizationId },
         data: orgData
@@ -504,6 +555,7 @@ export async function updateOrganizationProfile(req: Request, res: Response, nex
       taxId: z.string().trim().max(30).optional(),
       city: z.string().trim().max(100).optional(),
       address: z.string().trim().max(300).optional(),
+      serviceableRegions: z.string().trim().max(1000).optional(),
       country: z.string().trim().max(80).optional(),
       description: z.string().max(4000).optional(),
       yearsInBusiness: z.number().int().min(0).max(150).optional(),
@@ -534,6 +586,7 @@ export async function updateOrganizationProfile(req: Request, res: Response, nex
     if (input.taxId !== undefined) orgUpdateData.taxId = input.taxId || null;
     if (input.city !== undefined) orgUpdateData.city = input.city || null;
     if (input.address !== undefined) orgUpdateData.address = input.address || null;
+    if (input.serviceableRegions !== undefined) orgUpdateData.serviceableRegions = input.serviceableRegions || null;
     if (input.country !== undefined) orgUpdateData.country = input.country || null;
 
     const org = await prisma.$transaction(async (tx) => {

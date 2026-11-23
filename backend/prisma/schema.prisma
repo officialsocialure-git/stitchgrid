@@ -129,6 +129,7 @@ model Organization {
   taxId                  String?
   address                String?                 @db.Text
   city                   String?
+  serviceableRegions     String?                 @db.Text
   country                String?
   verificationStatus     VerificationStatus      @default(PENDING)
   createdAt              DateTime                @default(now())
@@ -273,12 +274,12 @@ model CatalogItem {
 }
 
 model CatalogItemImage {
-  id           String      @id @default(cuid())
+  id            String      @id @default(cuid())
   catalogItemId String
-  imageUrl     String      @db.VarChar(2000)
-  sortOrder    Int         @default(0)
-  createdAt    DateTime    @default(now())
-  catalogItem  CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  imageUrl      String      @db.VarChar(2000)
+  sortOrder     Int         @default(0)
+  createdAt     DateTime    @default(now())
+  catalogItem   CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
 
   @@index([catalogItemId, sortOrder])
 }

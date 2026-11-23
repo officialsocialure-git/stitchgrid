@@ -31,13 +31,17 @@ const signupSchema = z
     productionCapacity: z.coerce.number().int().min(0).optional(),
     monthlyCapacity: z.union([z.string(), z.number()]).optional(),
     moq: z.union([z.string(), z.number()]).optional(),
-    categories: z.array(z.string().min(1).max(60)).max(30).optional(),
-    capabilities: z.array(z.string().min(1).max(60)).max(30).optional(),
+    categories: z.array(z.enum(["Garments", "Fabrics", "Trims", "Sampling"])).max(4).optional(),
+    capabilities: z.array(z.string().trim().min(1).max(100)).max(80).optional(),
     keyProcesses: z.array(z.string().min(1).max(60)).max(30).optional(),
   })
   .refine((v) => !!(v.email && v.email.trim()) || !!(v.phone && v.phone.trim()), {
     message: "Either email address or mobile number is required",
     path: ["email"],
+  })
+  .refine((v) => v.accountType === "BUYER" || Boolean(v.categories?.length), {
+    message: "Select at least one supplier category",
+    path: ["categories"],
   });
 
 const identifierSchema = z.object({
@@ -132,16 +136,15 @@ export async function signup(req: Request, res: Response, next: NextFunction) {
     // 4. Create Organization & Associated Profiles
     const taxId = input.gstNumber || input.taxId || undefined;
     const city = input.factoryLocation || input.city || undefined;
-    const address = input.serviceableRegions || input.address || undefined;
-
     const organization = await prisma.organization.create({
       data: {
         name: input.organizationName,
         legalName: input.legalName || undefined,
         businessType: input.businessType || undefined,
         taxId,
-        address,
+        address: input.address || undefined,
         city,
+        serviceableRegions: input.serviceableRegions || undefined,
         country: input.country || "India",
       },
     });
@@ -156,9 +159,8 @@ export async function signup(req: Request, res: Response, next: NextFunction) {
     });
 
     if (roles.includes("SUPPLIER")) {
-      const allCategories = Array.from(
-        new Set([...(input.categories || []), ...(input.capabilities || [])])
-      ).filter(Boolean);
+      const allCategories = Array.from(new Set(input.categories || [])).filter(Boolean);
+      const selectedCapabilities = Array.from(new Set(input.capabilities || [])).filter(Boolean);
 
       const parsedCapacity = input.monthlyCapacity
         ? parseInt(String(input.monthlyCapacity).replace(/\D/g, ""), 10) || input.productionCapacity
@@ -187,6 +189,9 @@ export async function signup(req: Request, res: Response, next: NextFunction) {
           productionCapacity: parsedCapacity,
           categories: allCategories.length
             ? { create: allCategories.map((category) => ({ category })) }
+            : undefined,
+          capabilities: selectedCapabilities.length
+            ? { create: selectedCapabilities.map((value) => ({ capabilityGroup: "GENERAL", value })) }
             : undefined,
         },
       });
