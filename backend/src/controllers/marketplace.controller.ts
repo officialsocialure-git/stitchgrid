@@ -19,8 +19,11 @@ const GARMENT_SYNONYMS = [
 const FABRIC_SYNONYMS = [
   "fabric", "woven", "mill", "cotton", "linen", "polyester", "silk", "yarn", "knitted fabric", "textile"
 ];
+const SAMPLING_SYNONYMS = [
+  "sampling", "sample", "proto", "fit sample", "size set", "pre-production", "production sample", "fabric sample", "trim sample", "print sample", "embroidery sample", "wash sample", "counter sample", "photo sample", "salesman sample", "pattern development", "tech pack", "pattern making"
+];
 const TRIMS_SYNONYMS = [
-  "trim", "trims", "button", "buttons", "zipper", "zippers", "label", "labels", "accessories", "elastic", "thread"
+  "trim", "trims", "button", "buttons", "zipper", "zippers", "label", "labels", "accessories", "elastic", "thread", "threads", "lace", "laces", "ribbon", "ribbons", "hook", "hooks", "interlining", "buckle", "buckles", "rivet", "rivets", "eyelet", "eyelets", "drawcord", "drawcords", "patch", "patches", "velcro", "snap", "snaps", "d-ring", "d-rings"
 ];
 const JOBWORK_SYNONYMS = [
   "job work", "jobwork", "cutting", "stitching", "printing", "washing", "embroidery", "finishing", "packing", "dyeing"
@@ -49,6 +52,9 @@ function matchesCategoryFilter(
   }
   if (norm.includes("trim")) {
     return TRIMS_SYNONYMS.some((syn) => combined.includes(syn));
+  }
+  if (norm.includes("sampling") || norm.includes("sample")) {
+    return SAMPLING_SYNONYMS.some((syn) => combined.includes(syn));
   }
   if (norm.includes("job")) {
     return JOBWORK_SYNONYMS.some((syn) => combined.includes(syn));
@@ -259,7 +265,21 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
         if (businessType) {
           const capabilityValues = ((profile as any)?.capabilities ?? []).map((item: any) => String(item.value || "")).join(" ");
           const businessText = [organization.businessType || "", profile?.description || "", capabilityValues, ...categoryNames].join(" ").toLowerCase();
-          if (businessType.includes("job")) {
+          if (category.includes("sampling")) {
+            if (businessType.includes("job")) {
+              if (!/job.?work|sampling|sample|proto|fit|pattern|tech.?pack|embroidery|printing|wash/.test(businessText)) return false;
+            } else if (businessType.includes("studio") || businessType.includes("development") || businessType.includes("pattern")) {
+              if (!/sampling|sample|studio|develop|pattern|proto|fit|tech.?pack/.test(businessText)) return false;
+            }
+          } else if (category.includes("trim")) {
+            if (businessType.includes("job")) {
+              if (!/job.?work|trim|button|zipper|label|elastic|thread|lace|ribbon|accessor|stitch|attachment|finishing/.test(businessText)) return false;
+            } else if (businessType.includes("manufactur")) {
+              if (!/manufactur|factory|production|button|zipper|label|elastic|thread|lace|ribbon|trim/.test(businessText)) return false;
+            } else if (businessType.includes("trading") || businessType.includes("wholesale")) {
+              if (!/trad|wholesale|distribut|stockist|supplier|merchant|trim|button|zipper|label/.test(businessText)) return false;
+            }
+          } else if (businessType.includes("job")) {
             if (!/job.?work|stitch|cutting|printing|washing|embroidery|finishing|packing|dyeing|weaving|knitting/.test(businessText)) return false;
           } else if (businessType.includes("garment")) {
             if (!matchesCategoryFilter("Garment", categoryNames, organization.businessType, profile?.description)) return false;
@@ -271,7 +291,8 @@ export async function supplierSearch(req: Request, res: Response, next: NextFunc
         }
         if (itemTypes.length) {
           const catalogText = (profile?.catalogItems ?? []).map((item: any) => [item.name, item.description].filter(Boolean).join(" ")).join(" ").toLowerCase();
-          const availableItems = [...categoryNames, catalogText, profile?.description?.toLowerCase() ?? ""];
+          const capabilityText = ((profile as any)?.capabilities ?? []).map((item: any) => String(item.value || "")).join(" ").toLowerCase();
+          const availableItems = [...categoryNames, catalogText, capabilityText, profile?.description?.toLowerCase() ?? ""];
           if (!itemTypes.some((type) => availableItems.some((value) => value.includes(type)))) return false;
         }
         if (minMoq !== null && Number.isFinite(minMoq)) {
