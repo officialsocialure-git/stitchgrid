@@ -1454,7 +1454,7 @@ export async function submitDeliveryAddress(req: Request, res: Response, next: N
     const input = z.object({
       recipientName: z.string().trim().min(2).max(160),
       phone: z.string().trim().min(7).max(30),
-      addressLine: z.string().trim().min(5).max(2000),
+      addressLine: z.string().trim().min(3).max(2000),
       city: z.string().trim().min(2).max(120),
       state: z.string().trim().min(2).max(120),
       postalCode: z.string().trim().min(3).max(20),
