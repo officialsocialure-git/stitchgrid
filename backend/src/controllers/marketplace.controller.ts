@@ -1405,6 +1405,119 @@ export async function createPurchaseOrder(req: Request, res: Response, next: Nex
   } catch (e) { next(e); }
 }
 
+export async function requestDeliveryAddress(req: Request, res: Response, next: NextFunction) {
+  try {
+    const orderId = String(req.params.orderId || "");
+    const order = await prisma.purchaseOrder.findUnique({ where: { id: orderId } });
+    if (!order) throw new AppError(404, "Purchase order not found");
+    const supplier = await prisma.organizationMember.findFirst({
+      where: { userId: req.auth!.userId, organizationId: order.supplierOrgId, role: "SUPPLIER", isActive: true }
+    });
+    if (!supplier) throw new AppError(403, "Only the assigned supplier can request the delivery address");
+    if (order.status !== "READY_TO_DISPATCH") throw new AppError(409, "Delivery address can only be requested after buyer approves the quality check.");
+    if (order.deliveryAddressStatus === "CONFIRMED") throw new AppError(409, "Buyer delivery address has already been submitted.");
+    if (order.deliveryAddressStatus === "REQUESTED") return sendOk(res, order);
+
+    const updated = await prisma.$transaction(async tx => {
+      const result = await tx.purchaseOrder.update({
+        where: { id: order.id },
+        data: { deliveryAddressStatus: "REQUESTED", deliveryAddressRequestedAt: new Date() }
+      });
+      await tx.orderEvent.create({
+        data: { purchaseOrderId: order.id, eventType: "DELIVERY_ADDRESS_REQUESTED", note: "Supplier requested the buyer to provide the delivery address.", actorUserId: req.auth!.userId }
+      });
+      const buyers = await tx.organizationMember.findMany({
+        where: { organizationId: order.buyerOrgId, role: "BUYER", isActive: true }, select: { userId: true }
+      });
+      if (buyers.length) {
+        await tx.notification.createMany({
+          data: buyers.map(member => ({
+            userId: member.userId,
+            title: "Delivery address required",
+            body: `Your supplier is ready to dispatch PO #${order.poNumber}. Please submit the delivery address so the shipment can be dispatched.`
+          }))
+        });
+      }
+      buyers.forEach(member => emitToUser(member.userId, "notification:new", { orderId: order.id, title: "Delivery address required" }));
+      return result;
+    });
+    await audit("DELIVERY_ADDRESS_REQUESTED", "PurchaseOrder", order.id, req.auth!.userId, order.supplierOrgId);
+    emitToOrg(order.buyerOrgId, "order:updated", { orderId: order.id, deliveryAddressStatus: "REQUESTED" });
+    emitToOrg(order.supplierOrgId, "order:updated", { orderId: order.id, deliveryAddressStatus: "REQUESTED" });
+    emitToRole("ADMIN", "order:updated", { orderId: order.id, deliveryAddressStatus: "REQUESTED" });
+    return sendOk(res, updated);
+  } catch (e) { next(e); }
+}
+
+export async function submitDeliveryAddress(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = z.object({
+      recipientName: z.string().trim().min(2).max(160),
+      phone: z.string().trim().min(7).max(30),
+      addressLine: z.string().trim().min(5).max(2000),
+      city: z.string().trim().min(2).max(120),
+      state: z.string().trim().min(2).max(120),
+      postalCode: z.string().trim().min(3).max(20),
+      country: z.string().trim().min(2).max(100),
+      latitude: z.number().min(-90).max(90).optional().nullable(),
+      longitude: z.number().min(-180).max(180).optional().nullable()
+    }).parse(req.body);
+    const orderId = String(req.params.orderId || "");
+    const order = await prisma.purchaseOrder.findUnique({ where: { id: orderId } });
+    if (!order) throw new AppError(404, "Purchase order not found");
+    const buyer = await prisma.organizationMember.findFirst({
+      where: { userId: req.auth!.userId, organizationId: order.buyerOrgId, role: "BUYER", isActive: true }
+    });
+    if (!buyer) throw new AppError(403, "Only the buyer organization can submit the delivery address");
+    if (order.status !== "READY_TO_DISPATCH") throw new AppError(409, "Delivery address can only be submitted when the order is ready to dispatch.");
+    if (order.deliveryAddressStatus !== "REQUESTED" && order.deliveryAddressStatus !== "CONFIRMED") {
+      throw new AppError(409, "The supplier has not requested the delivery address yet.");
+    }
+    if (order.dispatchDate) throw new AppError(409, "Delivery address is locked after dispatch.");
+
+    const updated = await prisma.$transaction(async tx => {
+      const result = await tx.purchaseOrder.update({
+        where: { id: order.id },
+        data: {
+          deliveryAddressStatus: "CONFIRMED",
+          deliveryRecipientName: input.recipientName,
+          deliveryPhone: input.phone,
+          deliveryAddressLine: input.addressLine,
+          deliveryCity: input.city,
+          deliveryState: input.state,
+          deliveryPostalCode: input.postalCode,
+          deliveryCountry: input.country,
+          deliveryLatitude: input.latitude ?? null,
+          deliveryLongitude: input.longitude ?? null,
+          deliveryAddressSubmittedAt: new Date()
+        }
+      });
+      await tx.orderEvent.create({
+        data: { purchaseOrderId: order.id, eventType: "DELIVERY_ADDRESS_CONFIRMED", note: "Buyer submitted and confirmed the delivery address.", actorUserId: req.auth!.userId }
+      });
+      const suppliers = await tx.organizationMember.findMany({
+        where: { organizationId: order.supplierOrgId, role: "SUPPLIER", isActive: true }, select: { userId: true }
+      });
+      if (suppliers.length) {
+        await tx.notification.createMany({
+          data: suppliers.map(member => ({
+            userId: member.userId,
+            title: "Buyer delivery address received",
+            body: `Buyer has submitted the delivery address for PO #${order.poNumber}. Review the address and proceed with dispatch.`
+          }))
+        });
+      }
+      suppliers.forEach(member => emitToUser(member.userId, "notification:new", { orderId: order.id, title: "Buyer delivery address received" }));
+      return result;
+    });
+    await audit("DELIVERY_ADDRESS_CONFIRMED", "PurchaseOrder", order.id, req.auth!.userId, order.buyerOrgId);
+    emitToOrg(order.buyerOrgId, "order:updated", { orderId: order.id, deliveryAddressStatus: "CONFIRMED" });
+    emitToOrg(order.supplierOrgId, "order:updated", { orderId: order.id, deliveryAddressStatus: "CONFIRMED" });
+    emitToRole("ADMIN", "order:updated", { orderId: order.id, deliveryAddressStatus: "CONFIRMED" });
+    return sendOk(res, updated);
+  } catch (e) { next(e); }
+}
+
 export async function updateOrderStatus(req: Request, res: Response, next: NextFunction) {
   try {
     const input = z.object({
@@ -1485,6 +1598,9 @@ export async function updateOrderStatus(req: Request, res: Response, next: NextF
     if (supplier && input.status === "DISPATCHED" && order.status !== "READY_TO_DISPATCH") {
       throw new AppError(409, "Buyer must approve the quality check before dispatch.");
     }
+    if (supplier && input.status === "DISPATCHED" && order.deliveryAddressStatus !== "CONFIRMED") {
+      throw new AppError(409, "Buyer delivery address is required before dispatch. Request the address from the buyer first.");
+    }
 
     const updated = await prisma.$transaction(async tx => {
       const updateData: any = { status: input.status };
@@ -1493,10 +1609,17 @@ export async function updateOrderStatus(req: Request, res: Response, next: NextF
       if (input.status === "DISPATCHED") updateData.dispatchDate = new Date();
       if (input.status === "DELIVERED" || input.status === "COMPLETED") updateData.deliveryDate = new Date();
 
-      const result = await tx.purchaseOrder.update({
-        where: { id: order.id },
-        data: updateData
-      });
+      let result: any;
+      if (supplier && input.status === "DISPATCHED") {
+        const guarded = await tx.purchaseOrder.updateMany({
+          where: { id: order.id, status: "READY_TO_DISPATCH", deliveryAddressStatus: "CONFIRMED" },
+          data: updateData
+        });
+        if (guarded.count !== 1) throw new AppError(409, "The buyer delivery address must be confirmed before dispatch.");
+        result = await tx.purchaseOrder.findUniqueOrThrow({ where: { id: order.id } });
+      } else {
+        result = await tx.purchaseOrder.update({ where: { id: order.id }, data: updateData });
+      }
 
       await tx.orderEvent.create({
         data: {

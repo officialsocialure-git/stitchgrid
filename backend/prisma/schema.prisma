@@ -403,6 +403,18 @@ model PurchaseOrder {
   dispatchDate        DateTime?
   trackingNumber      String?
   deliveryDate        DateTime?
+  deliveryAddressStatus String             @default("NOT_REQUESTED") @db.VarChar(24)
+  deliveryRecipientName String?            @db.VarChar(160)
+  deliveryPhone       String?              @db.VarChar(30)
+  deliveryAddressLine String?              @db.Text
+  deliveryCity        String?              @db.VarChar(120)
+  deliveryState       String?              @db.VarChar(120)
+  deliveryPostalCode  String?              @db.VarChar(20)
+  deliveryCountry     String?              @db.VarChar(100)
+  deliveryLatitude    Float?
+  deliveryLongitude   Float?
+  deliveryAddressRequestedAt DateTime?
+  deliveryAddressSubmittedAt DateTime?
   qcNotes             String?              @db.Text
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt

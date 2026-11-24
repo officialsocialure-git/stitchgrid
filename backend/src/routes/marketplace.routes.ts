@@ -8,7 +8,8 @@ import {
   getRfqDetails, inviteSupplier, listAdminOrganizations, listMyRfqs, listPurchaseOrders,
   submitQuote, supplierSearch, updateOrderStatus, upsertSupplierProfile,
   getOrganizationProfile, updateOrganizationProfile, updateQuotationStatus, reviseSupplierQuotation,
-  listBusinessMedia, createBusinessMedia, deleteBusinessMedia, getPublicSupplierProfile
+  listBusinessMedia, createBusinessMedia, deleteBusinessMedia, getPublicSupplierProfile,
+  requestDeliveryAddress, submitDeliveryAddress
 } from "../controllers/marketplace.controller";
 const router = Router();
 
@@ -48,6 +49,8 @@ router.get("/purchase-orders", listPurchaseOrders);
 router.get("/purchase-orders/:orderId", getPurchaseOrderDetails);
 router.post("/purchase-orders", createPurchaseOrder);
 router.patch("/purchase-orders/:orderId/status", updateOrderStatus);
+router.post("/purchase-orders/:orderId/delivery-address/request", requestDeliveryAddress);
+router.put("/purchase-orders/:orderId/delivery-address", submitDeliveryAddress);
 router.get("/admin/organizations", requireRole("ADMIN"), listAdminOrganizations);
 router.patch("/admin/organizations/:organizationId/verification", requireRole("ADMIN"), adminVerification);
 export default router;

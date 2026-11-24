@@ -20,6 +20,10 @@ type Order = {
   dispatchDate?: string | null;
   deliveryDate?: string | null;
   trackingNumber?: string | null;
+  deliveryAddressStatus?: string;
+  deliveryRecipientName?: string | null; deliveryPhone?: string | null; deliveryAddressLine?: string | null;
+  deliveryCity?: string | null; deliveryState?: string | null; deliveryPostalCode?: string | null; deliveryCountry?: string | null;
+  deliveryLatitude?: number | null; deliveryLongitude?: number | null;
   buyer?: { id: string; name: string };
   supplier?: { id: string; name: string };
   items?: { id: string; name: string; quantity: number; unitPrice: number | string }[];
@@ -704,6 +708,12 @@ export default function OrdersPage() {
                   <span className="text-slate-400 font-semibold uppercase">Status</span>
                   <p className="font-bold text-[#5B13EC] mt-0.5">{activeOrder.status}</p>
                 </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-[#FAF9FD] p-4">
+                <h4 className="font-bold text-slate-900 mb-2">Delivery Address</h4>
+                <p className="text-[11px] font-semibold text-slate-500 mb-2">Status: <span className={activeOrder.deliveryAddressStatus === "CONFIRMED" ? "text-emerald-700" : activeOrder.deliveryAddressStatus === "REQUESTED" ? "text-amber-700" : "text-slate-500"}>{(activeOrder.deliveryAddressStatus || "NOT_REQUESTED").replaceAll("_", " ")}</span></p>
+                {activeOrder.deliveryAddressStatus === "CONFIRMED" ? <div className="space-y-1 text-slate-700"><p><strong>{activeOrder.deliveryRecipientName}</strong> · {activeOrder.deliveryPhone}</p><p>{activeOrder.deliveryAddressLine}</p><p>{[activeOrder.deliveryCity, activeOrder.deliveryState, activeOrder.deliveryPostalCode, activeOrder.deliveryCountry].filter(Boolean).join(", ")}</p>{activeOrder.deliveryLatitude != null && activeOrder.deliveryLongitude != null && <p className="text-[11px] text-slate-500">Map coordinates: {activeOrder.deliveryLatitude}, {activeOrder.deliveryLongitude}</p>}</div> : <p className="text-slate-400 italic">Buyer delivery address has not been submitted.</p>}
               </div>
 
               <div>
