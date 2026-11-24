@@ -15,7 +15,7 @@ A calm B2B sourcing and factory-operations workspace. A buyer searches manufactu
 - Respect safe-area insets, keyboard, screen reader names, loading/empty/error states and long text.
 - Authentication: center compact content with flexGrow within a ScrollView; never force viewport-height content plus additional safe-area padding. Scroll only if content or the keyboard requires it.
 - In chat, use a single conversation header; give the keyboard priority over bottom tabs. Preserve scroll position when reading earlier messages.
-- The five primary destinations stay fixed. Requests and Offers share the Sourcing destination, with their own visible two-way secondary tabs.
+- The five primary destinations stay fixed. Requests and Offers share the Offers destination, with their own visible two-way secondary tabs.
 - Keep bottom navigation accessible in Settings, but hide it while the keyboard is open. Use scrollable, keyboard-aware forms and pickers; never truncate long lists in a sheet.
 - Bundle the approved brand logo locally, and use readable secondary text with at least 4.5:1 contrast on white.
 - No extra motion for routine navigation; existing feature and state behavior must stay unchanged.

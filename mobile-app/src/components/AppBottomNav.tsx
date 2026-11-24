@@ -9,7 +9,7 @@ type Tab = { section: string; label: string; icon: IconName; selectedIcon: IconN
 
 const BUYER_TABS: Tab[] = [
   { section: 'home', label: 'Home', icon: 'home-outline', selectedIcon: 'home' },
-  { section: 'requests', label: 'Sourcing', icon: 'file-document-outline', selectedIcon: 'file-document' },
+  { section: 'requests', label: 'Offers', icon: 'file-document-outline', selectedIcon: 'file-document' },
   { section: 'orders', label: 'Orders', icon: 'package-variant-closed', selectedIcon: 'package-variant' },
   { section: 'chat', label: 'Chats', icon: 'message-text-outline', selectedIcon: 'message-text' },
   { section: 'organization-settings', label: 'Settings', icon: 'cog-outline', selectedIcon: 'cog' },
@@ -17,7 +17,7 @@ const BUYER_TABS: Tab[] = [
 
 const SUPPLIER_TABS: Tab[] = [
   { section: 'home', label: 'Home', icon: 'home-outline', selectedIcon: 'home' },
-  { section: 'requests', label: 'Sourcing', icon: 'file-document-outline', selectedIcon: 'file-document' },
+  { section: 'requests', label: 'Offers', icon: 'file-document-outline', selectedIcon: 'file-document' },
   { section: 'orders', label: 'Orders', icon: 'package-variant-closed', selectedIcon: 'package-variant' },
   { section: 'chat', label: 'Chats', icon: 'message-text-outline', selectedIcon: 'message-text' },
   { section: 'business-profile', label: 'Profile', icon: 'account-outline', selectedIcon: 'account' },

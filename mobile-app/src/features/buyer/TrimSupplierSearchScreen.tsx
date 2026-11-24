@@ -16,12 +16,11 @@ productionCapacity?: number | null; description?: string; organization?: { name?
 categories?: { category: string }[]; catalogItems?: { name: string; description?: string; moq?: number; minOrderQty?: number }[];
 businessMedia?: { mediaType: string; url: string }[]; rating?: number | null; reviewCount?: number;
 };
-type Picker = 'location' | 'business' | 'trims' | null;
+type Picker = 'location' | 'trims' | null;
 
 export default function TrimSupplierSearchScreen() {
 const router = useRouter();
 const [location, setLocation] = useState('');
-const [businessType, setBusinessType] = useState('');
 const [minimumQuantity, setMinimumQuantity] = useState('');
 const [trimTypes, setTrimTypes] = useState<string[]>([]);
 const [picker, setPicker] = useState<Picker>(null);
@@ -35,21 +34,20 @@ const [sort, setSort] = useState('Relevance');
 
 const searchSuppliers = useCallback(async () => {
 if (!location.trim()) { Alert.alert('Location required', 'Select a location or use Near Me.'); return; }
-if (!businessType) { Alert.alert('Business type required', 'Select Trim Job Work or Trim Manufacturing.'); return; }
 if (!trimTypes.length) { Alert.alert('Trim type required', 'Select at least one trim type.'); return; }
 const minQty = minimumQuantity.trim() ? Number(minimumQuantity.replace(/,/g, '')) : undefined;
 if (minQty === undefined) { Alert.alert('MOQ required', 'Enter your order quantity so we can match suppliers by MOQ.'); return; }
 if (!Number.isFinite(minQty) || minQty <= 0) { Alert.alert('Invalid MOQ', 'Enter a valid minimum quantity.'); return; }
 setLoading(true); setError(''); setHasSearched(true);
 try {
-const params = new URLSearchParams({ category: 'Trims', region: location.trim(), businessType, itemTypes: trimTypes.join(',') });
+const params = new URLSearchParams({ category: 'Trims', region: location.trim(), itemTypes: trimTypes.join(',') });
 if (minQty) params.set('minMoq', String(minQty));
 const data = await apiGet<SupplierRow[]>(`/suppliers?${params.toString()}`);
 setSuppliers(Array.isArray(data) ? data : []);
 } catch (e) {
 setSuppliers([]); setError(e instanceof Error ? e.message : 'Unable to search suppliers.');
 } finally { setLoading(false); }
-}, [location, businessType, trimTypes, minimumQuantity]);
+}, [location, trimTypes, minimumQuantity]);
 
 const sortedSuppliers = useMemo(() => {
 const list = [...suppliers];
@@ -75,7 +73,6 @@ setLocation(city);
 const toggleTrim = (item: string) => setSelectedTrims(current => current.includes(item) ? current.filter(x => x !== item) : [...current, item]);
 const confirmPicker = () => {
 if (picker === 'location') setLocation(locationDraft.trim());
-if (picker === 'business') setBusinessType(locationDraft);
 if (picker === 'trims') setTrimTypes(selectedTrims);
 setPicker(null);
 };
@@ -100,21 +97,15 @@ return (
 </View>
 </View>
 <View style={styles.filterRow}>
-<View style={styles.labelWrap}><MaterialCommunityIcons name="briefcase-outline" size={22} color={PURPLE}/><Text style={styles.label}>Business Type <Text style={styles.required}>*</Text></Text></View>
-<Pressable style={styles.dropdown} onPress={() => {setLocationDraft(businessType);setPicker('business');}}>
-<Text style={[styles.dropdownText,!businessType && styles.placeholder]}>{businessType || 'Select Business Type'}</Text><MaterialCommunityIcons name="chevron-down" size={23} color="#111827"/>
-</Pressable>
-</View>
-<View style={styles.filterRow}>
-<View style={styles.labelWrap}><MaterialCommunityIcons name="layers-triple-outline" size={22} color="#61558D"/><Text style={styles.label}>MOQ (Minimum Order Quantity) <Text style={styles.required}>*</Text></Text></View>
-<TextInput value={minimumQuantity} onChangeText={setMinimumQuantity} keyboardType="number-pad" placeholder="Enter minimum quantity (e.g. 1,000 pcs)" placeholderTextColor="#77729A" style={styles.input}/>
-</View>
-<View style={styles.filterRow}>
 <View style={styles.labelWrap}><MaterialCommunityIcons name="tag-multiple-outline" size={22} color={PURPLE}/><Text style={styles.label}>Trim Type <Text style={styles.required}>*</Text></Text></View>
 <Pressable style={styles.dropdown} onPress={() => {setSelectedTrims(trimTypes);setPicker('trims');}}>
 <View style={styles.chips}>{trimTypes.length ? <>{trimTypes.slice(0,3).map(item=><View key={item} style={styles.chip}><Text style={styles.chipText}>{item}</Text><Pressable onPress={(event) => {event.stopPropagation();setTrimTypes(current=>current.filter(x=>x!==item));}}><MaterialCommunityIcons name="close" size={17} color={PURPLE}/></Pressable></View>)}{trimTypes.length > 3 && <Text style={styles.moreText}>+{trimTypes.length-3}</Text>}</> : <Text style={[styles.dropdownText,styles.placeholder]}>Select Trim Type</Text>}</View>
 <MaterialCommunityIcons name="chevron-down" size={23} color="#111827"/>
 </Pressable>
+</View>
+<View style={styles.filterRow}>
+<View style={styles.labelWrap}><MaterialCommunityIcons name="layers-triple-outline" size={22} color="#61558D"/><Text style={styles.label}>MOQ (Minimum Order Quantity) <Text style={styles.required}>*</Text></Text></View>
+<TextInput value={minimumQuantity} onChangeText={setMinimumQuantity} keyboardType="number-pad" placeholder="Enter minimum quantity (e.g. 1,000 pcs)" placeholderTextColor="#77729A" style={styles.input}/>
 </View>
 <Pressable style={styles.searchButton} onPress={() => void searchSuppliers()} disabled={loading}>
 {loading ? <ActivityIndicator color="#FFFFFF"/> : <><MaterialCommunityIcons name="magnify" size={25} color="#FFFFFF"/><Text style={styles.searchButtonText}>Search Suppliers</Text></>}
@@ -139,7 +130,7 @@ return <Pressable key={supplier.organizationId} style={styles.supplierCard} onPr
 <View style={styles.cardInfo}>
 <View style={styles.nameRow}><Text numberOfLines={2} style={styles.supplierName}>{org.name || 'Trim Supplier'}</Text>{verified && <MaterialCommunityIcons name="check-decagram" size={19} color={PURPLE}/>}</View>
 <View style={styles.locationLine}><MaterialCommunityIcons name="map-marker" size={16} color="#6B6591"/><Text numberOfLines={1} style={styles.locationText}>{[org.city,org.country].filter(Boolean).join(', ')}</Text></View>
-<Text style={styles.businessPill}>{org.businessType || businessType}</Text>
+<Text style={styles.businessPill}>{org.businessType || 'Trim Supplier'}</Text>
 <View style={styles.tags}>{tags.slice(0,4).map(tag=><Text key={tag} style={styles.tag}>{tag}</Text>)}</View>
 </View>
 {!!supplier.rating && <View style={styles.rating}><MaterialCommunityIcons name="star" size={16} color="#F4B400"/><Text style={styles.ratingText}>{supplier.rating.toFixed(1)}</Text>{!!supplier.reviewCount && <Text style={styles.reviewCount}>({supplier.reviewCount})</Text>}</View>}
@@ -154,9 +145,8 @@ return <Pressable key={supplier.organizationId} style={styles.supplierCard} onPr
 </ScrollView>
 <Modal visible={!!picker} transparent animationType="slide" onRequestClose={()=>setPicker(null)}>
 <Pressable style={styles.backdrop} onPress={()=>setPicker(null)}><Pressable style={styles.sheet} onPress={()=>{}}>
-<View style={styles.sheetHeader}><Text style={styles.sheetTitle}>{picker==='location'?'Select Location':picker==='business'?'Select Business Type':'Select Trim Type'}</Text><Pressable onPress={()=>setPicker(null)}><MaterialCommunityIcons name="close" size={23} color="#6B7280"/></Pressable></View>
+<View style={styles.sheetHeader}><Text style={styles.sheetTitle}>{picker==='location'?'Select Location':'Select Trim Type'}</Text><Pressable onPress={()=>setPicker(null)}><MaterialCommunityIcons name="close" size={23} color="#6B7280"/></Pressable></View>
 {picker==='location' && <><TextInput value={locationDraft} onChangeText={setLocationDraft} placeholder="Enter city, state or area" style={styles.modalInput}/><Text style={styles.helper}>Example: Noida, Uttar Pradesh</Text></>}
-{picker==='business' && ['Trim Job Work','Trim Manufacturing','Trim Trading / Wholesale'].map(item=><Pressable key={item} style={styles.option} onPress={()=>setLocationDraft(item)}><Text style={[styles.optionText,locationDraft===item&&styles.optionActive]}>{item}</Text><MaterialCommunityIcons name={locationDraft===item?'radiobox-marked':'radiobox-blank'} size={22} color={locationDraft===item?PURPLE:'#9CA3AF'}/></Pressable>)}
 {picker==='trims' && <ScrollView style={{maxHeight:360}}>{TRIM_TYPES.map(item=><Pressable key={item} style={styles.option} onPress={()=>toggleTrim(item)}><Text style={[styles.optionText,selectedTrims.includes(item)&&styles.optionActive]}>{item}</Text><MaterialCommunityIcons name={selectedTrims.includes(item)?'checkbox-marked':'checkbox-blank-outline'} size={22} color={selectedTrims.includes(item)?PURPLE:'#9CA3AF'}/></Pressable>)}</ScrollView>}
 <Pressable style={styles.confirmButton} onPress={confirmPicker}><Text style={styles.confirmText}>Done</Text></Pressable>
 </Pressable></Pressable>

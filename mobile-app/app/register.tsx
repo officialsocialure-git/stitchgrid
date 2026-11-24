@@ -14,8 +14,8 @@ const PURPLE = ui.accent;
 
 const CATEGORY_CAPABILITIES: Record<string, string[]> = {
 Garments: ['T-Shirts','Shirts','Hoodies','Activewear','Polo Shirts','Denim & Jeans','Trousers','Dresses','Kids Wear','Knitwear'],
-Fabrics: ['Cotton','Polyester','Linen','Silk','Denim Fabric','Knitted Fabric','Woven Fabric','Rayon','Blended Fabric'],
-Trims: ['Buttons','Zippers','Labels','Threads','Elastic','Laces','Hooks & Eyes','Ribbons','Interlining'],
+Fabrics: ['Cotton','Polyester','Linen','Silk','Denim Fabric','Rayon / Viscose','Knitted Fabric','Woven Fabric','Wool','Nylon','Blended Fabric','Georgette','Chiffon','Satin','Canvas'],
+Trims: ['Buttons','Zippers','Woven Labels','Printed Labels','Threads','Elastic','Laces','Ribbons','Hooks & Eyes','Interlining','Buckles','Rivets','Eyelets','Drawcords','Patches','Velcro','Snaps','D-rings'],
 Sampling: ['Proto Sample','Fit Sample','Size Set Sample','Pre-production Sample','Fabric Sample','Print / Embroidery Sample'],
 };
 const CATEGORY_NAMES = Object.keys(CATEGORY_CAPABILITIES);
@@ -265,12 +265,6 @@ return <Pressable key={item} onPress={() => toggle(item, capabilities, setCapabi
 </View>}
 </View>;
 })}
-<View style={styles.selectedTags}>
-{capabilities.map(item => <Pressable key={item} onPress={() => toggle(item, capabilities, setCapabilities)} style={styles.selectedTag}><Text style={styles.selectedTagText}>{item}</Text><MaterialCommunityIcons name="close" size={18} color={PURPLE} /></Pressable>)}
-</View>
-<View style={styles.suggestTags}>
-{CATEGORY_NAMES.flatMap(category => CATEGORY_CAPABILITIES[category]).filter(item => !capabilities.includes(item)).map(item => <Pressable key={item} onPress={() => toggle(item, capabilities, setCapabilities)} style={styles.suggestTag}><Text style={styles.suggestTagText}>+ {item}</Text></Pressable>)}
-</View>
 </View>
 <View style={styles.field}>
 <Text style={styles.sectionTitle}>KEY PROCESSES / OPERATIONS *</Text>
