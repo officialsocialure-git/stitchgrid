@@ -274,7 +274,7 @@ export default function SupplierPaymentsScreen() {
             <TextInput value={productionAmountDrafts[order.id] || ''} onChangeText={value => setProductionAmountDrafts(current => ({ ...current, [order.id]: value }))} keyboardType="decimal-pad" style={s.input} placeholder="Production payment amount (INR)" />
             <Pressable style={[s.primaryButton, saving && { opacity: 0.65 }]} onPress={() => void saveProductionAmount(order)} disabled={saving}>
               {saving ? <ActivityIndicator color="#fff" /> : <MaterialCommunityIcons name="check-circle-outline" size={18} color="#fff" />}
-              <Text style={s.primaryButtonText}>{saving ? 'Saving...' : 'Submit Production Amount'}</Text>
+              <Text style={s.primaryButtonText}>{saving ? 'Sending...' : 'Send Production Payment Request'}</Text>
             </Pressable>
           </View>
         )}

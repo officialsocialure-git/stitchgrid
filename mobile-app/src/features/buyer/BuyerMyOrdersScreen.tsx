@@ -10,6 +10,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Location from 'expo-location';
 import { apiGet, apiPost, apiRequest } from '@/services/api';
 import { AppHeader } from '@/components/AppHeader';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
@@ -30,6 +31,10 @@ type Order = {
   buyer?: { id: string; name: string; city?: string | null };
   supplier?: { id: string; name: string; city?: string | null };
   items?: OrderItem[]; milestones?: Milestone[]; samples?: { id: string; status: string }[]; qcReports?: QcReport[];
+  deliveryAddressStatus?: string;
+  deliveryRecipientName?: string | null; deliveryPhone?: string | null; deliveryAddressLine?: string | null;
+  deliveryCity?: string | null; deliveryState?: string | null; deliveryPostalCode?: string | null; deliveryCountry?: string | null;
+  deliveryLatitude?: number | null; deliveryLongitude?: number | null;
 };
 type Membership = { organizationId?: string; organization?: { id?: string }; role?: string };
 type PaymentSummary = {
@@ -103,6 +108,10 @@ export default function BuyerMyOrdersScreen() {
   const [qcPhotoViewerOpen, setQcPhotoViewerOpen] = useState(false);
   const [qcViewerPhotos, setQcViewerPhotos] = useState<string[]>([]);
   const [qcViewerIndex, setQcViewerIndex] = useState(0);
+  const [deliveryAddressOrder, setDeliveryAddressOrder] = useState<Order | null>(null);
+  const [deliveryAddressBusy, setDeliveryAddressBusy] = useState(false);
+  const [deliveryForm, setDeliveryForm] = useState({ recipientName: '', phone: '', addressLine: '', city: '', state: '', postalCode: '', country: 'India' });
+  const [deliveryCoordinates, setDeliveryCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
   const qcViewerWidth = Dimensions.get('window').width;
 
 
@@ -161,6 +170,31 @@ export default function BuyerMyOrdersScreen() {
     setDrawerOpen(false);
     if (section === 'home') router.replace('/workspace?role=BUYER' as any);
     else router.replace({ pathname: '/buyer/[section]', params: { section } } as any);
+  };
+
+  const captureDeliveryLocation = async () => {
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (!permission.granted) { Alert.alert('Location permission needed', 'Allow location access to attach an optional map pin. You can still submit the postal address without it.'); return; }
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setDeliveryCoordinates({ latitude: position.coords.latitude, longitude: position.coords.longitude });
+    } catch (e) { Alert.alert('Unable to get location', e instanceof Error ? e.message : 'Please try again.'); }
+  };
+
+  const submitDeliveryAddress = async () => {
+    if (!deliveryAddressOrder) return;
+    const required = Object.values(deliveryForm).every(value => value.trim().length > 0);
+    if (!required) { Alert.alert('Missing details', 'Please complete all required delivery address fields.'); return; }
+    try {
+      setDeliveryAddressBusy(true);
+      await apiRequest(`/purchase-orders/${deliveryAddressOrder.id}/delivery-address`, { method: 'PUT', body: { ...deliveryForm, ...(deliveryCoordinates || {}) } });
+      setDeliveryAddressOrder(null);
+      setDeliveryForm({ recipientName: '', phone: '', addressLine: '', city: '', state: '', postalCode: '', country: 'India' });
+      await loadOrders(true);
+      Alert.alert('Address submitted', 'Your supplier has received the delivery address and can now dispatch the order.');
+    } catch (e) {
+      Alert.alert('Unable to submit address', e instanceof Error ? e.message : 'Please try again.');
+    } finally { setDeliveryAddressBusy(false); }
   };
 
   const updateOrderStatus = async (order: Order, status: string) => {
@@ -341,6 +375,7 @@ export default function BuyerMyOrdersScreen() {
             const paymentTotal = Number(paymentPlan?.totalAmount || order.totalAmount || 0);
             const paymentPercent = paymentTotal > 0 ? Math.min(100, Math.round(paymentPaid / paymentTotal * 100)) : 0;
             const paidCount = paymentMilestones.filter(item => ['PAID', 'RELEASED'].includes(item.status)).length;
+            const pendingPaymentCount = paymentMilestones.filter(item => item.status === 'DUE').length;
             const orderPendingSampleCount = (samplesByOrder[order.id] || []).filter(sample => String((sample as any).status).toUpperCase() === 'DISPATCHED').length;
             return (
               <View key={order.id} style={styles.orderCard}>
@@ -394,6 +429,13 @@ export default function BuyerMyOrdersScreen() {
                     <MaterialCommunityIcons name="clipboard-check-outline" size={19} color="#fff" />
                     <Text style={styles.buyerActionText}>Review Quality Check</Text>
                   </Pressable>
+                ) : order.status === 'READY_TO_DISPATCH' && order.deliveryAddressStatus === 'REQUESTED' ? (
+                  <Pressable style={styles.buyerActionButton} onPress={() => { setDeliveryForm({ recipientName: '', phone: '', addressLine: '', city: '', state: '', postalCode: '', country: 'India' }); setDeliveryCoordinates(null); setDeliveryAddressOrder(order); }}><MaterialCommunityIcons name="map-marker-plus" size={19} color="#fff" /><Text style={styles.buyerActionText}>Provide Delivery Address</Text></Pressable>
+                ) : order.status === 'READY_TO_DISPATCH' && order.deliveryAddressStatus === 'CONFIRMED' ? (
+                  <View style={{ gap: 7 }}>
+                    <View style={[styles.inlineStatus, { backgroundColor: '#E9FBF2', borderColor: '#B7EED4', marginBottom: 0 }]}><MaterialCommunityIcons name="map-marker-check" size={18} color="#087653" /><Text style={[styles.inlineStatusText, { color: '#087653' }]}>Delivery Address Submitted to Supplier</Text></View>
+                    <Pressable style={[styles.buyerActionButton, { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: PURPLE }]} onPress={() => { setDeliveryForm({ recipientName: order.deliveryRecipientName || '', phone: order.deliveryPhone || '', addressLine: order.deliveryAddressLine || '', city: order.deliveryCity || '', state: order.deliveryState || '', postalCode: order.deliveryPostalCode || '', country: order.deliveryCountry || 'India' }); setDeliveryCoordinates(order.deliveryLatitude != null && order.deliveryLongitude != null ? { latitude: order.deliveryLatitude, longitude: order.deliveryLongitude } : null); setDeliveryAddressOrder(order); }}><MaterialCommunityIcons name="pencil-outline" size={18} color={PURPLE} /><Text style={[styles.buyerActionText, { color: PURPLE }]}>View / Edit Delivery Address</Text></Pressable>
+                  </View>
                 ) : order.status === 'DISPATCHED' ? (
                   <Pressable style={styles.buyerActionButton} onPress={() => updateOrderStatus(order, 'DELIVERED')}><MaterialCommunityIcons name="package-variant-closed-check" size={19} color="#fff" /><Text style={styles.buyerActionText}>Confirm Delivery Received</Text></Pressable>
                 ) : order.status === 'DELIVERED' ? (
@@ -424,8 +466,8 @@ export default function BuyerMyOrdersScreen() {
                     <View style={styles.sampleActionIconWrap}><MaterialCommunityIcons name="hanger" size={27} color="#17202D" />{orderPendingSampleCount > 0 && <View style={styles.sampleActionBadge}><Text style={styles.sampleActionBadgeText}>{orderPendingSampleCount > 99 ? "99+" : orderPendingSampleCount}</Text></View>}</View>
                     <Text style={styles.actionLabel}>View Samples</Text>
                   </Pressable>
-                  <Pressable style={styles.actionItem} onPress={() => navigate('payments')}>
-                    <MaterialCommunityIcons name="wallet-outline" size={27} color="#17202D" />
+                  <Pressable style={styles.actionItem} onPress={() => router.push({ pathname: '/buyer/[section]', params: { section: 'payments', orderId: order.id } } as any)}>
+                    <View style={{ position: 'relative' }}><MaterialCommunityIcons name="wallet-outline" size={27} color="#17202D" />{pendingPaymentCount > 0 && <View style={{ position: 'absolute', top: -9, right: -12, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, backgroundColor: '#E53935', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#FFFFFF' }}><Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '800' }}>{pendingPaymentCount > 99 ? '99+' : pendingPaymentCount}</Text></View>}</View>
                     <Text style={styles.actionLabel}>Secure Payment</Text>
                   </Pressable>
                 </View>
@@ -436,6 +478,40 @@ export default function BuyerMyOrdersScreen() {
       </ScrollView>
 
       <AppBottomNav role="BUYER" activeSection="orders" onNavigate={navigate} onLayout={e => setBottomHeight(e.nativeEvent.layout.height)} />
+
+      <Modal visible={!!deliveryAddressOrder} transparent animationType="slide" onRequestClose={() => setDeliveryAddressOrder(null)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setDeliveryAddressOrder(null)}>
+          <Pressable style={styles.samplePaymentSheet} onPress={() => undefined}>
+            <View style={styles.dragHandle} />
+            <View style={styles.sheetHeader}><View style={{ flex: 1 }}><Text style={styles.sheetTitle}>Add Delivery Address</Text><Text style={styles.sheetSubtitle}>{deliveryAddressOrder?.poNumber}</Text></View><Pressable onPress={() => setDeliveryAddressOrder(null)}><MaterialCommunityIcons name="close" size={24} color="#737B87" /></Pressable></View>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              {([
+                ['recipientName', 'Receiver Name', 'Enter receiver name'],
+                ['phone', 'Mobile Number', 'Enter contact number'],
+                ['addressLine', 'Full Address', 'House / building, street, area'],
+                ['city', 'City', 'Enter city'],
+                ['state', 'State', 'Enter state'],
+                ['postalCode', 'PIN Code', 'Enter postal / PIN code'],
+                ['country', 'Country', 'Enter country']
+              ] as const).map(([key, label, placeholder]) => (
+                <View key={key} style={{ marginBottom: 11, gap: 5 }}>
+                  <Text style={{ color: ui.ink, fontSize: 12, fontWeight: '700' }}>{label} *</Text>
+                  <TextInput value={deliveryForm[key]} onChangeText={value => setDeliveryForm(current => ({ ...current, [key]: value }))} placeholder={placeholder} placeholderTextColor="#9299A3" style={{ minHeight: 46, borderWidth: 1, borderColor: '#DDE1E8', borderRadius: 11, paddingHorizontal: 12, color: ui.ink, backgroundColor: '#FFFFFF' }} />
+                </View>
+              ))}
+              <Pressable onPress={() => void captureDeliveryLocation()} style={{ minHeight: 44, borderWidth: 1, borderColor: '#D8C8F5', borderRadius: 11, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <MaterialCommunityIcons name="map-marker-plus-outline" size={19} color={PURPLE} />
+                <Text style={{ color: PURPLE, fontSize: 12, fontWeight: '700', flex: 1 }}>{deliveryCoordinates ? 'Location pin added' : 'Add Location Pin (Optional)'}</Text>
+                {deliveryCoordinates ? <MaterialCommunityIcons name="check-circle" size={18} color="#087653" /> : null}
+              </Pressable>
+              <Text style={{ color: ui.muted, fontSize: 11, marginBottom: 12 }}>Please verify the address carefully. It will be locked once the supplier dispatches the order.</Text>
+              <Pressable disabled={deliveryAddressBusy} style={[styles.samplePayNowButton, deliveryAddressBusy && { opacity: 0.6 }]} onPress={() => void submitDeliveryAddress()}>
+                {deliveryAddressBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.samplePayNowText}>Submit Address</Text>}
+              </Pressable>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {drawerOpen && <View style={[styles.drawerLayer, { top: headerHeight, bottom: bottomHeight }]}>
         <View style={styles.drawer}>

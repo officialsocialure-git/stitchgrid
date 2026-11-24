@@ -3,7 +3,7 @@ import { AppBottomNav } from '@/components/AppBottomNav';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator, FlatList, Image, Modal, Pressable, RefreshControl, ScrollView,
-  StyleSheet, Text, TextInput, View, Alert,
+  StyleSheet, Text, TextInput, View, Alert, Linking,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -27,6 +27,10 @@ type PurchaseOrder = {
   supplier?: { id: string; name: string; city?: string | null };
   items?: OrderItem[]; milestones?: Milestone[]; samples?: { id: string; status: string }[];
   paymentPlan?: { milestones: PaymentMilestone[] } | null;
+  deliveryAddressStatus?: string;
+  deliveryRecipientName?: string | null; deliveryPhone?: string | null; deliveryAddressLine?: string | null;
+  deliveryCity?: string | null; deliveryState?: string | null; deliveryPostalCode?: string | null; deliveryCountry?: string | null;
+  deliveryLatitude?: number | null; deliveryLongitude?: number | null;
 };
 type Membership = { organizationId?: string; organization?: { id?: string }; role?: string };
 
@@ -124,10 +128,12 @@ export default function SupplierMyOrdersScreen() {
       ]);
       const rows = Array.isArray(response) ? response : [];
       const paymentByOrder = new Map<string, PurchaseOrder>((paymentDashboard.orders || []).map(order => [order.id, order] as const));
-      setOrders(rows.filter(order => order.supplierOrgId === organizationId).map(order => ({
+      const supplierOrders = rows.filter(order => order.supplierOrgId === organizationId).map(order => ({
         ...order,
         paymentPlan: paymentByOrder.get(order.id)?.paymentPlan || null,
-      })));
+      }));
+      setOrders(supplierOrders);
+      setDispatchOrder(current => current ? (supplierOrders.find(order => order.id === current.id) || current) : null);
       setSampleOrderIds(new Set((Array.isArray(sampleRows) ? sampleRows : []).map(sample => sample.purchaseOrderId)));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to load your purchase orders.');
@@ -167,6 +173,33 @@ export default function SupplierMyOrdersScreen() {
     });
   }, [orders, search, filter]);
 
+  const requestBuyerAddress = async (order: PurchaseOrder) => {
+    try {
+      setUpdatingId(order.id);
+      await apiRequest(`/purchase-orders/${order.id}/delivery-address/request`, { method: 'POST', body: {} });
+      setDispatchOrder(current => current?.id === order.id ? { ...current, deliveryAddressStatus: 'REQUESTED' } : current);
+      await loadOrders(true);
+      Alert.alert('Request sent', 'Buyer has been notified to submit the delivery address.');
+    } catch (e) {
+      Alert.alert('Unable to request address', e instanceof Error ? e.message : 'Please try again.');
+    } finally { setUpdatingId(null); }
+  };
+
+  const confirmShipmentDispatch = async () => {
+    if (!dispatchOrder) return;
+    try {
+      setUpdatingId(dispatchOrder.id);
+      await apiRequest(`/purchase-orders/${dispatchOrder.id}/status`, {
+        method: 'PATCH', body: { status: 'DISPATCHED', trackingNumber: trackingNumberDraft.trim() || undefined, note: 'Supplier dispatched shipment after buyer delivery address confirmation.' }
+      });
+      setDispatchOrder(null);
+      setTrackingNumberDraft('');
+      await loadOrders(true);
+    } catch (e) {
+      Alert.alert('Unable to dispatch shipment', e instanceof Error ? e.message : 'Please try again.');
+    } finally { setUpdatingId(null); }
+  };
+
   const updateStatus = (order: PurchaseOrder, nextStatus: string) => {
     if (nextStatus === 'QC_PENDING') {
       setQcSubmitOrder(order);
@@ -177,20 +210,8 @@ export default function SupplierMyOrdersScreen() {
       return;
     }
     if (nextStatus === 'DISPATCHED') {
-      void (async () => {
-        try {
-          setUpdatingId(order.id);
-          await apiRequest(`/purchase-orders/${order.id}/status`, {
-            method: 'PATCH',
-            body: { status: 'DISPATCHED', note: 'Supplier dispatched shipment.' },
-          });
-          await loadOrders(true);
-        } catch (e) {
-          Alert.alert('Unable to dispatch shipment', e instanceof Error ? e.message : 'Please try again.');
-        } finally {
-          setUpdatingId(null);
-        }
-      })();
+      setTrackingNumberDraft('');
+      setDispatchOrder(order);
       return;
     }
     const actionLabels: Record<string, string> = {
@@ -231,7 +252,12 @@ export default function SupplierMyOrdersScreen() {
   const supplierAction = (order: PurchaseOrder) => {
     if (order.status === 'PO_CREATED' || order.status === 'PENDING_ACCEPTANCE') return { label: 'Accept Order', icon: 'check-decagram', status: 'ACCEPTED', color: '#079669' };
 
-    if (order.status === 'SAMPLE_APPROVED') return { label: 'Start Bulk Production', icon: 'factory', status: 'PRODUCTION_STARTED', color: PURPLE };
+    if (order.status === 'SAMPLE_APPROVED') {
+      const productionMilestone = order.paymentPlan?.milestones?.find(item => item.title === 'Production Payment');
+      return Number(productionMilestone?.amount || 0) > 0
+        ? { label: 'View Payment Request', icon: 'wallet-outline', status: 'PAYMENT_VIEW', color: PURPLE }
+        : { label: 'Start Bulk Production', icon: 'factory', status: 'PRODUCTION_STARTED', color: PURPLE };
+    }
     if (order.status === 'PRODUCTION_STARTED' || order.status === 'IN_PRODUCTION') return { label: 'Submit for Quality Inspection', icon: 'clipboard-check', status: 'QC_PENDING', color: PURPLE };
     if (order.status === 'QC_PENDING' || order.status === 'QC') return null;
     if (order.status === 'READY_TO_DISPATCH') return { label: 'Dispatch Shipment', icon: 'truck-delivery', status: 'DISPATCHED', color: PURPLE };
@@ -312,10 +338,12 @@ export default function SupplierMyOrdersScreen() {
               })()}
               {order.status === 'ACCEPTED' && !sampleOrderIds.has(order.id) ? <View style={styles.inlineNotice}><MaterialCommunityIcons name="clock-outline" size={18} color="#A66A00" /><Text style={styles.inlineNoticeText}>Awaiting Buyer sample request. You can set the sample price once the request is created.</Text></View> : null}
               {order.status === 'QC_PENDING' || order.status === 'QC' ? <View style={styles.inlineNotice}><MaterialCommunityIcons name="clock-check-outline" size={18} color="#A66A00" /><Text style={styles.inlineNoticeText}>QC report submitted · Awaiting Buyer approval</Text></View> : null}
+              {order.status === 'READY_TO_DISPATCH' && order.deliveryAddressStatus === 'REQUESTED' ? <View style={styles.inlineNotice}><MaterialCommunityIcons name="map-marker" size={18} color="#A66A00" /><Text style={styles.inlineNoticeText}>Delivery address requested · Waiting for buyer</Text></View> : null}
+              {order.status === 'READY_TO_DISPATCH' && order.deliveryAddressStatus === 'CONFIRMED' ? <View style={[styles.inlineNotice, { backgroundColor: '#E9F8F0', borderColor: '#B7EED4' }]}><MaterialCommunityIcons name="map-marker-check" size={18} color="#087653" /><Text style={[styles.inlineNoticeText, { color: '#087653' }]}>Buyer delivery address received · Ready to dispatch</Text></View> : null}
               {updatingId === order.id ? <View style={styles.updatingRow}><ActivityIndicator color={PURPLE} /><Text style={styles.updatingText}>Updating order...</Text></View>
               : action ? <View style={styles.supplierActionRow}>
                   <Text style={styles.supplierActionLabel}>Supplier Action:</Text>
-                  <Pressable style={[styles.acceptButton, { backgroundColor: action.color }]} onPress={() => updateStatus(order, action.status)}>
+                  <Pressable style={[styles.acceptButton, { backgroundColor: action.color }]} onPress={() => action.status === 'PRODUCTION_STARTED' || action.status === 'PAYMENT_VIEW' ? navigate('payments', order.id) : updateStatus(order, action.status)}>
                     <MaterialCommunityIcons name={action.icon as any} size={21} color="#FFFFFF" />
                     <Text style={styles.acceptButtonText}>{action.label}</Text>
                   </Pressable>
@@ -364,18 +392,31 @@ export default function SupplierMyOrdersScreen() {
 
       <SupplierQcSubmitModal visible={!!qcSubmitOrder} orderId={qcSubmitOrder?.id || ''} poNumber={qcSubmitOrder?.poNumber || ''} onClose={() => setQcSubmitOrder(null)} onSubmitted={() => { setQcSubmitOrder(null); void loadOrders(true); }} />
 
-      <Modal visible={false} transparent animationType="slide" onRequestClose={() => setDispatchOrder(null)}>
+      <Modal visible={!!dispatchOrder} transparent animationType="slide" onRequestClose={() => setDispatchOrder(null)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.filterSheet}>
             <View style={styles.sheetHandle} />
-            <View style={styles.sheetHeader}><Text style={styles.sheetTitle}>Confirm Shipment Dispatch</Text><Pressable onPress={() => setDispatchOrder(null)}><MaterialCommunityIcons name="close" size={23} color="#596273" /></Pressable></View>
-            <Text style={styles.stateText}>Enter the courier or shipment tracking number for PO #{dispatchOrder?.poNumber}. The buyer will receive this update.</Text>
-            <View style={styles.searchBox}>
-              <TextInput value={trackingNumberDraft} onChangeText={setTrackingNumberDraft} placeholder="Enter tracking number" placeholderTextColor="#8B929C" style={styles.searchInput} autoCapitalize="characters" />
-            </View>
-            <Pressable style={[styles.acceptButton, { backgroundColor: PURPLE }]} onPress={() => undefined} disabled={!!updatingId}>
-              <Text style={styles.acceptButtonText}>{updatingId === dispatchOrder?.id ? 'Updating...' : 'Confirm Dispatch'}</Text>
-            </Pressable>
+            <View style={styles.sheetHeader}><Text style={styles.sheetTitle}>Delivery Address & Dispatch</Text><Pressable onPress={() => setDispatchOrder(null)}><MaterialCommunityIcons name="close" size={23} color="#596273" /></Pressable></View>
+            {dispatchOrder?.deliveryAddressStatus === 'CONFIRMED' ? <View style={{ backgroundColor: '#E9F8F0', borderRadius: 12, padding: 13, marginBottom: 12, gap: 5 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}><MaterialCommunityIcons name="map-marker-check" size={19} color="#087653" /><Text style={{ color: '#087653', fontWeight: '800' }}>Buyer Delivery Address Received</Text></View>
+              <Text style={{ color: ui.ink, fontWeight: '700' }}>{dispatchOrder.deliveryRecipientName} · {dispatchOrder.deliveryPhone}</Text>
+              <Text style={{ color: ui.ink }}>{dispatchOrder.deliveryAddressLine}, {dispatchOrder.deliveryCity}, {dispatchOrder.deliveryState} {dispatchOrder.deliveryPostalCode}, {dispatchOrder.deliveryCountry}</Text>
+              {dispatchOrder.deliveryLatitude != null && dispatchOrder.deliveryLongitude != null ? <Pressable onPress={() => void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${dispatchOrder.deliveryLatitude},${dispatchOrder.deliveryLongitude}`)}><Text style={{ color: PURPLE, fontWeight: '700' }}>View location coordinates</Text></Pressable> : null}
+            </View> : <View style={{ backgroundColor: '#FFF7E8', borderColor: '#F4D79B', borderWidth: 1, borderRadius: 12, padding: 13, marginBottom: 12, gap: 6 }}>
+              <Text style={{ color: '#8A5700', fontWeight: '800' }}>Buyer delivery address is required</Text>
+              <Text style={{ color: '#8A5700', fontSize: 12 }}>Request the address from the buyer. Dispatch will be enabled after the buyer submits it.</Text>
+              {dispatchOrder?.deliveryAddressStatus === 'REQUESTED' ? <Text style={{ color: '#8A5700', fontWeight: '700' }}>Address request sent · Waiting for buyer</Text> : null}
+              <Pressable style={[styles.acceptButton, { backgroundColor: PURPLE }]} onPress={() => dispatchOrder && void requestBuyerAddress(dispatchOrder)} disabled={!!updatingId || dispatchOrder?.deliveryAddressStatus === 'REQUESTED'}>
+                <Text style={styles.acceptButtonText}>{dispatchOrder?.deliveryAddressStatus === 'REQUESTED' ? 'Address Requested' : 'Request Buyer Address'}</Text>
+              </Pressable>
+            </View>}
+            {dispatchOrder?.deliveryAddressStatus === 'CONFIRMED' ? <>
+              <Text style={styles.stateText}>Enter the courier or shipment tracking number for PO #{dispatchOrder?.poNumber} (optional).</Text>
+              <View style={styles.searchBox}><TextInput value={trackingNumberDraft} onChangeText={setTrackingNumberDraft} placeholder="Enter tracking number" placeholderTextColor="#8B929C" style={styles.searchInput} autoCapitalize="characters" /></View>
+              <Pressable style={[styles.acceptButton, { backgroundColor: PURPLE }]} onPress={() => void confirmShipmentDispatch()} disabled={!!updatingId}>
+                <Text style={styles.acceptButtonText}>{updatingId === dispatchOrder?.id ? 'Updating...' : 'Confirm Dispatch'}</Text>
+              </Pressable>
+            </> : null}
           </View>
         </View>
       </Modal>
