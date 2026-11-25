@@ -20,6 +20,11 @@ export function useNotifications() {
       const data = await api.get<AppNotification[]>("/notifications");
       setNotifications(Array.isArray(data) ? data : []);
     } catch (error) {
+      // Expired sessions are handled centrally by ApiClient (clear session + redirect).
+      // Avoid noisy console errors while the browser navigates to sign-in.
+      if (error instanceof Error && /invalid.*token|expired.*token|authentication required/i.test(error.message)) {
+        return;
+      }
       console.error("Failed to load notifications:", error);
     }
   }, []);

@@ -32,7 +32,23 @@ class ApiClient {
 
   private async request(url: string, options: RequestInit): Promise<Response> {
     try {
-      return await fetch(url, options);
+      const response = await fetch(url, options);
+      const requestHeaders = new Headers(options.headers);
+      const hasAuthenticatedRequest = requestHeaders.has("Authorization");
+
+      // A 401 on a request carrying an access token means the current session
+      // is no longer valid. Clear only auth state and send the user to sign in.
+      if (response.status === 401 && hasAuthenticatedRequest && typeof window !== "undefined") {
+        localStorage.removeItem("sg_token");
+        localStorage.removeItem("sg_user");
+        localStorage.removeItem("sg_membership");
+        window.dispatchEvent(new CustomEvent("sg_session_expired"));
+        if (window.location.pathname !== "/login") {
+          window.location.assign("/login?session=expired");
+        }
+      }
+
+      return response;
     } catch (err: any) {
       if (err instanceof TypeError || err?.name === "TypeError" || String(err?.message || "").includes("fetch")) {
         throw new Error(

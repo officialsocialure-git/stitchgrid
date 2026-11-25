@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Package, Clock3, Truck, CheckCircle2, Search, RefreshCw, Download,
-  ChevronLeft, ChevronRight, Eye, MoreHorizontal, X, LoaderCircle,
-  ArrowUp, CheckSquare, Square, Layers3, Factory, ShieldCheck, XCircle
+  ChevronLeft, ChevronRight, Eye, MoreHorizontal, X, LoaderCircle, Filter,
+  ArrowUp, CheckSquare, Square, Layers3, Factory, ShieldCheck, XCircle, MapPin
 } from "lucide-react";
 import { adminService } from "@/features/admin/admin.service";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
@@ -130,6 +130,7 @@ export default function OrdersPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   const refresh = useCallback(() => setRefreshKey((v) => v + 1), []);
   useRealtimeSync({
@@ -233,11 +234,11 @@ export default function OrdersPage() {
   };
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-4 md:space-y-6">
       {/* Page Header with Export & Refresh Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 sm:items-center sm:gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">Orders</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">Orders</h1>
           <p className="mt-1 text-sm text-slate-500">
             Track purchase orders, sampling requests and production progress.
           </p>
@@ -261,10 +262,10 @@ export default function OrdersPage() {
       </div>
 
       {/* 4 KPI Summary Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-4 xl:grid-cols-4">
         {/* Card 1: Total Orders */}
-        <div className="flex items-center gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs transition hover:shadow-sm">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#F3EFFC] text-[#5B13EC]">
+        <div className="flex min-w-0 flex-col items-start gap-2 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-xs transition hover:shadow-sm sm:flex-row sm:items-center sm:gap-4 sm:p-5">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl sm:h-12 sm:w-12 sm:rounded-2xl bg-[#F3EFFC] text-[#5B13EC]">
             <Package size={22} />
           </span>
           <div className="min-w-0 flex-1">
@@ -282,8 +283,8 @@ export default function OrdersPage() {
         </div>
 
         {/* Card 2: In Progress */}
-        <div className="flex items-center gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs transition hover:shadow-sm">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#FFFBEB] text-[#D97706]">
+        <div className="flex min-w-0 flex-col items-start gap-2 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-xs transition hover:shadow-sm sm:flex-row sm:items-center sm:gap-4 sm:p-5">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl sm:h-12 sm:w-12 sm:rounded-2xl bg-[#FFFBEB] text-[#D97706]">
             <Clock3 size={22} />
           </span>
           <div className="min-w-0 flex-1">
@@ -298,8 +299,8 @@ export default function OrdersPage() {
         </div>
 
         {/* Card 3: Dispatched */}
-        <div className="flex items-center gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs transition hover:shadow-sm">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#EFF6FF] text-[#2563EB]">
+        <div className="flex min-w-0 flex-col items-start gap-2 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-xs transition hover:shadow-sm sm:flex-row sm:items-center sm:gap-4 sm:p-5">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl sm:h-12 sm:w-12 sm:rounded-2xl bg-[#EFF6FF] text-[#2563EB]">
             <Truck size={22} />
           </span>
           <div className="min-w-0 flex-1">
@@ -314,8 +315,8 @@ export default function OrdersPage() {
         </div>
 
         {/* Card 4: Completed */}
-        <div className="flex items-center gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs transition hover:shadow-sm">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#ECFDF5] text-[#059669]">
+        <div className="flex min-w-0 flex-col items-start gap-2 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-xs transition hover:shadow-sm sm:flex-row sm:items-center sm:gap-4 sm:p-5">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl sm:h-12 sm:w-12 sm:rounded-2xl bg-[#ECFDF5] text-[#059669]">
             <CheckCircle2 size={22} />
           </span>
           <div className="min-w-0 flex-1">
@@ -332,8 +333,8 @@ export default function OrdersPage() {
 
       {/* Main Container Card */}
       <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs">
-        {/* Tabs Row */}
-        <div className="flex flex-wrap gap-2.5 border-b border-slate-100 px-6 py-4">
+        {/* Desktop status tabs */}
+        <div className="hidden md:flex flex-wrap gap-2.5 border-b border-slate-100 px-6 py-4">
           {tabs.map((t) => {
             const active = tab === t.value;
             return (
@@ -359,8 +360,69 @@ export default function OrdersPage() {
           })}
         </div>
 
-        {/* Filter Inputs Bar */}
-        <div className="grid grid-cols-1 gap-2.5 border-b border-slate-100 bg-[#FAF9FD] p-4 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_180px_180px_180px_auto]">
+        {/* Mobile search and expandable filters */}
+        <div className="border-b border-slate-100 bg-[#FAF9FD] p-3 md:hidden">
+          <div className="flex items-center gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                value={query}
+                onChange={(e) => { setQuery(e.target.value); setPage(1); }}
+                placeholder="Search PO, buyer or supplier..."
+                className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none shadow-sm focus:border-[#5B13EC]"
+              />
+            </div>
+            <button
+              type="button"
+              aria-expanded={showMobileFilters}
+              aria-controls="mobile-orders-filters"
+              onClick={() => setShowMobileFilters((value) => !value)}
+              className={`relative inline-flex h-12 shrink-0 items-center gap-2 rounded-2xl border px-3.5 text-sm font-bold transition ${showMobileFilters ? "border-[#5B13EC] bg-[#F3EDFF] text-[#5B13EC]" : "border-slate-200 bg-white text-slate-700"}`}
+            >
+              <Filter size={17} /> Filters
+              {(tab !== "ALL" || paymentStatus !== "ALL" || dateRange !== "ALL") && <span className="absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-[#5B13EC] px-1 text-[10px] text-white">{Number(tab !== "ALL") + Number(paymentStatus !== "ALL") + Number(dateRange !== "ALL")}</span>}
+            </button>
+          </div>
+
+          {showMobileFilters && (
+            <div id="mobile-orders-filters" className="mt-3 max-h-[min(62dvh,560px)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-extrabold text-slate-900">Filters</h3>
+                <button type="button" onClick={reset} className="text-xs font-bold text-[#5B13EC]">Clear All</button>
+              </div>
+              <p className="mb-2.5 text-xs font-bold text-slate-800">Order Status</p>
+              <div className="grid grid-cols-2 gap-2">
+                {tabs.map((t) => {
+                  const active = tab === t.value;
+                  return (
+                    <button key={t.value} type="button" onClick={() => { setTab(t.value); setOrderStatus("ALL"); setPage(1); }} className={`inline-flex min-h-10 items-center justify-start gap-2 rounded-xl border px-2.5 py-2 text-left text-[11px] font-bold transition ${active ? "border-[#5B13EC] bg-[#5B13EC] text-white shadow-sm" : "border-slate-200 bg-white text-slate-700"}`}>
+                      <t.icon size={15} className="shrink-0" /> <span className="min-w-0 flex-1">{t.label.replace(" Orders", "")}</span><span className={active ? "text-white/80" : "text-slate-400"}>({t.count})</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-4 grid grid-cols-1 gap-3">
+                <label className="block text-xs font-bold text-slate-700">Payment Status
+                  <select value={paymentStatus} onChange={(e) => { setPaymentStatus(e.target.value); setPage(1); }} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-[#5B13EC]">
+                    <option value="ALL">All Payments</option><option value="PAID">Paid</option><option value="PENDING">Pending</option><option value="FAILED">Failed</option>
+                  </select>
+                </label>
+                <label className="block text-xs font-bold text-slate-700">Date Range
+                  <select value={dateRange} onChange={(e) => { setDateRange(e.target.value); setPage(1); }} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-[#5B13EC]">
+                    <option value="ALL">All Time</option><option value="7D">Last 7 days</option><option value="30D">Last 30 days</option><option value="90D">Last 90 days</option>
+                  </select>
+                </label>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button type="button" onClick={reset} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700"><RefreshCw size={14} /> Reset</button>
+                <button type="button" onClick={() => setShowMobileFilters(false)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#5B13EC] text-xs font-bold text-white"><CheckCircle2 size={14} /> Apply Filters</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Desktop filter inputs */}
+        <div className="hidden md:grid grid-cols-1 gap-2.5 border-b border-slate-100 bg-[#FAF9FD] p-4 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_180px_180px_180px_auto]">
           <div className="relative">
             <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -447,7 +509,40 @@ export default function OrdersPage() {
         ) : data.items.length === 0 ? (
           <div className="p-12 text-center text-sm text-slate-500">No purchase orders found.</div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Mobile order cards */}
+          <div className="space-y-3 p-3 md:hidden">
+            {data.items.map((order) => {
+              const progress = getMilestoneProgress(order.status);
+              const pBadge = getPaymentBadge(order);
+              return (
+                <article key={order.id} className="rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#F1EAFE] text-[#5B13EC]"><Package size={21} /></span>
+                      <div className="min-w-0"><p className="truncate text-sm font-extrabold text-slate-900">{order.poNumber}</p><p className="mt-0.5 text-[10px] text-slate-400">{new Date(order.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p></div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <button type="button" onClick={() => toggleSelect(order.id)} aria-label={selectedIds.includes(order.id) ? "Deselect order" : "Select order"} className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-[#F3EDFF]">{selectedIds.includes(order.id) ? <CheckSquare size={17} className="text-[#5B13EC]" /> : <Square size={17} />}</button>
+                      <span className="rounded-full bg-[#EBE4FF] px-2.5 py-1 text-[10px] font-bold text-[#5B13EC]">{order.status.replaceAll("_", " ")}</span>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-3 border-y border-slate-100 py-3">
+                    <div className="min-w-0"><p className="text-[10px] font-semibold text-slate-400">Buyer</p><p className="truncate text-xs font-bold text-slate-800">{order.buyer?.name || "Corporate Buyer"}</p></div>
+                    <div className="min-w-0"><p className="text-[10px] font-semibold text-slate-400">Supplier</p><p className="truncate text-xs font-bold text-slate-800">{order.supplier?.name || "Manufacturing Mill"}</p></div>
+                    <div><p className="text-[10px] font-semibold text-slate-400">Order Value</p><p className="mt-0.5 text-sm font-extrabold text-slate-900">{formatMoney(order.totalAmount, order.currency)}</p></div>
+                    <div><p className="text-[10px] font-semibold text-slate-400">Payment</p><span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${pBadge.color}`}>{pBadge.label}</span></div>
+                  </div>
+                  <div className="mt-3"><div className="mb-1.5 flex items-center justify-between gap-2 text-[10px] font-bold text-slate-600"><span>Progress · {progress.label}</span><span>{progress.percent}%</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-[#5B13EC] transition-all" style={{ width: `${progress.percent}%` }} /></div></div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => setActiveOrder(order)} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700"><Eye size={14} /> View Details</button>
+                    <button type="button" onClick={() => setActiveOrder(order)} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-[#5B13EC] text-xs font-bold text-white"><MapPin size={14} /> Track Order</button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full min-w-[1100px] text-left text-xs">
               <thead className="bg-[#FAF9FD] text-[11px] font-bold text-slate-600 border-b border-slate-100">
                 <tr>
@@ -607,6 +702,7 @@ export default function OrdersPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
 
         {/* Footer Pagination */}

@@ -50,18 +50,72 @@ export async function adminOrganizationDetails(req: Request, res: Response, next
   } catch (error) { next(error); }
 }
 
+export async function adminOrganizationActivity(req: Request, res: Response, next: NextFunction) {
+  try {
+    const organizationId = String(req.params.organizationId || "").trim();
+    if (!organizationId) throw new AppError(400, "Organization ID is required");
+    const organization = await prisma.organization.findUnique({ where: { id: organizationId }, select: { id: true } });
+    if (!organization) throw new AppError(404, "Business profile not found");
+    const activity = await prisma.auditLog.findMany({
+      where: {
+        OR: [
+          { entityType: "Organization", entityId: organizationId },
+          { organizationId }
+        ]
+      },
+      include: { user: { select: { fullName: true, email: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 50
+    });
+    return sendOk(res, activity);
+  } catch (error) { next(error); }
+}
+
 export async function adminUsers(req: Request, res: Response, next: NextFunction) {
   try {
-    const parsed = pageQuery.extend({ role: z.enum(["ALL", "BUYER", "SUPPLIER", "ADMIN"]).default("ALL"), active: z.enum(["ALL", "ACTIVE", "INACTIVE"]).default("ALL") }).parse(req.query);
+    const parsed = pageQuery.extend({
+      role: z.enum(["ALL", "BUYER", "SUPPLIER", "ADMIN"]).default("ALL"),
+      active: z.enum(["ALL", "ACTIVE", "INACTIVE"]).default("ALL"),
+      verification: z.enum(["ALL", "APPROVED", "PENDING", "REJECTED", "N/A"]).default("ALL"),
+      joinedFrom: z.coerce.date().optional(),
+      joinedTo: z.coerce.date().optional(),
+      lastActive: z.enum(["ALL", "7D", "30D"]).default("ALL")
+    }).parse(req.query);
     const where: any = {};
     if (parsed.q) where.OR = [
       { fullName: { contains: parsed.q } }, { email: { contains: parsed.q } }, { phone: { contains: parsed.q } },
       { memberships: { some: { organization: { name: { contains: parsed.q } } } } }
     ];
-    if (parsed.role !== "ALL") where.memberships = { some: { role: parsed.role, isActive: true } };
+    const membershipFilters: any[] = [];
+    if (parsed.role !== "ALL") membershipFilters.push({ role: parsed.role, isActive: true });
+    if (parsed.verification === "N/A") {
+      where.AND = [...(where.AND || []), { memberships: { none: {} } }];
+    } else if (parsed.verification !== "ALL") {
+      membershipFilters.push({ organization: { is: { verificationStatus: parsed.verification } } });
+    }
+    if (membershipFilters.length) where.memberships = { some: { AND: membershipFilters } };
     if (parsed.active !== "ALL") where.isActive = parsed.active === "ACTIVE";
+    if (parsed.joinedFrom || parsed.joinedTo) {
+      where.createdAt = {
+        ...(parsed.joinedFrom ? { gte: parsed.joinedFrom } : {}),
+        ...(parsed.joinedTo ? { lte: parsed.joinedTo } : {})
+      };
+    }
+    if (parsed.lastActive !== "ALL") {
+      const days = parsed.lastActive === "7D" ? 7 : 30;
+      where.auditLogs = { some: { action: { in: ["AUTH_LOGIN", "AUTH_LOGIN_GOOGLE"] }, createdAt: { gte: new Date(Date.now() - days * 86400000) } } };
+    }
     const [items, total] = await Promise.all([
-      prisma.user.findMany({ where, include: { memberships: { include: { organization: { select: { id: true, name: true, verificationStatus: true } } } } }, orderBy: { createdAt: "desc" }, skip: (parsed.page - 1) * parsed.limit, take: parsed.limit }),
+      prisma.user.findMany({
+        where,
+        include: {
+          memberships: { include: { organization: { select: { id: true, name: true, verificationStatus: true } } } },
+          auditLogs: { where: { action: { in: ["AUTH_LOGIN", "AUTH_LOGIN_GOOGLE"] } }, orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } }
+        },
+        orderBy: { createdAt: "desc" },
+        skip: (parsed.page - 1) * parsed.limit,
+        take: parsed.limit
+      }),
       prisma.user.count({ where })
     ]);
     return sendOk(res, { items, page: parsed.page, limit: parsed.limit, total, pages: Math.ceil(total / parsed.limit) });
@@ -85,6 +139,132 @@ export async function adminUpdateUserStatus(req: Request, res: Response, next: N
   } catch (error) { next(error); }
 }
 
+
+
+export async function adminUserDetails(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = String(req.params.userId);
+    const [user, activity] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true, fullName: true, email: true, phone: true, isActive: true,
+          emailVerified: true, phoneVerified: true, createdAt: true, updatedAt: true,
+          memberships: { include: { organization: { select: { id: true, name: true, verificationStatus: true } } } }
+        }
+      }),
+      prisma.auditLog.findMany({
+        where: { OR: [{ actorUserId: userId }, { entityType: "User", entityId: userId }] },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+        select: { id: true, action: true, entityType: true, entityId: true, metadata: true, createdAt: true }
+      })
+    ]);
+    if (!user) throw new AppError(404, "User not found");
+    return sendOk(res, { ...user, activity });
+  } catch (error) { next(error); }
+}
+
+export async function adminUpdateUser(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = z.object({
+      fullName: z.string().trim().min(2).max(120),
+      email: z.string().trim().email().max(190).nullable()
+    }).parse(req.body);
+    const userId = String(req.params.userId);
+    const target = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true } });
+    if (!target) throw new AppError(404, "User not found");
+    if (input.email) {
+      const existing = await prisma.user.findUnique({ where: { email: input.email }, select: { id: true } });
+      if (existing && existing.id !== userId) throw new AppError(409, "This email address is already used by another account.");
+    }
+    const emailChanged = (input.email || null) !== target.email;
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: { fullName: input.fullName, email: input.email || null, ...(emailChanged ? { emailVerified: false } : {}) },
+      select: { id: true, fullName: true, email: true, phone: true, isActive: true, emailVerified: true, createdAt: true, updatedAt: true }
+    });
+    await audit("ADMIN_USER_PROFILE_UPDATED", "User", userId, req.auth!.userId, undefined, { fullName: input.fullName, emailChanged });
+    emitToRole("ADMIN", "admin:user_updated", { userId });
+    return sendOk(res, updated);
+  } catch (error) { next(error); }
+}
+
+export async function adminUpdateUserRole(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { role } = z.object({ role: z.enum(["BUYER", "SUPPLIER", "ADMIN"]) }).parse(req.body);
+    const userId = String(req.params.userId);
+    if (userId === req.auth?.userId && role !== "ADMIN") throw new AppError(400, "You cannot change your own administrator role.");
+    const target = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { memberships: { where: { isActive: true } } }
+    });
+    if (!target) throw new AppError(404, "User not found");
+    if (target.memberships.length !== 1) {
+      throw new AppError(409, "Role can only be changed when the user has exactly one active organization membership. Review memberships first.");
+    }
+    const current = target.memberships[0];
+    if (current.role === role) return sendOk(res, { id: userId, role });
+    if (current.role === "ADMIN" && role !== "ADMIN") {
+      const activeAdmins = await prisma.organizationMember.findMany({
+        where: { role: "ADMIN", isActive: true },
+        select: { userId: true },
+        distinct: ["userId"]
+      });
+      if (activeAdmins.length <= 1) throw new AppError(400, "The last active administrator cannot be demoted.");
+    }
+    await prisma.$transaction(async (tx) => {
+      const existingMembership = await tx.organizationMember.findUnique({
+        where: { userId_organizationId_role: { userId, organizationId: current.organizationId, role } }
+      });
+      await tx.organizationMember.update({ where: { id: current.id }, data: { isActive: false } });
+      if (existingMembership) {
+        await tx.organizationMember.update({ where: { id: existingMembership.id }, data: { isActive: true } });
+      } else {
+        await tx.organizationMember.update({ where: { id: current.id }, data: { role, isActive: true } });
+      }
+      await tx.auditLog.create({
+        data: {
+          action: "ADMIN_USER_ROLE_UPDATED",
+          entityType: "User",
+          entityId: userId,
+          actorUserId: req.auth!.userId,
+          organizationId: current.organizationId,
+          metadata: { previousRole: current.role, role }
+        }
+      });
+    });
+    emitToOrg(current.organizationId, "admin:user_updated", { userId });
+    emitToRole("ADMIN", "admin:user_updated", { userId });
+    return sendOk(res, { id: userId, role });
+  } catch (error) { next(error); }
+}
+
+export async function adminDeleteUser(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = String(req.params.userId);
+    if (userId === req.auth?.userId) throw new AppError(400, "You cannot delete your own administrator account.");
+    const target = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, memberships: { select: { id: true } } } });
+    if (!target) throw new AppError(404, "User not found");
+    const [messageCount, disputeCount, orderEventCount, qualityReportCount] = await Promise.all([
+      prisma.message.count({ where: { senderUserId: userId } }),
+      prisma.dispute.count({ where: { raisedByUserId: userId } }),
+      prisma.orderEvent.count({ where: { actorUserId: userId } }),
+      prisma.qualityCheckReport.count({ where: { OR: [{ supplierUserId: userId }, { reviewedByUserId: userId }] } })
+    ]);
+    if (target.memberships.length || messageCount || disputeCount || orderEventCount || qualityReportCount) {
+      throw new AppError(409, "This account is linked to organization or business activity. Deactivate it instead to preserve STITCHGRID records.");
+    }
+    await prisma.$transaction([
+      prisma.notification.deleteMany({ where: { userId } }),
+      prisma.user.delete({ where: { id: userId } })
+    ]);
+    await audit("ADMIN_USER_DELETED", "User", userId, req.auth!.userId);
+    emitToRole("ADMIN", "admin:user_updated", { userId });
+    return sendOk(res, { id: userId, deleted: true });
+  } catch (error) { next(error); }
+}
+
 export async function adminCatalog(req: Request, res: Response, next: NextFunction) {
   try {
     const parsed = pageQuery.extend({
@@ -100,7 +280,7 @@ export async function adminCatalog(req: Request, res: Response, next: NextFuncti
       where.createdAt = { gte: new Date(Date.now() - days * 24 * 60 * 60 * 1000) };
     }
     const [items, total, totalListings, pending, approved, rejected, categories] = await Promise.all([
-      prisma.catalogItem.findMany({ where, include: { supplierProfile: { include: { organization: { select: { id: true, name: true, city: true, verificationStatus: true } } } } }, orderBy: { createdAt: "desc" }, skip: (parsed.page - 1) * parsed.limit, take: parsed.limit }),
+      prisma.catalogItem.findMany({ where, include: { images: { orderBy: { sortOrder: "asc" } }, supplierProfile: { include: { organization: { select: { id: true, name: true, city: true, verificationStatus: true } } } } }, orderBy: { createdAt: "desc" }, skip: (parsed.page - 1) * parsed.limit, take: parsed.limit }),
       prisma.catalogItem.count({ where }),
       prisma.catalogItem.count(),
       prisma.catalogItem.count({ where: { moderationStatus: "PENDING" } }),
@@ -326,7 +506,7 @@ export async function adminPayments(req: Request, res: Response, next: NextFunct
         take: parsed.limit
       }),
       prisma.paymentTransaction.count({ where }),
-      prisma.paymentTransaction.aggregate({ where: { provider: "RAZORPAY", status: "PAID", signatureVerified: true }, _sum: { amount: true }, _count: { _all: true } }),
+      prisma.paymentTransaction.aggregate({ where: { provider: { in: ["RAZORPAY", "MOCK_TEST"] }, status: "PAID", OR: [{ signatureVerified: true }, { provider: "MOCK_TEST" }] }, _sum: { amount: true }, _count: { _all: true } }),
       prisma.paymentTransaction.aggregate({ where: { provider: { in: ["RAZORPAY", "MOCK_TEST"] }, status: "PENDING" }, _sum: { amount: true }, _count: { _all: true } }),
       prisma.paymentTransaction.aggregate({ where: { provider: { in: ["RAZORPAY", "MOCK_TEST"] }, status: "FAILED" }, _sum: { amount: true }, _count: { _all: true } }),
       prisma.paymentRefund.aggregate({ where: { status: { in: ["REQUESTED", "PROCESSING", "PROCESSED"] } }, _sum: { amount: true }, _count: { _all: true } }),

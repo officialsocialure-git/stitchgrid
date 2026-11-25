@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Search, RefreshCw, Download, ChevronLeft, ChevronRight, MoreHorizontal,
-  Users, UserRound, Store, UserX, X, ShieldCheck, LoaderCircle, CheckCircle2,
-  Clock3, Ban, ArrowUp
+  Users, UserRound, Store, X, ShieldCheck, LoaderCircle, CheckCircle2,
+  Clock3, Ban, ArrowUp, Filter, Building2, Eye, Pencil, UserCog, Trash2,
+  RotateCcw, Check, AlertTriangle
 } from "lucide-react";
 import { adminService } from "@/features/admin/admin.service";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
+import * as XLSX from "xlsx";
 
 type UserRow = {
   id: string;
@@ -18,7 +20,11 @@ type UserRow = {
   createdAt: string;
   updatedAt?: string;
   memberships?: any[];
+  auditLogs?: { createdAt: string }[];
 };
+
+type ExportField = "name" | "email" | "phone" | "organization" | "role" | "active" | "verification" | "joined" | "lastActive";
+
 
 const PAGE_SIZE = 10;
 
@@ -35,6 +41,9 @@ const verificationOf = (u: UserRow) => {
   if (values.includes("PENDING")) return "Pending";
   return "Verified";
 };
+
+const lastLoginAt = (events?: { action?: string; createdAt: string }[]) =>
+  events?.find((event) => event.action === "AUTH_LOGIN" || event.action === "AUTH_LOGIN_GOOGLE")?.createdAt;
 
 const formatRelativeTime = (dateStr?: string) => {
   if (!dateStr) return "Today";
@@ -67,7 +76,25 @@ export default function UsersPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [selected, setSelected] = useState<UserRow | null>(null);
   const [menuFor, setMenuFor] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<"xls" | "csv" | "pdf">("xls");
+  const [exporting, setExporting] = useState(false);
+  const [exportComplete, setExportComplete] = useState(false);
+  const [lastActive, setLastActive] = useState("ALL");
+  const [joinedFrom, setJoinedFrom] = useState("");
+  const [joinedTo, setJoinedTo] = useState("");
+  const [exportFields, setExportFields] = useState<ExportField[]>(["name", "email", "phone", "organization", "role", "active", "verification", "joined", "lastActive"]);
+  const [editTarget, setEditTarget] = useState<UserRow | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [roleTarget, setRoleTarget] = useState<UserRow | null>(null);
+  const [roleValue, setRoleValue] = useState<"BUYER" | "SUPPLIER" | "ADMIN">("BUYER");
+  const [confirmTarget, setConfirmTarget] = useState<{ user: UserRow; action: "status" | "delete"; nextActive?: boolean } | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [detailActivity, setDetailActivity] = useState<any[]>([]);
+  const [detailTab, setDetailTab] = useState<"overview" | "activity">("overview");
 
   const refresh = useCallback(() => setRefreshKey((v) => v + 1), []);
   useRealtimeSync({
@@ -88,7 +115,18 @@ export default function UsersPage() {
           q: query,
           role,
           active,
+          verification,
+          lastActive,
         });
+        if (joinedFrom) params.set("joinedFrom", new Date(joinedFrom).toISOString());
+        else if (joined === "7D") params.set("joinedFrom", new Date(Date.now() - 7 * 86400000).toISOString());
+        else if (joined === "30D") params.set("joinedFrom", new Date(Date.now() - 30 * 86400000).toISOString());
+        else if (joined === "YEAR") params.set("joinedFrom", new Date(new Date().getFullYear(), 0, 1).toISOString());
+        if (joinedTo) {
+          const end = new Date(joinedTo);
+          end.setHours(23, 59, 59, 999);
+          params.set("joinedTo", end.toISOString());
+        }
         const [result, stats, inactiveResult, adminResult] = await Promise.all([
           adminService.users(params),
           adminService.overview(),
@@ -112,70 +150,139 @@ export default function UsersPage() {
     return () => {
       alive = false;
     };
-  }, [page, role, active, query, refreshKey]);
+  }, [page, role, active, verification, joined, joinedFrom, joinedTo, lastActive, query, refreshKey]);
 
-  const visibleRows = useMemo(() => {
-    return rows.filter((u) => {
-      const verify = verificationOf(u);
-      const verificationMatch = verification === "ALL" || verify.toUpperCase() === verification;
-      const date = new Date(u.createdAt);
-      const now = new Date();
-      const joinedMatch =
-        joined === "ALL" ||
-        (joined === "7D" && date >= new Date(now.getTime() - 7 * 86400000)) ||
-        (joined === "30D" && date >= new Date(now.getTime() - 30 * 86400000)) ||
-        (joined === "YEAR" && date.getFullYear() === now.getFullYear());
-      return verificationMatch && joinedMatch;
-    });
-  }, [rows, verification, joined]);
+  const visibleRows = useMemo(() => rows, [rows]);
+  const activeFilterCount = [
+    role !== "ALL",
+    active !== "ALL",
+    verification !== "ALL",
+    joined !== "ALL" || Boolean(joinedFrom || joinedTo),
+    lastActive !== "ALL"
+  ].filter(Boolean).length;
 
-  const exportUsers = async () => {
+  const exportUsers = () => { setExportComplete(false); setActionError(""); setExportOpen(true); };
+
+  const runExport = async () => {
+    setExporting(true);
+    let printWindow: Window | null = null;
+    if (exportFormat === "pdf") printWindow = window.open("", "_blank");
     try {
       const all: UserRow[] = [];
-      const first = await adminService.users(new URLSearchParams({ page: "1", limit: "100", q: query, role, active }));
+      const baseParams = new URLSearchParams({ page: "1", limit: "100", q: query, role, active, verification, lastActive });
+      const now = new Date();
+      if (joinedFrom) baseParams.set("joinedFrom", new Date(joinedFrom).toISOString());
+      else if (joined === "7D") baseParams.set("joinedFrom", new Date(now.getTime() - 7 * 86400000).toISOString());
+      else if (joined === "30D") baseParams.set("joinedFrom", new Date(now.getTime() - 30 * 86400000).toISOString());
+      else if (joined === "YEAR") baseParams.set("joinedFrom", new Date(now.getFullYear(), 0, 1).toISOString());
+      if (joinedTo) {
+        const end = new Date(joinedTo); end.setHours(23, 59, 59, 999);
+        baseParams.set("joinedTo", end.toISOString());
+      }
+      const first = await adminService.users(baseParams);
       all.push(...(first.items || []));
       for (let p = 2; p <= (first.pages || 1); p++) {
-        const batch = await adminService.users(new URLSearchParams({ page: String(p), limit: "100", q: query, role, active }));
+        const params = new URLSearchParams(baseParams);
+        params.set("page", String(p));
+        const batch = await adminService.users(params);
         all.push(...(batch.items || []));
       }
-      const csvRows = [
-        ["Name", "Email", "Phone", "Organization", "Role", "Account Status", "Verification", "Joined"],
-        ...all.map((u) => [
-          u.fullName,
-          u.email || "",
-          u.phone || "",
-          orgOf(u),
-          roleOf(u),
-          u.isActive ? "Active" : "Inactive",
-          verificationOf(u),
-          new Date(u.createdAt).toLocaleDateString(),
-        ]),
-      ];
-      const csv = csvRows.map((row) => row.map((v) => `"${String(v ?? "").replaceAll('"', '""')}"`).join(",")).join("\r\n");
-      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "stitchgrid-users.csv";
-      a.click();
-      URL.revokeObjectURL(url);
+
+      const fieldMap: Record<ExportField, { label: string; value: (u: UserRow) => string }> = {
+        name: { label: "Name", value: (u) => u.fullName },
+        email: { label: "Email", value: (u) => u.email || "" },
+        phone: { label: "Phone", value: (u) => u.phone || "" },
+        organization: { label: "Organization", value: orgOf },
+        role: { label: "Role", value: roleOf },
+        active: { label: "Account Status", value: (u) => u.isActive ? "Active" : "Inactive" },
+        verification: { label: "Verification", value: verificationOf },
+        joined: { label: "Joined", value: (u) => new Date(u.createdAt).toLocaleDateString() },
+        lastActive: { label: "Last Login", value: (u) => u.auditLogs?.[0]?.createdAt ? new Date(u.auditLogs[0].createdAt).toLocaleString() : "No login recorded" }
+      };
+      const selectedFields = exportFields.length ? exportFields : ["name", "email", "role", "active"] as ExportField[];
+      const headers = selectedFields.map((field) => fieldMap[field].label);
+      const values = all.map((u) => selectedFields.map((field) => fieldMap[field].value(u)));
+
+      if (exportFormat === "csv") {
+        const csv = [headers, ...values].map((row) => row.map((v) => `"${String(v ?? "").replaceAll('"', '""')}"`).join(",")).join("\r\n");
+        const url = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8;" }));
+        const a = document.createElement("a"); a.href = url; a.download = "stitchgrid-users.csv"; a.click();
+        URL.revokeObjectURL(url);
+      } else if (exportFormat === "xls") {
+        const sheet = XLSX.utils.aoa_to_sheet([headers, ...values]);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, sheet, "Users");
+        XLSX.writeFile(workbook, "stitchgrid-users.xlsx");
+      } else if (printWindow) {
+        const escapeHtml = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+        const table = `<table><thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${values.map((row) => `<tr>${row.map((v) => `<td>${escapeHtml(v)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+        printWindow.document.write(`<!doctype html><html><head><title>STITCHGRID Users</title><style>body{font:12px Arial;padding:24px;color:#182332}h1{font-size:20px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #dfe3eb;padding:8px;text-align:left}th{background:#f0eafe}</style></head><body><h1>STITCHGRID User Export</h1><p>${all.length} users</p>${table}</body></html>`);
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+      } else {
+        throw new Error("Your browser blocked the PDF print window. Allow pop-ups and try again.");
+      }
+      setExportComplete(true);
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Unable to export users.");
+      if (printWindow && !printWindow.closed) printWindow.close();
+      setActionError(e instanceof Error ? e.message : "Unable to export users.");
+    } finally {
+      setExporting(false);
     }
   };
 
   const toggleUser = async (u: UserRow) => {
-    const next = !u.isActive;
-    if (!window.confirm(`${next ? "Activate" : "Deactivate"} ${u.fullName}'s account?`)) return;
-    setBusyId(u.id);
+    setConfirmTarget({ user: u, action: "status", nextActive: !u.isActive });
+    setMenuFor(null);
+    setActionError("");
+  };
+
+  const openUserDetails = async (u: UserRow) => {
+    setSelected(u);
+    setDetailTab("overview");
+    setDetailActivity([]);
+    setActionError("");
     setMenuFor(null);
     try {
-      await adminService.updateUserStatus(u.id, next);
-      refresh();
+      const details = await adminService.user(u.id);
+      setSelected(details);
+      setDetailActivity(details.activity || []);
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Unable to update account.");
-    } finally {
-      setBusyId(null);
+      setActionError(e instanceof Error ? e.message : "Unable to load user details.");
     }
+  };
+
+  const saveUserEdit = async () => {
+    if (!editTarget) return;
+    setActionBusy(true); setActionError("");
+    try {
+      await adminService.updateUser(editTarget.id, { fullName: editName.trim(), email: editEmail.trim() || null });
+      setEditTarget(null); refresh();
+    } catch (e) { setActionError(e instanceof Error ? e.message : "Unable to update user."); }
+    finally { setActionBusy(false); }
+  };
+
+  const saveUserRole = async () => {
+    if (!roleTarget) return;
+    setActionBusy(true); setActionError("");
+    try {
+      await adminService.updateUserRole(roleTarget.id, roleValue);
+      setRoleTarget(null); refresh();
+    } catch (e) { setActionError(e instanceof Error ? e.message : "Unable to change role."); }
+    finally { setActionBusy(false); }
+  };
+
+  const executeUserAction = async () => {
+    if (!confirmTarget) return;
+    const { user, action } = confirmTarget;
+    setActionBusy(true); setActionError("");
+    try {
+      if (action === "status") await adminService.updateUserStatus(user.id, Boolean(confirmTarget.nextActive));
+      else await adminService.deleteUser(user.id);
+      setConfirmTarget(null); refresh();
+    } catch (e) { setActionError(e instanceof Error ? e.message : "Unable to complete this action."); }
+    finally { setActionBusy(false); }
   };
 
   const roleTabs = [
@@ -186,9 +293,17 @@ export default function UsersPage() {
   ];
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5 sm:space-y-6">
+      {/* Mobile reference-style hero */}
+      <div className="sm:hidden overflow-hidden rounded-2xl bg-gradient-to-r from-[#4B10C8] via-[#6818E8] to-[#8B42F4] px-5 py-5 text-white shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0"><h1 className="text-[25px] font-bold leading-tight tracking-tight text-white">User Management</h1><p className="mt-2 max-w-[260px] text-[13px] leading-5 text-white/90">Manage platform users, their roles, organizations and account access.</p></div>
+          <Users size={54} strokeWidth={1.4} className="shrink-0 text-white/70" />
+        </div>
+      </div>
+
       {/* Page Title & Subtitle */}
-      <div>
+      <div className="hidden sm:block">
         <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">Users</h1>
         <p className="mt-1 text-sm text-slate-500">
           Manage platform users, their roles, organizations and account access.
@@ -196,7 +311,7 @@ export default function UsersPage() {
       </div>
 
       {/* 4 KPI Summary Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="hidden grid-cols-1 gap-4 sm:grid sm:grid-cols-2 xl:grid-cols-4">
         {/* Card 1: Total Users */}
         <div className="flex items-center gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs transition hover:shadow-sm">
           <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#F3EFFC] text-[#5B13EC]">
@@ -274,10 +389,20 @@ export default function UsersPage() {
         </div>
       </div>
 
+      {/* Mobile compact statistics */}
+      <div className="grid grid-cols-4 gap-2 sm:hidden">
+        {[
+          { label: "Total", value: overview?.users ?? total, icon: Users, tone: "text-[#5B13EC] bg-[#F0EAFE]" },
+          { label: "Buyers", value: overview?.buyers ?? "—", icon: UserRound, tone: "text-blue-600 bg-blue-50" },
+          { label: "Suppliers", value: overview?.suppliers ?? "—", icon: Store, tone: "text-violet-600 bg-violet-50" },
+          { label: "Admins", value: adminCount ?? "—", icon: ShieldCheck, tone: "text-[#48586C] bg-slate-100" },
+        ].map((item) => <div key={item.label} className="min-w-0 rounded-xl border border-[#E2E6ED] bg-white p-2.5 shadow-[0_2px_8px_rgba(24,35,50,0.03)]"><div className={`mb-2 grid h-8 w-8 place-items-center rounded-lg ${item.tone}`}><item.icon size={17}/></div><p className="truncate text-[10px] font-semibold text-[#48586C]">{item.label}</p><p className="mt-0.5 text-lg font-bold leading-none text-[#182332]">{loading ? "—" : item.value}</p></div>)}
+      </div>
+
       {/* Main Container Card */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs">
+      <div className="overflow-visible rounded-2xl border border-slate-200/90 bg-white shadow-xs sm:overflow-hidden">
         {/* Card Top: Title & Export Action */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-6 py-5">
+        <div className="hidden flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-6 py-5 lg:flex">
           <div>
             <h2 className="text-lg font-bold text-slate-900">User Management</h2>
             <p className="mt-0.5 text-xs text-slate-500">
@@ -293,7 +418,7 @@ export default function UsersPage() {
         </div>
 
         {/* Filter Tabs Row */}
-        <div className="flex flex-wrap gap-2.5 px-6 pt-4 pb-3">
+        <div className="flex flex-nowrap gap-2 overflow-x-auto px-3 pt-3 pb-3 sm:flex-wrap sm:px-6 sm:pt-4 no-scrollbar">
           {roleTabs.map((tab) => {
             const activeTab = role === tab.value;
             return (
@@ -303,7 +428,7 @@ export default function UsersPage() {
                   setRole(tab.value);
                   setPage(1);
                 }}
-                className={`inline-flex h-9 items-center gap-2 rounded-xl px-4 text-xs font-bold transition ${
+                className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-xl px-3 text-[11px] font-bold transition sm:h-9 sm:px-4 sm:text-xs ${
                   activeTab
                     ? "bg-[#5B13EC] text-white shadow-xs"
                     : "border border-slate-200/80 bg-white text-slate-600 hover:bg-slate-50"
@@ -319,8 +444,28 @@ export default function UsersPage() {
           })}
         </div>
 
-        {/* Filter Inputs Bar */}
-        <div className="grid grid-cols-1 gap-2.5 border-y border-slate-100 bg-[#FAF9FD] p-4 lg:grid-cols-[minmax(220px,1fr)_180px_180px_180px_auto]">
+        {/* Mobile search, filters and export toolbar */}
+        <div className="space-y-2 border-y border-slate-100 bg-[#FAF9FD] p-3 lg:hidden">
+          <div className="flex items-center gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} placeholder="Search name, email or company..." className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-xs outline-none focus:border-[#5B13EC]" />
+            </div>
+            <button onClick={() => setFiltersOpen(true)} className="relative inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[#5B13EC] bg-white px-3 text-xs font-bold text-[#5B13EC]"><Filter size={15}/> Filters{activeFilterCount > 0 && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-[#5B13EC] px-1 text-[10px] text-white">{activeFilterCount}</span>}</button>
+            <button onClick={exportUsers} className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl bg-[#5B13EC] px-3 text-xs font-bold text-white"><Download size={15}/> Export</button>
+          </div>
+          {activeFilterCount > 0 && <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[10px] text-[#48586C]">
+            {role !== "ALL" && <button onClick={() => setRole("ALL")} className="rounded-full bg-[#F0EAFE] px-2.5 py-1 font-semibold text-[#5B13EC]">{role} ×</button>}
+            {active !== "ALL" && <button onClick={() => setActive("ALL")} className="rounded-full bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700"> {active === "ACTIVE" ? "Active" : "Inactive"} ×</button>}
+            {verification !== "ALL" && <button onClick={() => setVerification("ALL")} className="rounded-full bg-[#F0EAFE] px-2.5 py-1 font-semibold text-[#5B13EC]">{verification === "APPROVED" ? "Verified" : verification} ×</button>}
+            {joined !== "ALL" && <button onClick={() => setJoined("ALL")} className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-700">Joined {joined} ×</button>}
+            {lastActive !== "ALL" && <button onClick={() => setLastActive("ALL")} className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-700">Active {lastActive} ×</button>}
+            <button onClick={() => { setRole("ALL"); setActive("ALL"); setVerification("ALL"); setJoined("ALL"); setJoinedFrom(""); setJoinedTo(""); setLastActive("ALL"); setPage(1); }} className="ml-auto font-bold text-[#5B13EC]">Clear all</button>
+          </div>}
+        </div>
+
+        {/* Desktop filter controls */}
+        <div className="hidden gap-2.5 border-y border-slate-100 bg-[#FAF9FD] p-4 lg:grid lg:grid-cols-[minmax(220px,1fr)_180px_180px_180px_auto]">
           <div className="relative">
             <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -377,6 +522,9 @@ export default function UsersPage() {
               setActive("ALL");
               setVerification("ALL");
               setJoined("ALL");
+              setJoinedFrom("");
+              setJoinedTo("");
+              setLastActive("ALL");
               setPage(1);
               refresh();
             }}
@@ -402,7 +550,49 @@ export default function UsersPage() {
         ) : visibleRows.length === 0 ? (
           <div className="p-12 text-center text-sm text-slate-500">No users match the selected filters.</div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Mobile user cards — replaces the wide data table on small screens */}
+          <div className="space-y-3 p-3 lg:hidden">
+            {visibleRows.map((u) => {
+              const roleName = roleOf(u);
+              const verifyStatus = verificationOf(u);
+              return (
+                <article key={u.id} className="relative rounded-2xl border border-[#E3DDF4] bg-white p-3.5 shadow-[0_3px_12px_rgba(61,34,120,0.045)]">
+                  <div className="flex items-start gap-3 pr-8">
+                    <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-[#F0E2FF] text-lg font-bold text-[#5B13EC]">{(u.fullName || "U").slice(0,1).toUpperCase()}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[15px] font-bold leading-5 text-[#182332]">{u.fullName}</p>
+                      <p className="mt-0.5 truncate text-xs text-[#64748B]">{u.email || u.phone || "No contact details"}</p>
+                      <div className="mt-2 flex min-w-0 items-start gap-1.5 text-xs text-[#334155]">
+                        <Building2 size={14} className="mt-0.5 shrink-0 text-[#475569]"/>
+                        <span className="line-clamp-2 min-w-0">{orgOf(u)}</span>
+                      </div>
+                      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                        <span className="rounded-full bg-[#F0E2FF] px-3 py-1 text-[10px] font-bold text-[#6416D9]">{roleName}</span>
+                        <span className={`rounded-full px-3 py-1 text-[10px] font-bold ${u.isActive ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{u.isActive ? "● Active" : "● Inactive"}</span>
+                        <span className={`rounded-full px-3 py-1 text-[10px] font-bold ${verifyStatus === "Verified" ? "bg-emerald-50 text-emerald-700" : verifyStatus === "Pending" ? "bg-amber-50 text-amber-800" : "bg-slate-100 text-slate-600"}`}>{verifyStatus === "Verified" ? "✓ Verified" : verifyStatus === "Pending" ? "◷ Pending" : verifyStatus}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <button disabled={actionBusy} onClick={() => setMenuFor(menuFor === u.id ? null : u.id)} aria-label={`Actions for ${u.fullName}`} className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full text-[#334155] hover:bg-[#F0EAFE] hover:text-[#5B13EC]"><MoreHorizontal size={21}/></button>
+                  {menuFor === u.id && <><button aria-label="Close user actions" className="fixed inset-0 z-30 cursor-default" onClick={() => setMenuFor(null)}/><div className="absolute right-3 top-12 z-50 w-52 rounded-xl border border-[#E2E6ED] bg-white p-1.5 shadow-xl">
+                    <button onClick={() => openUserDetails(u)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-[#182332] hover:bg-[#F6F7FA]"><Eye size={15}/> View Details</button>
+                    <button onClick={() => { setEditTarget(u); setEditName(u.fullName); setEditEmail(u.email || ""); setMenuFor(null); setActionError(""); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-[#182332] hover:bg-[#F6F7FA]"><Pencil size={15}/> Edit User</button>
+                    <button onClick={() => { setRoleTarget(u); setRoleValue((roleOf(u) === "ADMIN" || roleOf(u) === "SUPPLIER" ? roleOf(u) : "BUYER") as "BUYER" | "SUPPLIER" | "ADMIN"); setMenuFor(null); setActionError(""); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-[#182332] hover:bg-[#F6F7FA]"><UserCog size={15}/> Change Role <ChevronRight size={14} className="ml-auto"/></button>
+                    <button onClick={() => { toggleUser(u); }} className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold hover:bg-rose-50 ${u.isActive ? "text-rose-600" : "text-emerald-700"}`}><Ban size={15}/>{u.isActive ? "Deactivate Account" : "Activate Account"}</button>
+                    <button onClick={() => { setConfirmTarget({ user: u, action: "delete" }); setMenuFor(null); setActionError(""); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50"><Trash2 size={15}/> Delete User</button>
+                  </div></>}
+                  <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2.5 text-[10px] text-[#64748B]">
+                    <span>Joined {new Date(u.createdAt).toLocaleDateString("en-US")}</span>
+                    <span>Last login {u.auditLogs?.[0]?.createdAt ? formatRelativeTime(u.auditLogs[0].createdAt) : "Not recorded"}</span>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
+          {/* Desktop table remains unchanged */}
+          <div className="hidden overflow-x-auto lg:block">
             <table className="w-full min-w-[1000px] text-left text-xs">
               <thead className="bg-[#FAF9FD] text-[11px] font-bold text-slate-600 border-b border-slate-100">
                 <tr>
@@ -412,7 +602,7 @@ export default function UsersPage() {
                   <th className="px-5 py-3.5">Account Status</th>
                   <th className="px-5 py-3.5">Verification</th>
                   <th className="px-5 py-3.5">Joined</th>
-                  <th className="px-5 py-3.5">Last Active</th>
+                  <th className="px-5 py-3.5">Last Login</th>
                   <th className="px-5 py-3.5 text-right">Actions</th>
                 </tr>
               </thead>
@@ -486,13 +676,13 @@ export default function UsersPage() {
 
                       {/* Last Active */}
                       <td className="whitespace-nowrap px-5 py-3.5 text-slate-500 text-[11px]">
-                        {formatRelativeTime(u.updatedAt || u.createdAt)}
+                        {u.auditLogs?.[0]?.createdAt ? formatRelativeTime(u.auditLogs[0].createdAt) : "Not recorded"}
                       </td>
 
                       {/* Actions */}
                       <td className="relative px-5 py-3.5 text-right">
                         <button
-                          disabled={busyId === u.id}
+                          disabled={actionBusy}
                           onClick={() => setMenuFor(menuFor === u.id ? null : u.id)}
                           aria-label={`Actions for ${u.fullName}`}
                           className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-[#EBE4FF] hover:text-[#5B13EC] transition ml-auto"
@@ -500,26 +690,12 @@ export default function UsersPage() {
                           <MoreHorizontal size={18} />
                         </button>
                         {menuFor === u.id && (
-                          <div className="absolute right-6 top-10 z-20 w-44 rounded-xl border border-slate-200 bg-white p-1.5 text-left shadow-xl">
-                            <button
-                              onClick={() => {
-                                setSelected(u);
-                                setMenuFor(null);
-                              }}
-                              className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-50"
-                            >
-                              View details
-                            </button>
-                            <button
-                              onClick={() => toggleUser(u)}
-                              className={`w-full rounded-lg px-3 py-2 text-left text-xs font-semibold ${
-                                u.isActive
-                                  ? "text-rose-600 hover:bg-rose-50"
-                                  : "text-emerald-700 hover:bg-emerald-50"
-                              }`}
-                            >
-                              {u.isActive ? "Deactivate account" : "Activate account"}
-                            </button>
+                          <div className="absolute right-6 top-10 z-30 w-48 rounded-xl border border-slate-200 bg-white p-1.5 text-left shadow-xl">
+                            <button onClick={() => openUserDetails(u)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"><Eye size={14}/> View Details</button>
+                            <button onClick={() => { setEditTarget(u); setEditName(u.fullName); setEditEmail(u.email || ""); setMenuFor(null); setActionError(""); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"><Pencil size={14}/> Edit User</button>
+                            <button onClick={() => { setRoleTarget(u); setRoleValue((roleOf(u) === "ADMIN" || roleOf(u) === "SUPPLIER" ? roleOf(u) : "BUYER") as "BUYER" | "SUPPLIER" | "ADMIN"); setMenuFor(null); setActionError(""); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"><UserCog size={14}/> Change Role <ChevronRight size={13} className="ml-auto"/></button>
+                            <button onClick={() => toggleUser(u)} className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold ${u.isActive ? "text-rose-600 hover:bg-rose-50" : "text-emerald-700 hover:bg-emerald-50"}`}><Ban size={14}/>{u.isActive ? "Deactivate Account" : "Activate Account"}</button>
+                            <button onClick={() => { setConfirmTarget({ user: u, action: "delete" }); setMenuFor(null); setActionError(""); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50"><Trash2 size={14}/> Delete User</button>
                           </div>
                         )}
                       </td>
@@ -529,11 +705,12 @@ export default function UsersPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
 
         {/* Footer Pagination */}
         <div className="flex flex-col gap-3 border-t border-slate-100 px-6 py-4 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-          <span>
+          <span className="px-3 sm:px-0">
             Showing {total ? (page - 1) * PAGE_SIZE + 1 : 0}–{Math.min(page * PAGE_SIZE, total)} of {total} users
           </span>
 
@@ -586,14 +763,90 @@ export default function UsersPage() {
         </div>
       </div>
 
+      {/* Mobile filter sheet */}
+      {filtersOpen && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/45 p-0 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={() => setFiltersOpen(false)}>
+          <section role="dialog" aria-modal="true" aria-labelledby="user-filter-title" className="max-h-[92dvh] w-full max-w-xl overflow-y-auto rounded-t-3xl bg-[#F8F7FC] p-4 shadow-2xl sm:rounded-2xl sm:p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2.5"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[#F0EAFE] text-[#5B13EC]"><Filter size={19}/></span><h2 id="user-filter-title" className="text-lg font-bold text-[#182332]">Filters</h2></div>
+              <button onClick={() => setFiltersOpen(false)} aria-label="Close filters" className="grid h-9 w-9 place-items-center rounded-full text-slate-500 hover:bg-white"><X size={20}/></button>
+            </div>
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-[#E2E6ED] bg-white p-3.5">
+                <p className="mb-3 text-sm font-bold text-[#182332]">Account Status</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {([{v:"ALL",l:"All"},{v:"ACTIVE",l:"Active"},{v:"INACTIVE",l:"Inactive"}] as const).map((x) => <button key={x.v} onClick={() => {setActive(x.v);setPage(1);}} className={`min-h-10 rounded-xl border px-2 text-xs font-semibold ${active===x.v?"border-[#5B13EC] bg-[#5B13EC] text-white":"border-[#E2E6ED] bg-white text-[#334155]"}`}>{x.l}</button>)}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-[#E2E6ED] bg-white p-3.5">
+                <p className="mb-3 text-sm font-bold text-[#182332]">Verification Status</p>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {([{v:"ALL",l:"All"},{v:"APPROVED",l:"Verified"},{v:"PENDING",l:"Pending"},{v:"REJECTED",l:"Rejected"}] as const).map((x) => <button key={x.v} onClick={() => {setVerification(x.v);setPage(1);}} className={`min-h-10 rounded-xl border px-2 text-xs font-semibold ${verification===x.v?"border-[#5B13EC] bg-[#5B13EC] text-white":"border-[#E2E6ED] bg-white text-[#334155]"}`}>{x.l}</button>)}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-[#E2E6ED] bg-white p-3.5">
+                <p className="mb-3 text-sm font-bold text-[#182332]">Role</p>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {([{v:"ALL",l:"All"},{v:"BUYER",l:"Buyer"},{v:"SUPPLIER",l:"Supplier"},{v:"ADMIN",l:"Admin"}] as const).map((x) => <button key={x.v} onClick={() => {setRole(x.v);setPage(1);}} className={`min-h-10 rounded-xl border px-2 text-xs font-semibold ${role===x.v?"border-[#5B13EC] bg-[#5B13EC] text-white":"border-[#E2E6ED] bg-white text-[#334155]"}`}>{x.l}</button>)}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-[#E2E6ED] bg-white p-3.5">
+                <p className="mb-3 text-sm font-bold text-[#182332]">Joined Date</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {([{v:"ALL",l:"All Time"},{v:"7D",l:"Last 7 Days"},{v:"30D",l:"Last 30 Days"}] as const).map((x) => <button key={x.v} onClick={() => {setJoined(x.v);setJoinedFrom("");setJoinedTo("");setPage(1);}} className={`min-h-10 rounded-xl border px-2 text-[11px] font-semibold ${joined===x.v&&!joinedFrom&&!joinedTo?"border-[#5B13EC] bg-[#5B13EC] text-white":"border-[#E2E6ED] bg-white text-[#334155]"}`}>{x.l}</button>)}
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <label className="text-[11px] font-semibold text-[#64748B]">From<input type="date" value={joinedFrom} onChange={(e)=>{setJoined("CUSTOM");setJoinedFrom(e.target.value);setPage(1);}} className="mt-1 h-10 w-full rounded-xl border border-[#E2E6ED] px-2 text-xs text-[#182332]"/></label>
+                  <label className="text-[11px] font-semibold text-[#64748B]">To<input type="date" value={joinedTo} onChange={(e)=>{setJoined("CUSTOM");setJoinedTo(e.target.value);setPage(1);}} className="mt-1 h-10 w-full rounded-xl border border-[#E2E6ED] px-2 text-xs text-[#182332]"/></label>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-[#E2E6ED] bg-white p-3.5">
+                <p className="mb-3 text-sm font-bold text-[#182332]">Last Login</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {([{v:"ALL",l:"All Time"},{v:"7D",l:"Last 7 Days"},{v:"30D",l:"Last 30 Days"}] as const).map((x) => <button key={x.v} onClick={() => {setLastActive(x.v);setPage(1);}} className={`min-h-10 rounded-xl border px-2 text-[11px] font-semibold ${lastActive===x.v?"border-[#5B13EC] bg-[#5B13EC] text-white":"border-[#E2E6ED] bg-white text-[#334155]"}`}>{x.l}</button>)}
+                </div>
+                <p className="mt-2 text-[10px] text-slate-400">Uses recorded sign-in activity; accounts without login history are not included in date filters.</p>
+              </div>
+            </div>
+            <div className="sticky bottom-0 mt-4 grid grid-cols-[1fr_1.5fr] gap-2 bg-[#F8F7FC] pt-2">
+              <button onClick={() => {setActive("ALL");setVerification("ALL");setRole("ALL");setJoined("ALL");setJoinedFrom("");setJoinedTo("");setLastActive("ALL");setPage(1);}} className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-[#E2E6ED] bg-white text-sm font-bold text-[#334155]"><RotateCcw size={16}/> Reset</button>
+              <button onClick={() => {setPage(1);setFiltersOpen(false);}} className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#5B13EC] text-sm font-bold text-white"><Check size={17}/> Apply Filters</button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {/* Export options sheet */}
+      {exportOpen && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/45 p-0 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={() => !exporting && setExportOpen(false)}>
+          <section role="dialog" aria-modal="true" aria-labelledby="export-users-title" className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-2xl sm:p-6" onClick={(e)=>e.stopPropagation()}>
+            <div className="mb-5 flex items-center justify-between"><div className="flex items-center gap-2.5"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#F0EAFE] text-[#5B13EC]"><Download size={20}/></span><div><h2 id="export-users-title" className="text-lg font-bold text-[#182332]">Export Users</h2><p className="text-xs text-[#64748B]">Export the users matching current filters</p></div></div><button disabled={exporting} onClick={()=>setExportOpen(false)} aria-label="Close export" className="grid h-9 w-9 place-items-center rounded-full text-slate-500 hover:bg-slate-100"><X size={19}/></button></div>
+            {exportComplete && <div className="mb-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-center"><span className="mx-auto mb-2 grid h-12 w-12 place-items-center rounded-full bg-emerald-100 text-emerald-700"><Check size={25}/></span><p className="text-base font-bold text-emerald-800">Export Complete</p><p className="mt-1 text-xs text-emerald-700">Your user file has been prepared. Check your downloads or finish saving the PDF.</p></div>}
+            <p className="mb-2 text-sm font-bold text-[#182332]">Export Format</p>
+            <div className="space-y-2">
+              {([{v:"xls",l:"Excel (.xlsx)",d:"Microsoft Excel workbook"},{v:"csv",l:"CSV (.csv)",d:"Compatible with Excel and spreadsheets"},{v:"pdf",l:"PDF (.pdf)",d:"Opens print dialog — choose Save as PDF"}] as const).map((x)=> <button key={x.v} onClick={()=>setExportFormat(x.v)} className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left ${exportFormat===x.v?"border-[#B99BFF] bg-[#F7F2FF]":"border-[#E2E6ED] bg-white"}`}><span className={`grid h-5 w-5 place-items-center rounded-full border ${exportFormat===x.v?"border-[#5B13EC] bg-[#5B13EC] text-white":"border-slate-300"}`}>{exportFormat===x.v&&<Check size={13}/>}</span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-[#182332]">{x.l}</span><span className="block text-[11px] text-[#64748B]">{x.d}</span></span></button>)}
+            </div>
+            <div className="mt-5">
+              <div className="mb-2 flex items-center justify-between"><p className="text-sm font-bold text-[#182332]">Data to Export</p><button onClick={()=>setExportFields(["name","email","phone","organization","role","active","verification","joined","lastActive"])} className="text-xs font-bold text-[#5B13EC]">Select all</button></div>
+              <div className="grid grid-cols-2 gap-2">
+                {([{v:"name",l:"User Details (Name)"},{v:"email",l:"Email"},{v:"phone",l:"Phone"},{v:"organization",l:"Organization"},{v:"role",l:"Role"},{v:"active",l:"Account Status"},{v:"verification",l:"Verification Status"},{v:"joined",l:"Joined Date"},{v:"lastActive",l:"Last Active"}] as const).map((x)=> <label key={x.v} className="flex min-h-10 items-center gap-2 rounded-lg px-1 text-xs font-medium text-[#334155]"><input type="checkbox" checked={exportFields.includes(x.v)} onChange={(e)=>setExportFields((prev)=>e.target.checked?[...prev,x.v]:prev.filter((f)=>f!==x.v))} className="h-4 w-4 accent-[#5B13EC]"/>{x.l}</label>)}
+              </div>
+            </div>
+            {actionError && <p className="mt-3 rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{actionError}</p>}
+            {exporting && <div className="mt-4 rounded-xl bg-[#F6F2FF] p-3"><p className="text-xs font-semibold text-[#5B13EC]">Preparing your filtered user file...</p><div className="mt-2 h-2 overflow-hidden rounded-full bg-[#E8DFFF]"><div className="h-full w-2/3 animate-pulse rounded-full bg-[#5B13EC]"/></div></div>}
+            <div className="mt-5 grid grid-cols-2 gap-2"><button disabled={exporting} onClick={()=>{setExportOpen(false);setExportComplete(false);}} className="h-12 rounded-xl border border-[#E2E6ED] text-sm font-bold text-[#334155]">{exportComplete?"Close":"Cancel"}</button><button disabled={exporting||exportFields.length===0} onClick={exportComplete?()=>{setExportOpen(false);setExportComplete(false);}:runExport} className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#5B13EC] text-sm font-bold text-white disabled:opacity-60">{exporting?<LoaderCircle size={17} className="animate-spin"/>:exportComplete?<Check size={17}/>:<Download size={17}/>} {exporting?"Exporting...":exportComplete?"Done":"Export"}</button></div>
+          </section>
+        </div>
+      )}
+
       {/* User Details Modal */}
       {selected && (
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/40 backdrop-blur-xs p-4"
+          className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/40 p-0 backdrop-blur-xs sm:items-center sm:p-4"
           onClick={() => setSelected(null)}
         >
           <div
-            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+            className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-2xl sm:p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between border-b border-slate-100 pb-4">
@@ -619,7 +872,11 @@ export default function UsersPage() {
               </div>
             </div>
 
-            <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 text-xs">
+            <div className="mt-5 grid grid-cols-2 border-b border-slate-100 text-sm font-semibold">
+              <button onClick={() => setDetailTab("overview")} className={`border-b-2 py-3 ${detailTab==="overview"?"border-[#5B13EC] text-[#5B13EC]":"border-transparent text-slate-500"}`}>Overview</button>
+              <button onClick={() => setDetailTab("activity")} className={`border-b-2 py-3 ${detailTab==="activity"?"border-[#5B13EC] text-[#5B13EC]":"border-transparent text-slate-500"}`}>Activity</button>
+            </div>
+            {detailTab === "overview" && <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 text-xs">
               <div>
                 <p className="font-semibold text-slate-400 uppercase">Organization</p>
                 <p className="mt-1 font-bold text-slate-800">{orgOf(selected)}</p>
@@ -641,12 +898,15 @@ export default function UsersPage() {
                 <p className="mt-1 font-bold text-slate-800">{new Date(selected.createdAt).toLocaleString()}</p>
               </div>
               <div>
-                <p className="font-semibold text-slate-400 uppercase">Last Updated</p>
+                <p className="font-semibold text-slate-400 uppercase">Last Login</p>
                 <p className="mt-1 font-bold text-slate-800">
-                  {selected.updatedAt ? new Date(selected.updatedAt).toLocaleString() : "—"}
+                  {lastLoginAt(detailActivity) ? new Date(lastLoginAt(detailActivity)!).toLocaleString() : "Not recorded"}
                 </p>
               </div>
-            </div>
+            </div>}
+            {detailTab === "activity" && <div className="mt-4 max-h-[48vh] space-y-2 overflow-y-auto">
+              {detailActivity.length ? detailActivity.map((event) => <div key={event.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3"><p className="text-xs font-bold text-[#182332]">{String(event.action || "Activity").replaceAll("_"," ").toLowerCase().replace(/\b\w/g,(c:string)=>c.toUpperCase())}</p><p className="mt-1 text-[11px] text-slate-500">{new Date(event.createdAt).toLocaleString()}</p></div>) : <p className="rounded-xl bg-slate-50 p-5 text-center text-xs text-slate-500">No recorded activity for this user yet.</p>}
+            </div>}
 
             <div className="mt-6 flex justify-end">
               <button
@@ -659,6 +919,53 @@ export default function UsersPage() {
           </div>
         </div>
       )}
+      {/* Edit user sheet */}
+      {editTarget && (
+        <div className="fixed inset-0 z-[110] flex items-end justify-center bg-slate-950/45 p-0 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={()=>!actionBusy&&setEditTarget(null)}>
+          <section role="dialog" aria-modal="true" className="w-full max-w-lg rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-2xl sm:p-6" onClick={(e)=>e.stopPropagation()}>
+            <div className="mb-5 flex items-center justify-between"><div><h2 className="text-lg font-bold text-[#182332]">Edit User</h2><p className="text-xs text-slate-500">Update basic account details</p></div><button onClick={()=>setEditTarget(null)} className="grid h-9 w-9 place-items-center rounded-full hover:bg-slate-100"><X size={19}/></button></div>
+            <div className="space-y-4">
+              <label className="block text-xs font-bold text-[#334155]">Full Name<input value={editName} onChange={(e)=>setEditName(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#E2E6ED] px-3 text-sm font-normal outline-none focus:border-[#5B13EC]"/></label>
+              <label className="block text-xs font-bold text-[#334155]">Email Address<input type="email" value={editEmail} onChange={(e)=>setEditEmail(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#E2E6ED] px-3 text-sm font-normal outline-none focus:border-[#5B13EC]"/></label>
+              <label className="block text-xs font-bold text-[#334155]">Organization<input disabled value={orgOf(editTarget)} className="mt-1.5 h-11 w-full rounded-xl border border-[#E2E6ED] bg-[#F6F7FA] px-3 text-sm font-normal text-slate-500"/></label>
+              <label className="block text-xs font-bold text-[#334155]">Role<select disabled value={roleOf(editTarget)} className="mt-1.5 h-11 w-full rounded-xl border border-[#E2E6ED] bg-[#F6F7FA] px-3 text-sm font-normal text-slate-500"><option value={roleOf(editTarget)}>{roleOf(editTarget)}</option></select></label>
+              <div className="rounded-xl bg-[#F6F7FA] p-3 text-xs text-slate-500">Organization and role are shown for context. Use Change Role from the three-dot menu to manage access separately.</div>
+              {actionError && <p className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{actionError}</p>}
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-2"><button onClick={()=>setEditTarget(null)} disabled={actionBusy} className="h-11 rounded-xl border border-[#E2E6ED] text-sm font-bold text-slate-700">Cancel</button><button onClick={saveUserEdit} disabled={actionBusy||editName.trim().length<2} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#5B13EC] text-sm font-bold text-white disabled:opacity-60">{actionBusy?<LoaderCircle size={16} className="animate-spin"/>:""}Save Changes</button></div>
+          </section>
+        </div>
+      )}
+
+      {/* Change role sheet */}
+      {roleTarget && (
+        <div className="fixed inset-0 z-[110] flex items-end justify-center bg-slate-950/45 p-0 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={()=>!actionBusy&&setRoleTarget(null)}>
+          <section role="dialog" aria-modal="true" className="w-full max-w-lg rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-2xl sm:p-6" onClick={(e)=>e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between"><div><h2 className="text-lg font-bold text-[#182332]">Change Role</h2><p className="mt-1 text-xs text-slate-500">Select a new role for {roleTarget.fullName}</p></div><button onClick={()=>setRoleTarget(null)} className="grid h-9 w-9 place-items-center rounded-full hover:bg-slate-100"><X size={19}/></button></div>
+            <div className="space-y-2">
+              {([{v:"ADMIN",l:"Admin",d:"Platform administration access"},{v:"BUYER",l:"Buyer",d:"Create RFQs and manage buyer orders"},{v:"SUPPLIER",l:"Supplier",d:"Receive RFQs and manage supplier orders"}] as const).map((x)=><button key={x.v} onClick={()=>setRoleValue(x.v)} className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left ${roleValue===x.v?"border-[#B99BFF] bg-[#F7F2FF]":"border-[#E2E6ED]"}`}><span className={`grid h-5 w-5 place-items-center rounded-full border ${roleValue===x.v?"border-[#5B13EC] bg-[#5B13EC] text-white":"border-slate-300"}`}>{roleValue===x.v&&<Check size={13}/>}</span><span><span className="block text-sm font-bold text-[#182332]">{x.l}</span><span className="block text-[11px] text-slate-500">{x.d}</span></span></button>)}
+            </div>
+            {roleTarget.memberships?.filter((m:any)=>m.isActive).length!==1 && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs text-amber-800">This user has multiple or no active organization memberships. Role change is blocked until membership access is reviewed.</p>}
+            {actionError && <p className="mt-3 rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{actionError}</p>}
+            <div className="mt-5 grid grid-cols-2 gap-2"><button onClick={()=>setRoleTarget(null)} disabled={actionBusy} className="h-11 rounded-xl border border-[#E2E6ED] text-sm font-bold text-slate-700">Cancel</button><button onClick={saveUserRole} disabled={actionBusy||roleTarget.memberships?.filter((m:any)=>m.isActive).length!==1||roleValue===roleOf(roleTarget)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#5B13EC] text-sm font-bold text-white disabled:opacity-50">{actionBusy?<LoaderCircle size={16} className="animate-spin"/>:""}Update Role</button></div>
+          </section>
+        </div>
+      )}
+
+      {/* Status / delete confirmation */}
+      {confirmTarget && (
+        <div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/50 p-0 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={()=>!actionBusy&&setConfirmTarget(null)}>
+          <section role="alertdialog" aria-modal="true" className="w-full max-w-md rounded-t-3xl bg-white p-6 text-center shadow-2xl sm:rounded-2xl" onClick={(e)=>e.stopPropagation()}>
+            <span className={`mx-auto mb-4 grid h-16 w-16 place-items-center rounded-full ${confirmTarget.action==="delete"?"bg-rose-50 text-rose-600":"bg-amber-50 text-amber-600"}`}>{confirmTarget.action==="delete"?<Trash2 size={29}/>:<AlertTriangle size={29}/>}</span>
+            <h2 className="text-xl font-bold text-[#182332]">{confirmTarget.action==="delete"?"Delete User?":confirmTarget.nextActive?"Activate Account?":"Deactivate Account?"}</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">{confirmTarget.action==="delete"?"Permanent deletion is allowed only when the account has no organization memberships or authored business records. Existing business data is protected.":confirmTarget.nextActive?"This will restore the user's access to STITCHGRID.":"This will disable the user's access to STITCHGRID. You can activate the account again later."}</p>
+            <p className="mt-2 text-sm font-bold text-[#182332]">{confirmTarget.user.fullName}</p>
+            {actionError && <p className="mt-3 rounded-xl bg-rose-50 p-3 text-left text-xs text-rose-700">{actionError}</p>}
+            <div className="mt-6 grid grid-cols-2 gap-2"><button onClick={()=>setConfirmTarget(null)} disabled={actionBusy} className="h-11 rounded-xl border border-[#E2E6ED] text-sm font-bold text-slate-700">Cancel</button><button onClick={executeUserAction} disabled={actionBusy} className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-bold text-white disabled:opacity-60 ${confirmTarget.action==="delete"||!confirmTarget.nextActive?"bg-rose-600":"bg-[#5B13EC]"}`}>{actionBusy?<LoaderCircle size={16} className="animate-spin"/>:""}{confirmTarget.action==="delete"?"Delete":confirmTarget.nextActive?"Activate":"Deactivate"}</button></div>
+          </section>
+        </div>
+      )}
+
     </section>
   );
 }

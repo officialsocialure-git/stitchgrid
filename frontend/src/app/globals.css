@@ -192,3 +192,54 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Admin-only design tokens and shared presentation rules. Buyer/Supplier UI is untouched. */
+.admin-shell {
+  --admin-accent: #5B13EC;
+  --admin-canvas: #F6F7FA;
+  --admin-ink: #182332;
+  --admin-muted: #48586C;
+  --admin-border: #E2E6ED;
+  background: var(--admin-canvas);
+  color: var(--admin-ink);
+}
+
+.admin-shell main h1 {
+  color: var(--admin-ink);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.admin-shell main h2 {
+  color: var(--admin-ink);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.admin-shell main input:focus-visible,
+.admin-shell main select:focus-visible,
+.admin-shell main textarea:focus-visible,
+.admin-shell main button:focus-visible,
+.admin-shell main a:focus-visible {
+  outline: 2px solid var(--admin-accent);
+  outline-offset: 2px;
+}
+
+.admin-shell main input:focus,
+.admin-shell main select:focus,
+.admin-shell main textarea:focus {
+  border-color: var(--admin-accent);
+}
+
+.admin-shell main .overflow-hidden.rounded-2xl.border,
+.admin-shell main .rounded-2xl.border {
+  border-color: var(--admin-border);
+  border-radius: 12px;
+}
+
+@media (max-width: 639px) {
+  .admin-shell main h1 { font-size: 22px; }
+}

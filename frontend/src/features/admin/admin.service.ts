@@ -11,7 +11,12 @@ export type AdminPageResult<T = any> = {
 export const adminService = {
   overview: () => api.get<any>("/admin/overview"),
   users: (params: URLSearchParams) => api.get<AdminPageResult>(`/admin/users?${params.toString()}`),
+  user: (id: string) => api.get<any>(`/admin/users/${id}`),
+  updateUser: (id: string, input: { fullName: string; email: string | null }) => api.patch(`/admin/users/${id}`, input),
+  updateUserRole: (id: string, role: "BUYER" | "SUPPLIER" | "ADMIN") => api.patch(`/admin/users/${id}/role`, { role }),
+  deleteUser: (id: string) => api.delete(`/admin/users/${id}`),
   organization: (id: string) => api.get<any>(`/admin/organizations/${id}`),
+  organizationActivity: (id: string) => api.get<any[]>(`/admin/organizations/${id}/activity`),
   updateUserStatus: (id: string, isActive: boolean) => api.patch(`/admin/users/${id}/status`, { isActive }),
   marketplace: (params: URLSearchParams) => api.get<AdminPageResult>(`/admin/marketplace?${params.toString()}`),
   moderateCatalog: (id: string, status: "APPROVED" | "REJECTED", note?: string) => api.patch(`/admin/marketplace/${id}/moderation`, { status, note }),

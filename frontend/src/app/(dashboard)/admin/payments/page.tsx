@@ -5,7 +5,8 @@ import {
   Coins, Clock3, Landmark, RotateCcw, Search, RefreshCw, Download,
   ChevronLeft, ChevronRight, Eye, MoreHorizontal, X, LoaderCircle,
   CheckSquare, Square, CheckCircle2, UserCheck, AlertTriangle,
-  Flag, ArrowLeftRight, FileSpreadsheet
+  Flag, ArrowLeftRight, FileSpreadsheet, Wallet, Filter, Package,
+  Activity, CircleDollarSign
 } from "lucide-react";
 import { adminService } from "@/features/admin/admin.service";
 import { SupplierPaymentSetups } from "@/features/admin/SupplierPaymentSetups";
@@ -116,6 +117,8 @@ export default function PaymentsPage() {
   const [activePayment, setActivePayment] = useState<Payment | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [detailTab, setDetailTab] = useState<"OVERVIEW" | "ORDER" | "MILESTONES" | "ACTIVITY">("OVERVIEW");
 
   const refresh = useCallback(() => setRefreshKey((v) => v + 1), []);
   useRealtimeSync({
@@ -219,41 +222,37 @@ export default function PaymentsPage() {
   };
 
   return (
-    <section className="space-y-6">
-      {/* Page Header with Supplier Onboarding & Export Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
-            Payments & Payouts
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Review test transactions, milestone progress, supplier setup submissions and simulated refunds. No real payment gateway or bank transfer is active.
-          </p>
+    <section className="space-y-4 md:space-y-6">
+      {/* Payments overview hero */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#321078] via-[#5B13EC] to-[#7C3AED] p-5 text-white shadow-lg shadow-violet-900/10 sm:p-6">
+        <div className="pointer-events-none absolute -right-8 -top-12 h-44 w-44 rounded-full border-[24px] border-white/10" />
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white/90"><Wallet size={13} /> Finance workspace</div>
+            <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">Payments & Payouts</h1>
+            <p className="mt-1 max-w-xl text-xs leading-relaxed text-violet-100 sm:text-sm">Manage transactions, milestone payments, collections and supplier payouts.</p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button onClick={exportCsv} disabled={!data.items.length} className="inline-flex h-10 items-center gap-2 rounded-xl bg-white px-3.5 text-xs font-bold text-[#5B13EC] shadow-sm transition hover:bg-violet-50 disabled:opacity-50"><Download size={15} /> Export</button>
+            <button onClick={refresh} className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-3.5 text-xs font-bold text-white transition hover:bg-white/20"><RefreshCw size={15} /> <span className="hidden sm:inline">Refresh</span></button>
+          </div>
         </div>
-
-        <div className="flex items-center gap-2.5">
-          <span className="inline-flex h-10 items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 text-xs font-bold text-amber-800">
-            <UserCheck size={16} /> Supplier payouts paused in test mode
-          </span>
-          <button
-            onClick={exportCsv}
-            disabled={!data.items.length}
-            className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#5B13EC] px-4 text-xs font-bold text-white shadow-xs transition hover:bg-[#4C0EC9] disabled:opacity-50"
-          >
-            <Download size={15} /> Export
-          </button>
+        <div className="relative mt-4 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-amber-100">
+          <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200/30 bg-amber-300/15 px-2.5 py-1.5"><AlertTriangle size={13} /> TEST PAYMENT MODE</span>
+          <span className="text-white/80">Mock transactions are simulated. No real money is collected or transferred.</span>
         </div>
       </div>
 
-      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        <strong>TEST PAYMENT MODE</strong> · Transactions marked MOCK_TEST are simulated records only. They do not represent money collected, settled or transferred.
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-xs text-amber-900">
+        <span><strong>Supplier payouts paused:</strong> Bank settlement is not active in test mode.</span>
+        <button onClick={() => setShowOnboardingModal(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-2 font-bold text-amber-800 hover:bg-amber-100"><UserCheck size={14} /> Supplier setup</button>
       </div>
 
       {/* 4 KPI Summary Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-4 xl:grid-cols-4">
         {/* Card 1: Total Collections */}
-        <div className="flex items-center gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs transition hover:shadow-sm">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#F3EFFC] text-[#5B13EC]">
+        <div className="flex min-w-0 flex-col items-start gap-2 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-xs transition hover:shadow-sm sm:flex-row sm:items-center sm:gap-4 sm:p-5">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#F3EFFC] text-[#5B13EC] sm:h-12 sm:w-12 sm:rounded-2xl">
             <Coins size={22} />
           </span>
           <div className="min-w-0 flex-1">
@@ -264,13 +263,13 @@ export default function PaymentsPage() {
               </span>
               
             </div>
-            <p className="mt-1 text-xs text-slate-400">Verified payments</p>
+            <p className="mt-1 text-[10px] text-slate-400 sm:text-xs">Successful records · incl. test mode</p>
           </div>
         </div>
 
         {/* Card 2: Pending Payments */}
-        <div className="flex items-center gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs transition hover:shadow-sm">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#FFFBEB] text-[#D97706]">
+        <div className="flex min-w-0 flex-col items-start gap-2 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-xs transition hover:shadow-sm sm:flex-row sm:items-center sm:gap-4 sm:p-5">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#FFFBEB] text-[#D97706] sm:h-12 sm:w-12 sm:rounded-2xl">
             <Clock3 size={22} />
           </span>
           <div className="min-w-0 flex-1">
@@ -287,8 +286,8 @@ export default function PaymentsPage() {
         </div>
 
         {/* Card 3: Supplier Payouts */}
-        <div className="flex items-center gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs transition hover:shadow-sm">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#ECFDF5] text-[#059669]">
+        <div className="flex min-w-0 flex-col items-start gap-2 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-xs transition hover:shadow-sm sm:flex-row sm:items-center sm:gap-4 sm:p-5">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#ECFDF5] text-[#059669] sm:h-12 sm:w-12 sm:rounded-2xl">
             <Landmark size={22} />
           </span>
           <div className="min-w-0 flex-1">
@@ -303,8 +302,8 @@ export default function PaymentsPage() {
         </div>
 
         {/* Card 4: Refunds */}
-        <div className="flex items-center gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs transition hover:shadow-sm">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#FEF2F2] text-[#DC2626]">
+        <div className="flex min-w-0 flex-col items-start gap-2 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-xs transition hover:shadow-sm sm:flex-row sm:items-center sm:gap-4 sm:p-5">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#FEF2F2] text-[#DC2626] sm:h-12 sm:w-12 sm:rounded-2xl">
             <RotateCcw size={22} />
           </span>
           <div className="min-w-0 flex-1">
@@ -324,7 +323,7 @@ export default function PaymentsPage() {
       {/* Main Container Card */}
       <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs">
         {/* Tabs Row */}
-        <div className="flex flex-wrap gap-2.5 border-b border-slate-100 px-6 py-4">
+        <div className="flex gap-2.5 overflow-x-auto border-b border-slate-100 px-3 py-3 sm:flex-wrap sm:px-6 sm:py-4">
           {tabs.map((t) => {
             const active = tab === t.value;
             return (
@@ -352,8 +351,24 @@ export default function PaymentsPage() {
           })}
         </div>
 
-        {/* Filter Inputs Bar */}
-        <div className="grid grid-cols-1 gap-2.5 border-b border-slate-100 bg-[#FAF9FD] p-4 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_180px_180px_180px_auto]">
+        {/* Mobile search and filters */}
+        <div className="border-b border-slate-100 bg-[#FAF9FD] p-3 md:hidden">
+          <div className="flex items-center gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} placeholder="Search transaction or order ID..." className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-xs outline-none focus:border-[#5B13EC]" />
+            </div>
+            <button type="button" onClick={() => setShowMobileFilters(v => !v)} aria-expanded={showMobileFilters} className={`relative inline-flex h-11 shrink-0 items-center gap-2 rounded-xl border px-3.5 text-xs font-bold ${showMobileFilters ? "border-[#5B13EC] bg-[#F3EDFF] text-[#5B13EC]" : "border-slate-200 bg-white text-slate-700"}`}><Filter size={15} /> Filters {(status !== "ALL" || dateRange !== "ALL") && <span className="absolute -right-1.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-[#5B13EC] px-1 text-[9px] text-white">{Number(status !== "ALL") + Number(dateRange !== "ALL")}</span>}</button>
+          </div>
+          {showMobileFilters && <div className="mt-3 grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-white p-3">
+            <label className="text-[11px] font-bold text-slate-600">Payment Status<select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700"><option value="ALL">All Statuses</option><option value="PAID">Success / Paid</option><option value="PENDING">Pending</option><option value="FAILED">Failed</option><option value="REFUNDED">Refunded</option><option value="REFUND_REQUESTED">Refund Requested</option></select></label>
+            <label className="text-[11px] font-bold text-slate-600">Date Range<select value={dateRange} onChange={e => { setDateRange(e.target.value); setPage(1); }} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700"><option value="ALL">All Time</option><option value="7D">Last 7 days</option><option value="30D">Last 30 days</option><option value="90D">Last 90 days</option></select></label>
+            <div className="grid grid-cols-2 gap-2"><button type="button" onClick={reset} className="h-10 rounded-lg border border-slate-200 text-xs font-bold text-slate-600">Reset</button><button type="button" onClick={() => setShowMobileFilters(false)} className="h-10 rounded-lg bg-[#5B13EC] text-xs font-bold text-white">Apply Filters</button></div>
+          </div>}
+        </div>
+
+        {/* Desktop filter inputs */}
+        <div className="hidden md:grid grid-cols-1 gap-2.5 border-b border-slate-100 bg-[#FAF9FD] p-4 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_180px_180px_180px_auto]">
           <div className="relative">
             <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -394,6 +409,8 @@ export default function PaymentsPage() {
             <option value="PAID">Paid / Verified</option>
             <option value="PENDING">Pending</option>
             <option value="FAILED">Failed</option>
+            <option value="REFUNDED">Refunded</option>
+            <option value="REFUND_REQUESTED">Refund Requested</option>
           </select>
 
           <select
@@ -436,7 +453,29 @@ export default function PaymentsPage() {
         ) : data.items.length === 0 ? (
           <div className="p-12 text-center text-sm text-slate-500">No payment records found.</div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Mobile transaction cards */}
+          <div className="space-y-3 p-3 md:hidden">
+            {data.items.map((payment) => {
+              const isRefunded = payment.status === "REFUNDED";
+              const isPaid = !isRefunded && !["REFUND_REQUESTED", "PROCESSING"].includes(payment.status) && (["PAID", "CAPTURED", "SETTLED"].includes(payment.status) || payment.signatureVerified);
+              const isPending = ["PENDING", "CREATED", "REFUND_REQUESTED", "PROCESSING"].includes(payment.status);
+              const statusLabel = isRefunded ? "Refunded" : isPending ? (payment.status === "REFUND_REQUESTED" ? "Refund requested" : "Pending") : isPaid ? (payment.provider === "MOCK_TEST" ? "Test successful" : "Success") : payment.status === "FAILED" ? "Failed" : payment.status;
+              const statusClass = isRefunded ? "bg-rose-50 text-rose-700" : isPending ? "bg-amber-50 text-amber-800" : isPaid ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700";
+              const milestoneName = payment.paymentMilestone?.title || (payment.refunds?.length ? "Refund" : "Collection");
+              return <article key={payment.id} className="rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2.5"><span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${isRefunded ? "bg-rose-50 text-rose-600" : isPending ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600"}`}>{isRefunded ? <RotateCcw size={18} /> : isPending ? <Clock3 size={18} /> : <Download size={18} />}</span><div className="min-w-0"><p className="truncate text-sm font-extrabold text-slate-900">{shortTxId(payment)}</p><p className="mt-0.5 text-[10px] text-slate-500">Order: {payment.purchaseOrder?.poNumber || "—"}</p></div></div>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${statusClass}`}>{statusLabel}</span>
+                </div>
+                <div className="mt-3 flex items-end justify-between gap-2 border-t border-slate-100 pt-3"><div><p className="text-[10px] font-semibold text-slate-400">Amount</p><p className="mt-0.5 text-lg font-black text-slate-950">{formatMoney(payment.amount, payment.currency)}</p></div><div className="text-right"><p className="text-[10px] font-semibold text-slate-400">{milestoneName}</p><p className="mt-0.5 text-[11px] font-medium text-slate-600">{new Date(payment.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p></div></div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]"><div className="min-w-0"><p className="text-slate-400">Buyer</p><p className="truncate font-bold text-slate-700">{payment.purchaseOrder?.buyer?.name || "—"}</p></div><div className="min-w-0"><p className="text-slate-400">Supplier</p><p className="truncate font-bold text-slate-700">{payment.purchaseOrder?.supplier?.name || "—"}</p></div></div>
+                {payment.provider === "MOCK_TEST" && <p className="mt-2 text-[9px] font-bold tracking-wide text-amber-700">TEST SIMULATOR · NO REAL MONEY</p>}
+                <div className="mt-3 flex items-center justify-between gap-2"><button type="button" onClick={() => toggleSelect(payment.id)} className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">{selectedIds.includes(payment.id) ? <CheckSquare size={15} className="text-[#5B13EC]" /> : <Square size={15} />} Select</button><button type="button" onClick={() => { setDetailTab("OVERVIEW"); setActivePayment(payment); }} className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#5B13EC] px-4 text-xs font-bold text-white"><Eye size={14} /> View Details</button></div>
+              </article>;
+            })}
+          </div>
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full min-w-[1100px] text-left text-xs">
               <thead className="bg-[#FAF9FD] text-[11px] font-bold text-slate-600 border-b border-slate-100">
                 <tr>
@@ -463,12 +502,9 @@ export default function PaymentsPage() {
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {data.items.map((payment) => {
                   const isChecked = selectedIds.includes(payment.id);
-                  const isPaid =
-                    payment.status === "PAID" ||
-                    payment.status === "CAPTURED" ||
-                    payment.status === "SETTLED" ||
-                    payment.signatureVerified;
-                  const isPending = payment.status === "PENDING" || payment.status === "CREATED";
+                  const isRefunded = payment.status === "REFUNDED";
+                  const isPaid = !isRefunded && ["PAID", "CAPTURED", "SETTLED"].includes(payment.status) && (payment.provider === "MOCK_TEST" || payment.signatureVerified);
+                  const isPending = ["PENDING", "CREATED", "REFUND_REQUESTED", "PROCESSING"].includes(payment.status);
                   const milestoneName =
                     payment.paymentMilestone?.title || (payment.refunds?.length ? "Refund" : "Advance");
                   const isRefund = milestoneName === "Refund";
@@ -547,7 +583,9 @@ export default function PaymentsPage() {
 
                       {/* Payment Status */}
                       <td className="px-4 py-3.5">
-                        {isPaid ? (
+                        {isRefunded ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-rose-200/60 bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700"><RotateCcw size={11} /> Refunded</span>
+                        ) : isPaid ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 border border-emerald-200/60">
                             <CheckCircle2 size={11} /> {payment.provider === "MOCK_TEST" ? "Test successful" : "Verified"}
                           </span>
@@ -571,7 +609,7 @@ export default function PaymentsPage() {
                       <td className="relative px-4 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
-                            onClick={() => setActivePayment(payment)}
+                            onClick={() => { setDetailTab("OVERVIEW"); setActivePayment(payment); }}
                             className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
                           >
                             <Eye size={13} /> View
@@ -589,6 +627,7 @@ export default function PaymentsPage() {
                           <div className="absolute right-4 top-10 z-20 w-48 rounded-xl border border-slate-200 bg-white p-1.5 text-left shadow-xl">
                             <button
                               onClick={() => {
+                                setDetailTab("OVERVIEW");
                                 setActivePayment(payment);
                                 setMenuId(null);
                               }}
@@ -605,6 +644,7 @@ export default function PaymentsPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
 
         {/* Footer Pagination */}
@@ -673,7 +713,7 @@ export default function PaymentsPage() {
           onClick={() => setActivePayment(null)}
         >
           <div
-            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+            className="w-full max-w-xl max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between border-b border-slate-100 pb-4">
@@ -689,41 +729,20 @@ export default function PaymentsPage() {
               </button>
             </div>
 
-            <div className="mt-5 space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4">
-                <div>
-                  <span className="text-slate-400 font-semibold uppercase">Payment Type</span>
-                  <p className="font-bold text-slate-900 mt-0.5">{activePayment.provider === "MOCK_TEST" ? "TEST SIMULATOR · NO REAL MONEY" : activePayment.provider}</p>
+            <div className="mt-4 flex gap-1 overflow-x-auto border-b border-slate-100 text-xs">
+              {([ ["OVERVIEW", "Overview"], ["ORDER", "Order"], ["MILESTONES", "Milestones"], ["ACTIVITY", "Activity"] ] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setDetailTab(value)} className={`shrink-0 border-b-2 px-3 py-3 font-bold ${detailTab === value ? "border-[#5B13EC] text-[#5B13EC]" : "border-transparent text-slate-500"}`}>{label}</button>)}
+            </div>
+            <div className="mt-4 max-h-[55vh] space-y-3 overflow-y-auto text-xs">
+              {detailTab === "OVERVIEW" && <div className="rounded-xl border border-slate-200 p-4">
+                <h3 className="mb-3 flex items-center gap-2 text-sm font-extrabold text-slate-900"><CircleDollarSign size={17} className="text-[#5B13EC]" /> Transaction Information</h3>
+                <div className="space-y-2.5">
+                  {[["Transaction ID", activePayment.id], ["Provider Reference", activePayment.razorpayPaymentId || activePayment.providerRef || "—"], ["Type", activePayment.provider === "MOCK_TEST" ? "Test Simulator" : activePayment.provider], ["Amount", formatMoney(activePayment.amount, activePayment.currency)], ["Status", activePayment.status], ["Payment Method", activePayment.paymentMethod || "—"], ["Date & Time", new Date(activePayment.createdAt).toLocaleString("en-IN")], ["Verification", activePayment.provider === "MOCK_TEST" ? "Simulated · Not provider verified" : activePayment.signatureVerified ? "Verified" : "Pending / N/A"]].map(([label, value]) => <div key={label} className="flex items-start justify-between gap-3 border-b border-slate-100 pb-2 last:border-0"><span className="text-slate-500">{label}</span><span className="max-w-[62%] break-all text-right font-bold text-slate-900">{value}</span></div>)}
                 </div>
-                <div>
-                  <span className="text-slate-400 font-semibold uppercase">Provider Reference</span>
-                  <p className="font-bold font-mono text-slate-900 mt-0.5">
-                    {activePayment.razorpayPaymentId || activePayment.providerRef || "—"}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-semibold uppercase">Amount</span>
-                  <p className="font-bold font-mono text-slate-900 mt-0.5">
-                    {formatMoney(activePayment.amount, activePayment.currency)}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-semibold uppercase">Status</span>
-                  <p className="font-bold text-[#5B13EC] mt-0.5">{activePayment.status}</p>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-semibold uppercase">Order PO</span>
-                  <p className="font-bold text-slate-900 mt-0.5">
-                    {activePayment.purchaseOrder?.poNumber || "PO-ACTIVE"}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-semibold uppercase">Verification</span>
-                  <p className="font-bold text-slate-900 mt-0.5">
-                    {activePayment.provider === "MOCK_TEST" ? "Simulated result (not a real provider verification)" : activePayment.signatureVerified ? "Yes" : "Pending / N/A"}
-                  </p>
-                </div>
-              </div>
+                {activePayment.provider === "MOCK_TEST" && <p className="mt-3 rounded-lg bg-amber-50 p-2.5 text-[10px] font-bold text-amber-800">TEST SIMULATOR · NO REAL MONEY IS COLLECTED OR TRANSFERRED.</p>}
+              </div>}
+              {detailTab === "ORDER" && <div className="rounded-xl border border-slate-200 p-4"><h3 className="mb-3 flex items-center gap-2 text-sm font-extrabold text-slate-900"><Package size={17} className="text-[#5B13EC]" /> Related Order</h3><div className="space-y-3"><div><p className="text-slate-500">Purchase Order</p><p className="mt-0.5 font-bold text-slate-900">{activePayment.purchaseOrder?.poNumber || "—"}</p></div><div><p className="text-slate-500">Buyer</p><p className="mt-0.5 font-bold text-slate-900">{activePayment.purchaseOrder?.buyer?.name || "—"}</p></div><div><p className="text-slate-500">Supplier</p><p className="mt-0.5 font-bold text-slate-900">{activePayment.purchaseOrder?.supplier?.name || "—"}</p></div><div><p className="text-slate-500">Order Value</p><p className="mt-0.5 font-bold text-slate-900">{activePayment.purchaseOrder ? formatMoney(activePayment.purchaseOrder.totalAmount, activePayment.purchaseOrder.currency) : "—"}</p></div></div></div>}
+              {detailTab === "MILESTONES" && <div className="rounded-xl border border-slate-200 p-4"><h3 className="mb-3 flex items-center gap-2 text-sm font-extrabold text-slate-900"><Flag size={17} className="text-[#5B13EC]" /> Milestone Payment</h3>{activePayment.paymentMilestone ? <><p className="font-bold text-slate-900">{activePayment.paymentMilestone.title}</p><p className="mt-1 text-slate-500">Sequence {activePayment.paymentMilestone.sequence}</p><span className="mt-3 inline-flex rounded-full bg-violet-50 px-3 py-1 font-bold text-violet-700">{activePayment.paymentMilestone.status}</span></> : <p className="text-slate-500">This transaction is not linked to a payment milestone.</p>}</div>}
+              {detailTab === "ACTIVITY" && <div className="rounded-xl border border-slate-200 p-4"><h3 className="mb-3 flex items-center gap-2 text-sm font-extrabold text-slate-900"><Activity size={17} className="text-[#5B13EC]" /> Transaction Activity</h3><div className="space-y-3"><div className="flex gap-3"><span className="mt-0.5 h-2.5 w-2.5 rounded-full bg-violet-500" /><div><p className="font-bold text-slate-900">Transaction created</p><p className="text-slate-500">{new Date(activePayment.createdAt).toLocaleString("en-IN")}</p></div></div>{activePayment.capturedAt && <div className="flex gap-3"><span className="mt-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500" /><div><p className="font-bold text-slate-900">Payment captured</p><p className="text-slate-500">{new Date(activePayment.capturedAt).toLocaleString("en-IN")}</p></div></div>}{activePayment.settledAt && <div className="flex gap-3"><span className="mt-0.5 h-2.5 w-2.5 rounded-full bg-blue-500" /><div><p className="font-bold text-slate-900">Settlement recorded</p><p className="text-slate-500">{new Date(activePayment.settledAt).toLocaleString("en-IN")}</p></div></div>}{activePayment.refunds?.map(refund => <div key={refund.id} className="flex gap-3"><span className="mt-0.5 h-2.5 w-2.5 rounded-full bg-rose-500" /><div><p className="font-bold text-slate-900">Refund · {refund.status}</p><p className="text-slate-500">{new Date(refund.createdAt).toLocaleString("en-IN")} · {formatMoney(refund.amount, activePayment.currency)}</p>{refund.reason && <p className="mt-1 text-slate-500">{refund.reason}</p>}</div></div>)}</div></div>}
             </div>
 
             <div className="mt-6 flex justify-end border-t border-slate-100 pt-4">

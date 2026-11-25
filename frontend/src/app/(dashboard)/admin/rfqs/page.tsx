@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   FileText, Hourglass, CheckCircle2, XCircle, Search, RefreshCw, Download,
   ChevronLeft, ChevronRight, MoreHorizontal, Eye, LoaderCircle, ArrowUp,
-  Plus, CheckSquare, Square, Clock3, X
+  Plus, CheckSquare, Square, Clock3, X, SlidersHorizontal
 } from "lucide-react";
 import { adminService } from "@/features/admin/admin.service";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
@@ -54,6 +54,7 @@ export default function AdminRfqsPage() {
   const [activeRfq, setActiveRfq] = useState<Rfq | null>(null);
   const [busyId, setBusyId] = useState("");
   const [menuId, setMenuId] = useState<string | null>(null);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const refresh = useCallback(() => setRefreshKey((v) => v + 1), []);
   useRealtimeSync({
@@ -169,9 +170,9 @@ export default function AdminRfqsPage() {
   };
 
   return (
-    <section className="space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <section className="min-w-0 space-y-4 md:space-y-6">
+      {/* Desktop page header; mobile uses the compact hero below. */}
+      <div className="hidden flex-wrap items-center justify-between gap-4 md:flex">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
             RFQs (Buyer Requests)
@@ -189,8 +190,22 @@ export default function AdminRfqsPage() {
         </Link>
       </div>
 
+      {/* Mobile RFQ hero — intentionally text/icon only, no product imagery. */}
+      <div className="overflow-hidden rounded-[22px] bg-gradient-to-br from-[#4B0BCB] via-[#6415E8] to-[#7B2CF5] p-5 text-white shadow-[0_10px_24px_rgba(91,19,236,0.18)] md:hidden">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-[21px] font-extrabold tracking-tight">RFQs (Buyer Requests)</h1>
+            <p className="mt-1 max-w-[250px] text-[13px] leading-5 text-white/85">Monitor buyer requirements, supplier responses and RFQ progress.</p>
+          </div>
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white/15"><FileText size={27} /></span>
+        </div>
+        <Link href="/rfqs" className="mt-4 inline-flex h-10 items-center gap-2 rounded-xl bg-white px-4 text-sm font-bold text-[#5B13EC] shadow-sm">
+          <Plus size={17} /> Create RFQ
+        </Link>
+      </div>
+
       {/* 4 KPI Summary Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="hidden grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 md:grid">
         {/* Card 1: Total RFQs */}
         <div className="flex items-center gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs transition hover:shadow-sm">
           <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#F3EFFC] text-[#5B13EC]">
@@ -259,10 +274,28 @@ export default function AdminRfqsPage() {
         </div>
       </div>
 
+      {/* Mobile KPI cards */}
+      <div className="grid grid-cols-2 gap-2.5 md:hidden">
+        {[
+          { label: "Total RFQs", value: data.stats.total, icon: FileText, tone: "bg-[#F0EAFE] text-[#5B13EC]" },
+          { label: "Open RFQs", value: data.stats.open, icon: Hourglass, tone: "bg-amber-50 text-amber-600" },
+          { label: "Awarded", value: data.stats.awarded, icon: CheckCircle2, tone: "bg-emerald-50 text-emerald-600" },
+          { label: "Closed", value: data.stats.closed, icon: XCircle, tone: "bg-rose-50 text-rose-600" },
+        ].map((metric) => (
+          <div key={metric.label} className="flex min-w-0 items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-[0_2px_8px_rgba(24,35,50,0.03)]">
+            <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${metric.tone}`}><metric.icon size={20} /></span>
+            <div className="min-w-0">
+              <p className="truncate text-[11px] font-semibold text-slate-500">{metric.label}</p>
+              <p className="mt-0.5 text-[22px] font-extrabold leading-6 text-slate-900">{loading ? "—" : metric.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Main Container Card */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs">
-        {/* Tabs Row with Export & Refresh Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-6 py-4">
+      <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs">
+        {/* Tabs Row with Export & Refresh Actions — desktop */}
+        <div className="hidden flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-6 py-4 md:flex">
           <div className="flex flex-wrap gap-2.5">
             {tabs.map((t) => {
               const active = tab === t.value;
@@ -306,8 +339,57 @@ export default function AdminRfqsPage() {
           </div>
         </div>
 
-        {/* Filter Inputs Bar */}
-        <div className="grid grid-cols-1 gap-2.5 border-b border-slate-100 bg-[#FAF9FD] p-4 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_180px_180px_180px_auto]">
+        {/* Mobile status filters */}
+        <div className="border-b border-slate-100 p-3 md:hidden">
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {tabs.map((t) => {
+              const active = tab === t.value;
+              return (
+                <button key={t.value} onClick={() => { setTab(t.value); setPage(1); }} className={`inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-xs font-bold transition ${active ? "bg-[#5B13EC] text-white shadow-sm" : "border border-slate-200 bg-white text-slate-600"}`}>
+                  <t.icon size={14} /> {t.label.replace(" RFQs", "")} <span className={active ? "text-white/75" : "text-slate-400"}>({t.count})</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} placeholder="Search RFQ, buyer or product..." className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-[13px] outline-none focus:border-[#5B13EC]" />
+            </div>
+            <button aria-label="Toggle RFQ filters" aria-expanded={mobileFiltersOpen} onClick={() => setMobileFiltersOpen((v) => !v)} className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl border ${mobileFiltersOpen ? "border-[#5B13EC] bg-[#F4EFFF] text-[#5B13EC]" : "border-slate-200 bg-white text-slate-600"}`}>
+              <SlidersHorizontal size={18} />
+            </button>
+            <button aria-label="Export RFQs as CSV" onClick={exportCsv} disabled={!data.items.length} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#5B13EC] text-white disabled:opacity-40">
+              <Download size={18} />
+            </button>
+          </div>
+          {mobileFiltersOpen && (
+            <div className="mt-3 grid grid-cols-1 gap-2 rounded-xl bg-[#FAF9FD] p-3">
+              <label className="text-[11px] font-semibold text-slate-500">Category
+                <select value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700">
+                  <option value="ALL">All categories</option>{data.categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </label>
+              <label className="text-[11px] font-semibold text-slate-500">Status
+                <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700">
+                  <option value="ALL">All statuses</option><option value="OPEN">Open</option><option value="AWARDED">Awarded</option><option value="CLOSED">Closed</option><option value="CANCELLED">Cancelled</option>
+                </select>
+              </label>
+              <label className="text-[11px] font-semibold text-slate-500">Created date
+                <select value={dateRange} onChange={(e) => { setDateRange(e.target.value); setPage(1); }} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700">
+                  <option value="ALL">All time</option><option value="7D">Last 7 days</option><option value="30D">Last 30 days</option><option value="90D">Last 90 days</option>
+                </select>
+              </label>
+              <div className="flex gap-2">
+                <button onClick={() => { reset(); setMobileFiltersOpen(false); }} className="h-10 flex-1 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-600">Reset</button>
+                <button onClick={() => setMobileFiltersOpen(false)} className="h-10 flex-1 rounded-lg bg-[#5B13EC] text-xs font-bold text-white">Apply filters</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Filter Inputs Bar — desktop */}
+        <div className="hidden grid-cols-1 gap-2.5 border-b border-slate-100 bg-[#FAF9FD] p-4 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_180px_180px_180px_auto] md:grid">
           <div className="relative">
             <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -377,7 +459,51 @@ export default function AdminRfqsPage() {
           </button>
         </div>
 
-        {/* Data Table */}
+        {/* Mobile RFQ cards — text-only, no product images */}
+        <div className="space-y-3 p-3 md:hidden">
+          {error ? (
+            <div className="rounded-xl bg-rose-50 p-4 text-sm text-rose-700">{error}<button onClick={refresh} className="ml-2 font-bold underline">Try again</button></div>
+          ) : loading ? (
+            <div className="flex min-h-36 items-center justify-center gap-2 text-sm text-slate-500"><LoaderCircle size={19} className="animate-spin text-[#5B13EC]" /> Loading RFQs...</div>
+          ) : data.items.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">No buyer requests found.</div>
+          ) : data.items.map((item) => {
+            const quotesCount = item._count?.quotations ?? 0;
+            const isAwarded = item.status === "AWARDED";
+            const isOpen = item.status === "OPEN";
+            return (
+              <article key={item.id} className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-[0_2px_8px_rgba(24,35,50,0.035)]">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="break-words text-[14px] font-extrabold leading-5 text-slate-900">{item.title}</p>
+                    <p className="mt-1 font-mono text-[10px] text-slate-400">RFQ-2026-{item.id.slice(0, 5).toUpperCase()}</p>
+                  </div>
+                  <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold ${isAwarded ? "bg-emerald-50 text-emerald-700" : isOpen ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-600"}`}>
+                    {isAwarded ? <CheckCircle2 size={11} /> : <Clock3 size={11} />}{item.status.replace("_", " ")}
+                  </span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-slate-100 pt-3 text-xs">
+                  <div className="min-w-0"><p className="text-[10px] font-medium text-slate-400">Buyer</p><p className="mt-0.5 truncate font-semibold text-slate-700">{item.buyer?.name || "Corporate Buyer"}</p></div>
+                  <div className="min-w-0"><p className="text-[10px] font-medium text-slate-400">Category</p><p className="mt-0.5 truncate font-semibold text-slate-700">{item.garmentType || "Apparel"}</p></div>
+                  <div><p className="text-[10px] font-medium text-slate-400">Quantity</p><p className="mt-0.5 font-semibold text-slate-700">{Number(item.targetQuantity || 0).toLocaleString("en-IN")} pcs</p></div>
+                  <div><p className="text-[10px] font-medium text-slate-400">Responses</p><Link href={`/admin/rfqs/${item.id}`} className="mt-0.5 inline-block font-bold text-[#5B13EC]">{quotesCount} {quotesCount === 1 ? "Quote" : "Quotes"}</Link></div>
+                </div>
+                <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
+                  <span className="text-[10px] text-slate-400">Created {new Date(item.createdAt).toLocaleDateString("en-IN")}</span>
+                  <div className="flex items-center gap-2">
+                    <Link href={`/admin/rfqs/${item.id}?tab=RESPONSES`} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#5B13EC] bg-white px-3 text-xs font-bold text-[#5B13EC]"><FileText size={14} /> View Quotes ({quotesCount})</Link>
+                    <Link href={`/admin/rfqs/${item.id}`} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#5B13EC] px-3 text-xs font-bold text-white"><Eye size={14} /> Details</Link>
+                    <button aria-label={`More actions for ${item.title}`} onClick={() => setMenuId(menuId === item.id ? null : item.id)} className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-600"><MoreHorizontal size={17} /></button>
+                  </div>
+                </div>
+                {menuId === item.id && <div className="mt-2 flex justify-end border-t border-slate-100 pt-2"><button onClick={() => closeRfq(item)} disabled={busyId === item.id || item.status === "CLOSED"} className="rounded-lg px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-40">{busyId === item.id ? "Updating…" : "Close RFQ"}</button></div>}
+              </article>
+            );
+          })}
+        </div>
+
+        {/* Data Table — desktop */}
+        <div className="hidden md:block">
         {error ? (
           <div className="p-10 text-center text-sm text-rose-700">
             {error}
@@ -510,6 +636,12 @@ export default function AdminRfqsPage() {
                           >
                             <Eye size={13} /> View
                           </button>
+                          <Link
+                            href={`/admin/rfqs/${item.id}?tab=RESPONSES`}
+                            className="inline-flex items-center gap-1 rounded-xl border border-[#5B13EC]/25 bg-[#F7F3FF] px-3 py-1.5 text-xs font-bold text-[#5B13EC] hover:bg-[#F0EAFE] transition"
+                          >
+                            <FileText size={13} /> Quotes ({quotesCount})
+                          </Link>
 
                           <button
                             disabled={busyId === item.id}
@@ -546,6 +678,7 @@ export default function AdminRfqsPage() {
             </table>
           </div>
         )}
+        </div>
 
         {/* Footer Pagination */}
         <div className="flex flex-col gap-3 border-t border-slate-100 px-6 py-4 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
