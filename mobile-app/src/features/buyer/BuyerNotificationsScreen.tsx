@@ -108,7 +108,7 @@ export default function BuyerNotificationsScreen() {
       <AppHeader
         isBack
         title="Notifications"
-        showLogo={false}
+        showLogo
         rightAction={
           <Pressable
             onPress={() => void load()}

@@ -13,6 +13,8 @@ import BuyerChatScreen from '@/features/buyer/BuyerChatScreen';
 import OrganizationSettingsScreen from '@/features/shared/OrganizationSettingsScreen';
 import SupplierAccountSettingsScreen from '@/features/supplier/SupplierAccountSettingsScreen';
 import SupplierBusinessProfileScreen from '@/features/supplier/SupplierBusinessProfileScreen';
+import SupplierTrendyCollectionScreen from '@/features/supplier/SupplierTrendyCollectionScreen';
+import SupplierReelsScreen from '@/features/supplier/SupplierReelsScreen';
 import SupplierBusinessGalleryScreen from '@/features/supplier/SupplierBusinessGalleryScreen';
 import SupplierProductsPortfolioScreen from '@/features/supplier/SupplierProductsPortfolioScreen';
 import SupplierCertificationsScreen from '@/features/supplier/SupplierCertificationsScreen';
@@ -37,6 +39,8 @@ export default function SupplierSectionScreen() {
   if (section === 'notifications') return <BuyerNotificationsScreen />;
   if (section === 'chat') return <BuyerChatScreen />;
   if (section === 'business-profile') return <SupplierBusinessProfileScreen />;
+  if (section === 'trendy-collection') return <SupplierTrendyCollectionScreen />;
+  if (section === 'supplier-reels') return <SupplierReelsScreen />;
   if (section === 'business-gallery') return <SupplierBusinessGalleryScreen />;
   if (section === 'catalog') return <SupplierProductsPortfolioScreen />;
   if (section === 'business-certifications') return <SupplierCertificationsScreen />;

@@ -140,6 +140,7 @@ model Organization {
   supplierPaymentProfile SupplierPaymentProfile?
   supplierTestimonials   SupplierTestimonial[]
   trendyCollection       TrendyCollection?
+  supplierReels          SupplierReel[]
   rfqs                   Rfq[]
   quotes                 Quotation[]
   cartItems              CartItem[]
@@ -163,6 +164,7 @@ model TrendyCollection {
   name           String                 @db.VarChar(120)
   description    String?                @db.VarChar(500)
   imageUrl       String                 @db.VarChar(2000)
+  images         Json?
   isActive       Boolean                @default(false)
   status         TrendyCollectionStatus @default(PENDING)
   moderationNote String?                @db.VarChar(500)
@@ -171,6 +173,61 @@ model TrendyCollection {
   organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([status, isActive, updatedAt])
+}
+
+enum SupplierReelStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  HIDDEN
+}
+
+model SupplierReel {
+  id              String                @id @default(cuid())
+  organizationId  String
+  title           String                @db.VarChar(120)
+  videoUrl        String                @db.VarChar(2000)
+  durationSeconds Int
+  status          SupplierReelStatus    @default(PENDING)
+  isActive        Boolean               @default(false)
+  moderationNote  String?               @db.VarChar(500)
+  impressionCount Int                   @default(0)
+  viewCount       Int                   @default(0)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  products        SupplierReelProduct[]
+  events          SupplierReelEvent[]
+
+  @@index([status, isActive, createdAt])
+  @@index([organizationId, createdAt])
+  @@index([impressionCount, status, isActive])
+}
+
+model SupplierReelProduct {
+  id            String       @id @default(cuid())
+  reelId        String
+  catalogItemId String
+  createdAt     DateTime     @default(now())
+  reel          SupplierReel @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  catalogItem   CatalogItem  @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+
+  @@unique([reelId, catalogItemId])
+  @@index([catalogItemId])
+}
+
+model SupplierReelEvent {
+  id           String       @id @default(cuid())
+  eventKey     String       @unique
+  reelId       String
+  viewerKey    String       @db.VarChar(120)
+  eventType    String       @db.VarChar(20)
+  watchSeconds Int          @default(0)
+  createdAt    DateTime     @default(now())
+  reel         SupplierReel @relation(fields: [reelId], references: [id], onDelete: Cascade)
+
+  @@index([viewerKey, eventType, createdAt])
+  @@index([reelId, eventType, createdAt])
 }
 
 model OrganizationMember {
@@ -309,6 +366,7 @@ model CatalogItem {
   priceTiers        CatalogItemPriceTier[]
   cartItems         CartItem[]
   rfqItems          RfqItem[]
+  reelLinks         SupplierReelProduct[]
 
   @@index([supplierProfileId, createdAt])
 }
@@ -396,6 +454,7 @@ model Rfq {
   submissionGroupId String?
   title             String
   description       String?             @db.Text
+  sampleImageUrl    String?             @db.Text
   garmentType       String?
   fabricSpec        String?             @db.Text
   targetPrice       Decimal?            @db.Decimal(12, 2)

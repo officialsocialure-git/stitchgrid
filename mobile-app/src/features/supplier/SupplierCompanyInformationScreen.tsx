@@ -166,7 +166,7 @@ export default function SupplierCompanyInformationScreen() {
 
   return (
     <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <AppHeader isBack role="SUPPLIER" title="Company Information" showLogo={false} />
+      <AppHeader isBack role="SUPPLIER" title="Company Information" showLogo />
       {loading ? (
         <View style={s.state}><ActivityIndicator size="large" color={ui.accent} /><Text style={s.muted}>Loading company information…</Text></View>
       ) : (

@@ -48,7 +48,7 @@ export default function OrganizationSettingsScreen(){
     role={role === 'SUPPLIER' ? 'SUPPLIER' : 'BUYER'}
     activeSection="organization-settings"
     title={role === 'SUPPLIER' ? 'Factory Settings' : 'Organization Settings'}
-    showLogo={false}
+    showLogo
   />
   <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
   <Text style={s.heading}>{role==='SUPPLIER'?'Company Profile & Factory Settings':'Organization Profile & Compliance'}</Text>

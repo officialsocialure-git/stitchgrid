@@ -28,10 +28,12 @@ type Quote = {
   moq?: number | null;
   terms?: string | null;
   status: string;
-  items?: { id: string; description: string; quantity: number; unitPrice: number | string }[];
+  items?: { id: string; rfqItemId?: string; description: string; quantity: number; unitPrice: number | string }[];
+  rfqId?: string; rfqTitle?: string; rfqTargetDate?: string | null; rfqFabricSpec?: string | null;
   supplier?: { id: string; name: string; city?: string | null };
 };
 type Rfq = {
+  submissionGroupId?: string | null;
   id: string;
   title: string;
   status: string;
@@ -39,7 +41,7 @@ type Rfq = {
   targetDate?: string | null;
   fabricSpec?: string | null;
   description?: string | null;
-  items?: { id: string; name: string; quantity: number; unit: string }[];
+  items?: { id: string; catalogItemId?: string | null; name: string; quantity: number; unit: string; specifications?: string | null }[];
   quotations?: Quote[];
 };
 
@@ -87,7 +89,8 @@ export default function BuyerMyOffersScreen() {
         (list.find(r => (r.quotations || []).length > 0)?.id || list[0]?.id || '');
       setActiveRfqId(current);
       const currentRfq = list.find(r => r.id === current);
-      const quotes = currentRfq?.quotations || [];
+      const relatedRfqs = currentRfq?.submissionGroupId ? list.filter(r => r.submissionGroupId === currentRfq.submissionGroupId) : currentRfq ? [currentRfq] : [];
+      const quotes = relatedRfqs.flatMap(r => (r.quotations || []).map(q => ({ ...q, rfqId: r.id, rfqTitle: r.title, rfqTargetDate: r.targetDate, rfqFabricSpec: r.fabricSpec })));
       setSelectedQuoteId(previous => quotes.some(q => q.id === previous) ? previous : (quotes.find(q => q.status === 'ACCEPTED')?.id || quotes[0]?.id || ''));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to load supplier offers.');
@@ -106,13 +109,16 @@ export default function BuyerMyOffersScreen() {
   useRealtimeRefresh(load, ['*']);
 
   const activeRfq = rfqs.find(r => r.id === activeRfqId) || null;
-  const quotes = activeRfq?.quotations || [];
+  const relatedRfqs = activeRfq?.submissionGroupId ? rfqs.filter(r => r.submissionGroupId === activeRfq.submissionGroupId) : activeRfq ? [activeRfq] : [];
+  const quotes = relatedRfqs.flatMap(r => (r.quotations || []).map(q => ({ ...q, rfqId: r.id, rfqTitle: r.title, rfqTargetDate: r.targetDate, rfqFabricSpec: r.fabricSpec })));
   const selectedQuote = quotes.find(q => q.id === selectedQuoteId) || quotes[0] || null;
-  const accepted = activeRfq?.status === 'AWARDED' || quotes.some(q => q.status === 'ACCEPTED');
+  const accepted = selectedQuote?.status === 'ACCEPTED';
   const comparableQuotes = quotes.filter(q => q.status !== 'REJECTED' && q.status !== 'WITHDRAWN');
   const bestValueId = useMemo(() => {
     if (!activeRfq || comparableQuotes.length === 0) return '';
-    return [...comparableQuotes].sort((a,b) => unitPrice(a, activeRfq.targetQuantity) - unitPrice(b, activeRfq.targetQuantity))[0]?.id || '';
+    const productMix = comparableQuotes.map(q => (q.items || []).map(item => item.description).sort().join(String.fromCharCode(124)));
+    if (new Set(productMix).size > 1) return '';
+    return [...comparableQuotes].sort((a,b) => Number(a.totalAmount) - Number(b.totalAmount))[0]?.id || '';
   }, [activeRfq, comparableQuotes]);
   const fastestId = useMemo(() => [...comparableQuotes].sort((a,b) => a.leadTimeDays - b.leadTimeDays)[0]?.id || '', [comparableQuotes]);
 
@@ -126,13 +132,13 @@ export default function BuyerMyOffersScreen() {
     if (!selectedQuote || !activeRfq || accepted) return;
     Alert.alert(
       'Accept supplier quotation?',
-      `This will issue a Purchase Order to ${selectedQuote.supplier?.name || 'the selected supplier'} for ${activeRfq.title}. Other quotations for this RFQ will be rejected.`,
+      `This will issue a Purchase Order to ${selectedQuote.supplier?.name || 'the selected supplier'} for ${selectedQuote.rfqTitle || activeRfq.title}. Other supplier RFQs in this cart submission remain separate.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Accept & Issue PO', onPress: async () => {
           try {
             setBusy(true);
-            const po = await apiPost<{ id: string; poNumber?: string }>('/purchase-orders', { quotationId: selectedQuote.id, ...(activeRfq.targetDate ? { expectedDate: activeRfq.targetDate } : {}) });
+            const po = await apiPost<{ id: string; poNumber?: string }>('/purchase-orders', { quotationId: selectedQuote.id, ...(selectedQuote.rfqTargetDate ? { expectedDate: selectedQuote.rfqTargetDate } : activeRfq.targetDate ? { expectedDate: activeRfq.targetDate } : {}) });
             Alert.alert('Purchase Order issued', `PO ${po?.poNumber || 'created'} has been issued and sent to the supplier.`, [
               { text: 'View My Orders', onPress: () => router.replace({ pathname: '/buyer/[section]', params: { section: 'orders' } } as any) },
               { text: 'Done', onPress: () => void load(true) },
@@ -169,15 +175,15 @@ export default function BuyerMyOffersScreen() {
           <View style={styles.contextCard}>
             <View style={styles.contextTop}>
               <View style={styles.contextPills}>
-                <Text style={styles.rfqPill}>RFQ #{activeRfq.id.slice(0,12)}</Text>
-                <Text style={styles.quoteCountPill}>{quotes.length} {quotes.length === 1 ? 'QUOTE' : 'QUOTES'} SUBMITTED</Text>
+                <Text style={styles.rfqPill}>{relatedRfqs.length > 1 ? 'CART RFQ GROUP' : 'RFQ #' + activeRfq.id.slice(0,12)}</Text>
+                <Text style={styles.quoteCountPill}>{quotes.length} SUPPLIER QUOTE{quotes.length === 1 ? '' : 'S'}</Text>
               </View>
             </View>
             <Pressable style={styles.rfqSelect} onPress={() => setRfqPickerOpen(true)}>
-              <Text numberOfLines={1} style={styles.rfqSelectText}>{activeRfq.title} ({quotes.length} {quotes.length === 1 ? 'quote' : 'quotes'})</Text>
+              <Text numberOfLines={1} style={styles.rfqSelectText}>{relatedRfqs.length > 1 ? 'Cart submission · ' + relatedRfqs.length + ' supplier RFQs' : activeRfq.title} ({quotes.length} {quotes.length === 1 ? 'quote' : 'quotes'})</Text>
               <MaterialCommunityIcons name="chevron-down" size={22} color="#68727F"/>
             </Pressable>
-            <Text style={styles.rfqTitle}>{activeRfq.title}</Text>
+            <Text style={styles.rfqTitle}>{relatedRfqs.length > 1 ? 'Supplier quotations from your cart' : activeRfq.title}</Text>
             <Text style={styles.rfqDescription}>Target Delivery: {dateLabel(activeRfq.targetDate)}{activeRfq.fabricSpec ? ` • Fabric: ${activeRfq.fabricSpec}` : ''}</Text>
             <View style={styles.contextActions}>
               <Pressable style={styles.backRequestsButton} onPress={() => navigate('requests')}>
@@ -202,7 +208,7 @@ export default function BuyerMyOffersScreen() {
               const isSelected = selectedQuoteId === quote.id;
               const best = quote.id === bestValueId;
               const fastest = quote.id === fastestId && quotes.length > 1;
-              const price = unitPrice(quote, activeRfq.targetQuantity);
+              const price = unitPrice(quote, Number(quote.items?.[0]?.quantity || activeRfq.targetQuantity));
               return (
                 <Pressable key={quote.id} onPress={() => setSelectedQuoteId(quote.id)} style={[styles.quoteCard,isSelected&&styles.quoteCardSelected]}>
                   <View style={styles.quoteTop}>
@@ -212,15 +218,17 @@ export default function BuyerMyOffersScreen() {
                     <MaterialCommunityIcons name={isSelected?'radiobox-marked':'radiobox-blank'} size={23} color={isSelected?'#1683D8':'#A3AAB4'}/>
                   </View>
                   <Text style={styles.supplierName}>{quote.supplier?.name || 'Verified Supplier'}</Text>
+                  {quote.rfqTitle ? <Text style={styles.supplierLocation}>{quote.rfqTitle}</Text> : null}
                   <Text style={styles.supplierLocation}>{[quote.supplier?.city,'India'].filter(Boolean).join(', ')}</Text>
                   <View style={styles.pricePanel}>
-                    <View style={styles.priceLine}><Text style={styles.unitPrice}>{money(price,quote.currency)}</Text><Text style={styles.perPiece}> / piece</Text></View>
+                    <View style={styles.priceLine}><Text style={styles.unitPrice}>{quote.items && quote.items.length > 1 ? 'Product-wise pricing' : money(price,quote.currency)}</Text>{!quote.items || quote.items.length <= 1 ? <Text style={styles.perPiece}> / piece</Text> : null}</View>
                     <Text style={styles.totalPrice}>{money(Number(quote.totalAmount),quote.currency)} Total</Text>
                   </View>
+                  {quote.items && quote.items.length > 0 ? <View style={styles.specRows}>{quote.items.map((line,index)=><View key={line.id || index} style={styles.specRow}><Text numberOfLines={2} style={styles.specValueFlex}>{line.description} · {line.quantity} pcs</Text><Text style={styles.specValue}>{money(line.unitPrice,quote.currency)} /pc</Text></View>)}</View> : null}
                   <View style={styles.specRows}>
                     <View style={styles.specRow}><Text style={styles.specLabel}>Bulk Production</Text><Text style={styles.specValue}>{quote.leadTimeDays} Days</Text></View>
                     <View style={styles.specRow}><Text style={styles.specLabel}>Pre-Prod Sample</Text><Text style={styles.specValue}>{quote.sampleLeadDays || 7} Days</Text></View>
-                    <View style={styles.specRow}><Text style={styles.specLabel}>Fabric Spec</Text><Text numberOfLines={1} style={styles.specValueFlex}>{activeRfq.fabricSpec || 'As per RFQ'}</Text></View>
+                    <View style={styles.specRow}><Text style={styles.specLabel}>Fabric Spec</Text><Text numberOfLines={1} style={styles.specValueFlex}>{quote.rfqFabricSpec || activeRfq.fabricSpec || 'As per RFQ'}</Text></View>
                     <View style={styles.specRow}><Text style={styles.specLabel}>Payment Terms</Text><Text numberOfLines={2} style={styles.specValueFlex}>{quote.terms || 'To be mutually agreed'}</Text></View>
                     {quote.moq ? <View style={styles.specRow}><Text style={styles.specLabel}>Minimum Order</Text><Text style={styles.specValue}>{Number(quote.moq).toLocaleString('en-IN')} pcs</Text></View> : null}
                     {Number(quote.sampleCost || 0) > 0 ? <View style={styles.specRow}><Text style={styles.specLabel}>Sample Cost</Text><Text style={styles.specValue}>{money(quote.sampleCost,quote.currency)}</Text></View> : null}
@@ -249,7 +257,7 @@ export default function BuyerMyOffersScreen() {
               keyExtractor={r => r.id}
               style={{ flexGrow: 0, flexShrink: 1, maxHeight: 340 }}
               keyboardShouldPersistTaps="handled"
-              renderItem={({ item: r }) => <Pressable style={styles.pickerOption} accessibilityRole="radio" accessibilityState={{ checked: r.id === activeRfqId }} onPress={() => { setActiveRfqId(r.id); setSelectedQuoteId(r.quotations?.find(q => q.status === 'ACCEPTED')?.id || r.quotations?.[0]?.id || ''); setRfqPickerOpen(false); }}><View style={{ flex: 1 }}><Text style={styles.pickerOptionTitle}>{r.title}</Text><Text style={styles.pickerOptionMeta}>{r.quotations?.length || 0} quotations · {r.status}</Text></View><MaterialCommunityIcons name={r.id === activeRfqId ? 'radiobox-marked' : 'radiobox-blank'} size={21} color={r.id === activeRfqId ? PURPLE : ui.muted}/></Pressable>}
+              renderItem={({ item: r }) => <Pressable style={styles.pickerOption} accessibilityRole="radio" accessibilityState={{ checked: r.id === activeRfqId }} onPress={() => { setActiveRfqId(r.id); const related = r.submissionGroupId ? rfqs.filter(row => row.submissionGroupId === r.submissionGroupId) : [r]; const groupQuotes = related.flatMap(row => row.quotations || []); setSelectedQuoteId(groupQuotes.find(q => q.status === 'ACCEPTED')?.id || groupQuotes[0]?.id || ''); setRfqPickerOpen(false); }}><View style={{ flex: 1 }}><Text style={styles.pickerOptionTitle}>{r.title}</Text><Text style={styles.pickerOptionMeta}>{r.quotations?.length || 0} quotations · {r.status}</Text></View><MaterialCommunityIcons name={r.id === activeRfqId ? 'radiobox-marked' : 'radiobox-blank'} size={21} color={r.id === activeRfqId ? PURPLE : ui.muted}/></Pressable>}
               ListEmptyComponent={<Text style={styles.pickerOptionMeta}>No requests available.</Text>}
             />
           </Pressable>

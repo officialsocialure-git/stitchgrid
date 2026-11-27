@@ -21,13 +21,13 @@ type Rfq = {
   id: string; title?: string; description?: string; garmentType?: string; fabricSpec?: string;
   targetQuantity?: number; targetDate?: string; targetPrice?: number; status?: string;
   buyer?: { id?: string; name?: string; city?: string; country?: string };
-  items?: { id?: string; name?: string; description?: string; quantity?: number; unit?: string }[];
+  items?: { id?: string; catalogItemId?: string; name?: string; description?: string; specifications?: string; quantity?: number; unit?: string }[];
   quotations?: Quote[];
 };
 type Quote = {
   id: string; supplierOrgId: string; totalAmount: number; currency?: string; leadTimeDays?: number;
   sampleCost?: number; terms?: string; status?: string;
-  items?: { description?: string; quantity?: number; unitPrice?: number }[];
+  items?: { rfqItemId?: string; description?: string; quantity?: number; unitPrice?: number }[];
 };
 const money = (n: number) => '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 const date = (v?: string) => v ? new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not specified';
@@ -58,6 +58,7 @@ export default function SupplierRequestsScreen() {
   const [detailTab, setDetailTab] = useState<'REQUIREMENTS' | 'BUYER_INFO'>('REQUIREMENTS');
   const [editing, setEditing] = useState(false);
   const [price, setPrice] = useState('180');
+  const [linePrices, setLinePrices] = useState<Record<string, string>>({});
   const [delivery, setDelivery] = useState('21');
   const [sampleCost, setSampleCost] = useState('0');
   const [terms, setTerms] = useState('50% Advance, 50% on QC Pass');
@@ -125,6 +126,7 @@ export default function SupplierRequestsScreen() {
     setSelected(rfq); setDetailTab('REQUIREMENTS'); setEditing(true);
     const qty = Math.max(1, Number(rfq.targetQuantity || rfq.items?.[0]?.quantity || 1));
     setPrice(String(existing?.items?.[0]?.unitPrice ?? rfq.targetPrice ?? 180));
+    setLinePrices(Object.fromEntries((rfq.items || []).map((item, index) => [item.id || 'line-' + index, String(existing?.items?.find(q => q.rfqItemId === item.id)?.unitPrice ?? existing?.items?.[index]?.unitPrice ?? rfq.targetPrice ?? 180)])));
     setDelivery(String(existing?.leadTimeDays || 21));
     setSampleCost(String(existing?.sampleCost || 0));
     setTerms(existing?.terms || '50% Advance, 50% on QC Pass');
@@ -143,19 +145,25 @@ export default function SupplierRequestsScreen() {
 
   const submitQuote = async () => {
     if (!selected || !orgId) return;
-    const unitPrice = Number(price), days = Number(delivery), sample = Number(sampleCost);
-    const qty = Math.max(1, Number(selected.targetQuantity || selected.items?.[0]?.quantity || 1));
-    if (!Number.isFinite(unitPrice) || unitPrice <= 0 || !Number.isInteger(days) || days <= 0 || !Number.isFinite(sample) || sample < 0) {
-      Alert.alert('Invalid quote', 'Please enter a valid price, delivery time and sample cost.'); return;
+    const days = Number(delivery), sample = Number(sampleCost);
+    const sourceLines = selected.items?.length ? selected.items : [{ id: undefined, name: selected.title || 'Garment Lot', quantity: selected.targetQuantity || 1 }];
+    const quoteItems = sourceLines.map((line, index) => {
+      const key = line.id || 'line-' + index;
+      const unitPrice = Number(linePrices[key] ?? price);
+      return { rfqItemId: line.id, description: line.name || selected.title || 'Product', quantity: Math.max(1, Number(line.quantity || 1)), unitPrice };
+    });
+    const totalAmount = quoteItems.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
+    if (quoteItems.some(line => !Number.isFinite(line.unitPrice) || line.unitPrice <= 0) || !Number.isInteger(days) || days <= 0 || !Number.isFinite(sample) || sample < 0) {
+      Alert.alert('Invalid quote', 'Please enter a valid price for every product, delivery time and sample cost.'); return;
     }
     setSaving(true);
     try {
       const existing = getQuote(selected);
       const payload = {
-        rfqId: selected.id, supplierOrgId: orgId, totalAmount: unitPrice * qty,
+        rfqId: selected.id, supplierOrgId: orgId, totalAmount,
         currency: 'INR', leadTimeDays: days, sampleCost: sample, sampleLeadDays: 7,
-        moq: qty, terms: note.trim() ? `${terms}\n${note.trim()}` : terms,
-        items: [{ description: `${selected.title || 'Garment Lot'} - Supplier Quote`, quantity: qty, unitPrice }],
+        moq: Math.max(...quoteItems.map(line => line.quantity)), terms: note.trim() ? `${terms}\n${note.trim()}` : terms,
+        items: quoteItems,
       };
       if (existing) {
         await apiRequest(`/quotations/${encodeURIComponent(existing.id)}`, { method: 'PUT', body: payload });
@@ -257,7 +265,7 @@ export default function SupplierRequestsScreen() {
                 ['Delivery Location', city(selected), 'map-marker-outline'],
               ].map(([label, value, icon]) => <View key={label} style={styles.infoRow}><View style={styles.infoLabel}><MaterialCommunityIcons name={icon as any} size={21} color={ui.muted} /><Text style={styles.infoLabelText}>{label}</Text></View><Text style={styles.infoValue}>{value}</Text></View>)}
               {!!selected.description && <View style={styles.instructions}><Text style={styles.instructionsTitle}>BUYER INSTRUCTIONS</Text><Text style={styles.instructionsText}>{selected.description}</Text></View>}
-            </View> : <View style={styles.infoCard}>
+            {selected.items?.length ? <View style={styles.instructions}><Text style={styles.instructionsTitle}>PRODUCT-WISE REQUIREMENTS</Text>{selected.items.map((line,index)=><View key={line.id || index} style={{marginTop:8}}><Text style={{fontSize:13,fontWeight:'900',color:'#202633'}}>{line.name} · {Number(line.quantity||0).toLocaleString('en-IN')} pcs</Text><Text style={styles.instructionsText}>{line.specifications || line.description || 'No additional specifications'}</Text></View>)}</View> : null}</View> : <View style={styles.infoCard}>
               <View style={styles.infoRow}><Text style={styles.infoLabelText}>Company Name</Text><Text style={styles.infoValue}>{selected.buyer?.name || 'Not available'}</Text></View>
               <View style={styles.infoRow}><Text style={styles.infoLabelText}>Location</Text><Text style={styles.infoValue}>{city(selected)}</Text></View>
               <View style={styles.infoRow}><Text style={styles.infoLabelText}>Buyer ID</Text><Text style={styles.infoValue}>{selected.buyer?.id || 'Not shared'}</Text></View>
@@ -274,8 +282,8 @@ export default function SupplierRequestsScreen() {
               <Text style={styles.metricLabel}>Payment Terms</Text><Text style={styles.termsText}>{getQuote(selected)?.terms || 'Not specified'}</Text>
             </View> : <View style={styles.quoteCard}>
               <Text style={styles.quoteTitle}>{getQuote(selected) ? 'Revise Your Quote' : 'Send Your Quote'}</Text>
-              <Text style={styles.fieldLabel}>Price per Piece (₹) *</Text><TextInput value={price} onChangeText={setPrice} keyboardType="decimal-pad" style={styles.fieldInput} placeholder="Enter price" />
-              <Text style={styles.fieldLabel}>Total Price (₹)</Text><View style={styles.totalBox}><Text style={styles.totalText}>{money(Number(price || 0) * Math.max(1, Number(selected.targetQuantity || selected.items?.[0]?.quantity || 1)))}</Text></View>
+              {selected.items?.length ? selected.items.map((line, index) => <View key={line.id || index} style={{marginBottom:10}}><Text style={styles.fieldLabel}>{line.name || "Product"} · {Number(line.quantity || 0).toLocaleString("en-IN")} pcs (₹ / pc) *</Text><TextInput value={linePrices[line.id || "line-" + index] ?? price} onChangeText={value=>setLinePrices(current=>({...current,[line.id || "line-" + index]:value}))} keyboardType="decimal-pad" style={styles.fieldInput} placeholder="Enter unit price" /><Text style={styles.metricLabel}>{line.specifications || line.description || "Product specifications"}</Text></View>) : <><Text style={styles.fieldLabel}>Price per Piece (₹) *</Text><TextInput value={price} onChangeText={setPrice} keyboardType="decimal-pad" style={styles.fieldInput} placeholder="Enter price" /></>}
+              <Text style={styles.fieldLabel}>Total Quotation Amount (₹)</Text><View style={styles.totalBox}><Text style={styles.totalText}>{money(selected.items?.length ? selected.items.reduce((sum,line,index)=>sum+Number(line.quantity||0)*Number(linePrices[line.id || "line-" + index] || price || 0),0) : Number(price || 0) * Math.max(1, Number(selected.targetQuantity || 1)))}</Text></View>
               <Text style={styles.fieldLabel}>Delivery Time</Text><View style={styles.choiceRow}>{['15','21','30','45'].map(v => <Pressable key={v} onPress={() => setDelivery(v)} style={[styles.choice, delivery === v && styles.choiceActive]}><Text style={[styles.choiceText, delivery === v && styles.choiceTextActive]}>{v} Days</Text></Pressable>)}</View>
               <Text style={styles.fieldLabel}>Sample Cost (₹)</Text><TextInput value={sampleCost} onChangeText={setSampleCost} keyboardType="decimal-pad" style={styles.fieldInput} placeholder="0" />
               <Text style={styles.fieldLabel}>Payment Terms</Text>

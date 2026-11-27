@@ -63,3 +63,7 @@ export function apiPost<T>(path: string, body: unknown, timeoutMs = 45000) {
 export function apiPatch<T>(path: string, body: unknown) {
   return apiRequest<T>(path, { method: 'PATCH', body });
 }
+
+export function apiDelete<T>(path: string) {
+  return apiRequest<T>(path, { method: 'DELETE' });
+}

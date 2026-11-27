@@ -84,7 +84,7 @@ export default function BuyerPaymentHistoryScreen() {
 
   return (
     <View style={styles.screen}>
-      <AppHeader role="BUYER" activeSection="orders" isBack onBack={() => router.back()} title="Payment History" showLogo={false} />
+      <AppHeader role="BUYER" activeSection="orders" isBack onBack={() => router.back()} title="Payment History" showLogo />
       <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(true); }} tintColor={ui.accent} />}>
         <View style={styles.heading}>
           <Text style={styles.title}>Transactions</Text>

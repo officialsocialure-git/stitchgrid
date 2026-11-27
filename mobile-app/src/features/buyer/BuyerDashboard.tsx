@@ -2,21 +2,29 @@ import { ui } from '@/theme/ui';
 import { AppBottomNav } from '@/components/AppBottomNav';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet,
+  ActivityIndicator, Alert, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet,
   Text, TextInput, View, useWindowDimensions,
 } from 'react-native';
+import type { ScrollViewInstance } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import { apiGet, API_BASE_URL } from '@/services/api';
+import { apiGet, apiPost, API_BASE_URL } from '@/services/api';
+import { VideoView, useVideoPlayer } from 'expo-video';
+import { LinearGradient } from 'expo-linear-gradient';
 import CreateRfqModal from '@/features/buyer/CreateRfqModal';
 import { AppHeader } from '@/components/AppHeader';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 import { disconnectRealtime } from '@/services/realtime';
+import { POPULAR_CATEGORIES } from './popularCategories';
 
 const PURPLE = ui.accent;
 const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparent.png';
+const HERO_SLIDES = [
+  { image: require('../../../assets/banners/banner-1.png'), tint: '#72508F' },
+  { image: require('../../../assets/banners/banner-2.png'), tint: '#66508F' },
+] as const;
 // Legacy sprite replaced by separate high-resolution category PNG assets.
 
 const FILTERS = [
@@ -44,6 +52,7 @@ type Supplier = {
   fabricExpertise: string[];
   additionalCapabilities: string[];
   catalog: { name: string; price: string; moq?: number }[];
+  products: { id: string; name: string; itemType: string; imageUrl?: string | null; images?: { imageUrl: string; sortOrder?: number }[] }[];
   logoUrl?: string;
   factoryPhotoUrl?: string;
 };
@@ -84,6 +93,7 @@ function parseSupplier(row: any): Supplier {
     fabricExpertise: Array.isArray(row?.capabilities) ? row.capabilities.filter((item: any) => item.capabilityGroup === 'FABRIC').map((item: any) => item.value) : [],
     additionalCapabilities: Array.isArray(row?.capabilities) ? row.capabilities.filter((item: any) => item.capabilityGroup === 'SERVICE').map((item: any) => item.value) : [],
     catalog,
+    products: Array.isArray(row?.catalogItems) ? row.catalogItems.map((item: any) => ({ id: String(item.id), name: item.name || 'Catalog product', itemType: item.itemType || 'Product', imageUrl: item.imageUrl || null, images: Array.isArray(item.images) ? item.images : [] })) : [],
     logoUrl,
     factoryPhotoUrl,
   };
@@ -138,6 +148,79 @@ function SupplierCard({ supplier, onPress }: { supplier: Supplier; onPress: () =
   );
 }
 
+type SupplierReel = {
+  id: string;
+  title: string;
+  videoUrl: string;
+  durationSeconds: number;
+  impressionCount: number;
+  viewCount: number;
+  organization: {
+    id: string;
+    name: string;
+    businessType?: string | null;
+    city?: string | null;
+    verificationStatus: string;
+    businessMedia?: { url: string }[];
+  };
+  products?: { catalogItem: { id: string; name: string; itemType: string } }[];
+};
+
+function ReelSlide({ reel, active, width, height, onOpenSupplier }: {
+  reel: SupplierReel; active: boolean; width: number; height: number; onOpenSupplier: () => void;
+}) {
+  const player = useVideoPlayer(reel.videoUrl, instance => {
+    instance.loop = true;
+    instance.muted = true;
+  });
+  const [paused, setPaused] = useState(!active);
+
+  useEffect(() => {
+    if (active) {
+      setPaused(false);
+      player.play();
+    } else {
+      setPaused(true);
+      player.pause();
+    }
+  }, [active, player]);
+
+  const logo = reel.organization.businessMedia?.[0]?.url;
+  const logoUrl = logo ? (logo.startsWith('http') ? logo : `${API_BASE_URL.replace('/api', '')}${logo.startsWith('/') ? '' : '/'}${logo}`) : '';
+
+  return (
+    <View style={[styles.reelCard, { width, height }]}>
+      <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="cover" nativeControls={false} />
+      <Pressable style={StyleSheet.absoluteFill} onPress={() => {
+        if (paused) { player.play(); setPaused(false); }
+        else { player.pause(); setPaused(true); }
+      }}>
+        <LinearGradient colors={['rgba(12,8,18,.35)', 'transparent', 'rgba(12,8,18,.82)']} locations={[0, .45, 1]} style={StyleSheet.absoluteFill} />
+        <View style={styles.reelTopBadges}>
+          <View style={styles.reelBadge}><MaterialCommunityIcons name="fire" size={13} color="#FBBF24" /><Text style={styles.reelBadgeText}>Viral Trends</Text></View>
+          {reel.organization.verificationStatus === 'APPROVED' && <View style={styles.reelBadge}><MaterialCommunityIcons name="check-decagram" size={13} color="#C4B5FD" /><Text style={styles.reelBadgeText}>Verified Supplier</Text></View>}
+        </View>
+        <View style={styles.reelPlayButton}><MaterialCommunityIcons name={paused ? 'play' : 'pause'} size={28} color="#FFFFFF" /></View>
+        <View style={styles.reelBottomInfo}>
+          <Pressable style={styles.reelSupplierRow} onPress={event => { event.stopPropagation(); onOpenSupplier(); }}>
+            <View style={styles.reelLogo}>{logoUrl ? <Image source={{ uri: logoUrl }} style={styles.reelLogoImage} resizeMode="contain" /> : <MaterialCommunityIcons name="factory" size={21} color={PURPLE} />}</View>
+            <View style={{ flex: 1 }}>
+              <Text numberOfLines={1} style={styles.reelSupplierName}>{reel.organization.name}</Text>
+              <Text numberOfLines={1} style={styles.reelSupplierType}>{reel.organization.businessType || 'Verified Supplier'}</Text>
+            </View>
+            <MaterialCommunityIcons name="check-decagram" size={19} color="#C4B5FD" />
+          </Pressable>
+          <Text numberOfLines={2} style={styles.reelCollectionTitle}>{reel.title}</Text>
+          <View style={styles.reelMetaRow}>
+            <Text style={styles.reelMetaText}>{reel.durationSeconds}s collection video</Text>
+            <Text style={styles.reelMetaText}>{reel.viewCount.toLocaleString('en-IN')} views</Text>
+          </View>
+        </View>
+      </Pressable>
+    </View>
+  );
+}
+
 export default function BuyerDashboard() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -156,6 +239,20 @@ export default function BuyerDashboard() {
   const [activeTab, setActiveTab] = useState('Dashboard');
   const [headerHeight, setHeaderHeight] = useState(0);
   const [bottomNavHeight, setBottomNavHeight] = useState(0);
+  const dashboardScrollRef = useRef<ScrollViewInstance | null>(null);
+  const heroSlideRef = useRef<ScrollViewInstance | null>(null);
+  const [heroSlideIndex, setHeroSlideIndex] = useState(0);
+  const [trendyCollections, setTrendyCollections] = useState<{ id: string; name: string; description?: string | null; imageUrl: string; organization: { id: string; name: string; city?: string | null } }[]>([]);
+  const [refreshingTrendy, setRefreshingTrendy] = useState(false);
+  const [supplierReels, setSupplierReels] = useState<SupplierReel[]>([]);
+  const [supplierReelTotal, setSupplierReelTotal] = useState(0);
+  const [activeReelIndex, setActiveReelIndex] = useState(0);
+  const reelViewerKey = useRef<string | null>(null);
+  const reelCarouselRef = useRef<ScrollViewInstance | null>(null);
+  const reelCardWidth = Math.min(width - 76, 340);
+  const reelCardHeight = Math.min(470, Math.max(390, width * 1.22));
+  const heroWidth = Math.min(width - 32, 808);
+  const heroHeight = 220;
   const supplierRequestId = useRef(0);
 
   const loadSuppliers = useCallback(async () => {
@@ -186,6 +283,81 @@ export default function BuyerDashboard() {
   useRealtimeRefresh(loadSuppliers, ['*']);
 
   const visibleSuppliers = useMemo(() => suppliers, [suppliers]);
+  const displayedTrendingCollections = trendyCollections.slice(0, 3);
+  const refreshTrendingCollections = useCallback(async () => {
+    const nextSeed = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setRefreshingTrendy(true);
+    try {
+      const result = await apiGet<{ items?: typeof trendyCollections; total?: number }>(`/trendy-collections?page=1&limit=24&seed=${encodeURIComponent(nextSeed)}`);
+      setTrendyCollections(Array.isArray(result?.items) ? result.items : []);
+    } catch {
+      Alert.alert('Unable to refresh collections', 'Please try again.');
+    } finally {
+      setRefreshingTrendy(false);
+    }
+  }, []);
+  useEffect(() => { void refreshTrendingCollections(); }, [refreshTrendingCollections]);
+
+  const getReelViewerKey = useCallback(async () => {
+    if (reelViewerKey.current) return reelViewerKey.current;
+    let key = await SecureStore.getItemAsync('sg_reel_viewer_key');
+    if (!key) {
+      key = `buyer-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`;
+      await SecureStore.setItemAsync('sg_reel_viewer_key', key);
+    }
+    reelViewerKey.current = key;
+    return key;
+  }, []);
+
+  const refreshSupplierReels = useCallback(async () => {
+    try {
+      const viewerKey = await getReelViewerKey();
+      const seed = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      const result = await apiGet<{ items?: SupplierReel[]; total?: number; hasMore?: boolean }>(`/reels/feed?limit=5&seed=${encodeURIComponent(seed)}&viewerKey=${encodeURIComponent(viewerKey)}`);
+      setSupplierReels(Array.isArray(result?.items) ? result.items : []);
+      setSupplierReelTotal(Number(result?.total || 0));
+      setActiveReelIndex(Array.isArray(result?.items) && result.items.length > 1 ? 1 : 0);
+    } catch {
+      // Keep the last successfully loaded feed visible if a refresh request fails.
+    }
+  }, [getReelViewerKey]);
+
+  const trackReelEvent = useCallback(async (reelId: string, eventType: 'IMPRESSION' | 'VIEW' | 'CLICK', watchSeconds = 0) => {
+    try {
+      const viewerKey = await getReelViewerKey();
+      const eventKey = `${viewerKey}-${reelId}-${eventType}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      await apiPost(`/reels/${reelId}/events`, { eventKey, viewerKey, eventType, watchSeconds }, 12000);
+    } catch {
+      // Analytics failures must never interrupt video playback.
+    }
+  }, [getReelViewerKey]);
+
+  useEffect(() => { void refreshSupplierReels(); }, [refreshSupplierReels]);
+
+  useEffect(() => {
+    if (!supplierReels.length) return;
+    const initialIndex = supplierReels.length > 1 ? 1 : 0;
+    requestAnimationFrame(() => reelCarouselRef.current?.scrollTo({ x: initialIndex * (reelCardWidth + 12), animated: false }));
+  }, [supplierReels, reelCardWidth]);
+
+  useEffect(() => {
+    const activeReel = supplierReels[activeReelIndex];
+    if (!activeReel) return;
+    void trackReelEvent(activeReel.id, 'IMPRESSION');
+    const timer = setTimeout(() => { void trackReelEvent(activeReel.id, 'VIEW', 3); }, 3000);
+    return () => clearTimeout(timer);
+  }, [supplierReels, activeReelIndex, trackReelEvent]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setHeroSlideIndex(current => {
+        const next = (current + 1) % HERO_SLIDES.length;
+        heroSlideRef.current?.scrollTo({ x: next * heroWidth, animated: true });
+        return next;
+      });
+    }, 4200);
+    return () => clearInterval(timer);
+  }, [heroWidth]);
 
   const confirmLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout from STITCHGRID?', [
@@ -237,17 +409,42 @@ export default function BuyerDashboard() {
       <AppHeader
         role="BUYER"
         activeSection="home"
+        showCart
         onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.hero}>
-          <Text style={styles.heroTitle}>Find a manufacturing partner.</Text>
-          <Text style={styles.heroSubtitle}>Search suppliers by location, product and capability.</Text>
-          <Pressable style={styles.postRfqButton} onPress={() => { setRfqSupplier({}); setRfqModalVisible(true); }}>
-            <MaterialCommunityIcons name="plus" size={22} color="#FFFFFF" />
-            <Text style={styles.postRfqText}>Post RFQ</Text>
+      <ScrollView ref={dashboardScrollRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshingTrendy} onRefresh={() => { void refreshTrendingCollections(); void refreshSupplierReels(); }} tintColor={PURPLE} colors={[PURPLE]} />}>
+        <View style={[styles.hero, { width: heroWidth, height: heroHeight, alignSelf: 'center' }]}> 
+          <ScrollView
+            ref={heroSlideRef}
+            horizontal
+            pagingEnabled
+            scrollEnabled
+            showsHorizontalScrollIndicator={false}
+            removeClippedSubviews={false}
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, height: heroHeight, zIndex: 0 }}
+            contentContainerStyle={{ flexDirection: 'row', width: heroWidth * HERO_SLIDES.length, height: heroHeight }}
+            onMomentumScrollEnd={(event) => setHeroSlideIndex(Math.round(event.nativeEvent.contentOffset.x / heroWidth))}
+          >
+            {HERO_SLIDES.map((slide, index) => (
+              <Image
+                key={index}
+                source={slide.image}
+                style={{ width: heroWidth, height: heroHeight, backgroundColor: slide.tint }}
+                resizeMode="cover"
+                fadeDuration={0}
+              />
+            ))}
+          </ScrollView>
+          <Text style={styles.heroTitle}>Source Garments, Fabrics &amp; Trims Directly from Verified Suppliers</Text>
+
+          <Pressable style={styles.postRfqButton} onPress={() => dashboardScrollRef.current?.scrollTo({ y: 300, animated: true })}>
+            <Text style={styles.postRfqText}>Find Suppliers</Text>
+            <MaterialCommunityIcons name="chevron-right" size={18} color="#FFFFFF" />
           </Pressable>
+          <View style={styles.heroDots}>
+            {HERO_SLIDES.map((_, index) => <View key={index} style={[styles.heroDot, heroSlideIndex === index && styles.heroDotActive]} />)}
+          </View>
         </View>
 
         <View style={styles.categoryGrid}>
@@ -275,6 +472,109 @@ export default function BuyerDashboard() {
               </Pressable>
             </View>
           ))}
+        </View>
+
+        <View style={styles.trendySection}>
+          <View style={styles.trendyHeader}>
+            <View style={styles.trendyTitleRow}>
+              <Text style={styles.trendyTitle}>Trending Collection</Text>
+              <MaterialCommunityIcons name="crown" size={19} color="#8B5CF6" />
+            </View>
+            <Pressable onPress={() => router.push('/buyer/trendy-collections' as any)} style={styles.trendyViewAll}>
+              <Text style={styles.trendyViewAllText}>View All</Text>
+              <MaterialCommunityIcons name="chevron-right" size={17} color="#172033" />
+            </Pressable>
+          </View>
+          {trendyCollections.length ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trendyList}>
+              {displayedTrendingCollections.map(collection => (
+                <Pressable key={collection.id} style={styles.trendyCard} onPress={() => router.push({ pathname: '/buyer/supplier-preview/[organizationId]', params: { organizationId: collection.organization.id, collectionImageUrl: collection.imageUrl } } as any)}>
+                  <View style={styles.trendyImageWrap}>
+                    <Image source={{ uri: collection.imageUrl.startsWith('http') ? collection.imageUrl : `${API_BASE_URL.replace('/api', '')}${collection.imageUrl.startsWith('/') ? '' : '/'}${collection.imageUrl}` }} style={styles.trendyImage} resizeMode="contain" />
+                  </View>
+                  <Text numberOfLines={1} style={styles.trendySupplierName}>{collection.organization.name}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={styles.trendyEmpty}><MaterialCommunityIcons name="crown-outline" size={21} color="#9A8CB3" /><Text style={styles.trendyEmptyText}>Featured supplier collections will appear here after admin approval.</Text></View>
+          )}
+        </View>
+
+        <View style={styles.popularSection}>
+          <View style={styles.popularHeader}>
+            <Text style={styles.popularTitle}>Popular Categories</Text>
+            <Pressable onPress={() => router.push('/buyer/popular-categories' as any)} style={styles.popularViewAll}>
+              <Text style={styles.popularViewAllText}>View All</Text>
+              <MaterialCommunityIcons name="chevron-right" size={17} color="#172033" />
+            </Pressable>
+          </View>
+          <View style={styles.popularGrid}>
+            {POPULAR_CATEGORIES.slice(0, 3).map(item => (
+              <Pressable
+                key={item.id}
+                style={({ pressed }) => [styles.popularCard, pressed && styles.popularCardPressed]}
+                onPress={() => router.push({ pathname: '/buyer/products', params: { category: item.label } } as any)}
+                accessibilityRole="button"
+                accessibilityLabel={`Browse ${item.label}`}
+                android_ripple={{ color: '#E8DDFB' }}
+              >
+                <View style={styles.popularArtwork}>
+                  {item.image ? <Image source={item.image} style={styles.popularArtworkImage} resizeMode="contain" /> : <MaterialCommunityIcons name={item.icon as any} size={38} color={PURPLE} />}
+                </View>
+                <Text style={styles.popularLabel} numberOfLines={1}>{item.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.reelsSection}>
+          <View style={styles.reelsHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.reelsTitle}>Viral Trends This Week</Text>
+              <Text style={styles.reelsSubtitle}>{supplierReelTotal ? `${supplierReelTotal} approved collection videos from verified suppliers` : 'Collections from verified supplier companies'}</Text>
+            </View>
+            <Pressable onPress={() => void refreshSupplierReels()} style={styles.reelsRefresh}>
+              <MaterialCommunityIcons name="refresh" size={17} color={PURPLE} />
+              <Text style={styles.reelsRefreshText}>Refresh</Text>
+            </Pressable>
+          </View>
+          {supplierReels.length ? (
+            <>
+              <ScrollView
+                ref={reelCarouselRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                decelerationRate="fast"
+                snapToInterval={reelCardWidth + 12}
+                snapToAlignment="start"
+                contentContainerStyle={{ paddingHorizontal: Math.max(8, (width - reelCardWidth) / 2 - 16) }}
+                onMomentumScrollEnd={event => {
+                  const nextIndex = Math.max(0, Math.min(supplierReels.length - 1, Math.round(event.nativeEvent.contentOffset.x / (reelCardWidth + 12))));
+                  setActiveReelIndex(nextIndex);
+                }}
+              >
+                {supplierReels.slice(0, 5).map((reel, index) => (
+                  <View key={reel.id} style={[{ width: reelCardWidth, marginRight: 12 }, index === activeReelIndex ? { zIndex: 2 } : { transform: [{ scale: 0.92 }], opacity: 0.82 }]}>
+                    <ReelSlide reel={reel} active={index === activeReelIndex} width={reelCardWidth} height={reelCardHeight} onOpenSupplier={() => { void trackReelEvent(reel.id, 'CLICK'); router.push({ pathname: '/buyer/supplier/[organizationId]', params: { organizationId: reel.organization.id } } as any); }} />
+                  </View>
+                ))}
+              </ScrollView>
+              <View style={styles.reelDots}>
+                {supplierReels.slice(0, 5).map((reel, index) => <View key={reel.id} style={[styles.reelDot, index === activeReelIndex && styles.reelDotActive]} />)}
+              </View>
+              <View style={styles.reelsFairNote}>
+                <MaterialCommunityIcons name="shuffle-variant" size={17} color={PURPLE} />
+                <Text style={styles.reelsFairText}>Different supplier collections are rotated for every buyer and refresh.</Text>
+              </View>
+            </>
+          ) : (
+            <View style={styles.reelsEmpty}>
+              <MaterialCommunityIcons name="movie-play-outline" size={27} color="#9888B3" />
+              <Text style={styles.reelsEmptyTitle}>Supplier Reels are coming soon</Text>
+              <Text style={styles.reelsEmptyText}>Approved collection videos from verified suppliers will appear here.</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.searchRow}>
@@ -323,7 +623,13 @@ export default function BuyerDashboard() {
         )}
       </ScrollView>
 
-      <AppBottomNav role="BUYER" activeSection="home" onNavigate={(section) => openNextPage(section === 'organization-settings' ? 'Settings' : section === 'chat' ? 'Chat' : section === 'orders' ? 'Orders' : section === 'requests' ? 'Requests' : 'Home')} onLayout={event => setBottomNavHeight(event.nativeEvent.layout.height)} />
+      <AppBottomNav role="BUYER" activeSection="home" onNavigate={(section) => {
+        if (section === 'rfq') { setRfqSupplier({}); setRfqModalVisible(true); return; }
+        if (section === 'cart') { router.push('/buyer/cart' as any); return; }
+        if (section === 'offers') { openNextPage('My Offers'); return; }
+        if (section === 'orders') { openNextPage('Orders'); return; }
+        openNextPage('Home');
+      }} onLayout={event => setBottomNavHeight(event.nativeEvent.layout.height)} />
 
       <Modal visible={filterOpen} transparent animationType="slide" onRequestClose={() => setFilterOpen(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setFilterOpen(false)}>
@@ -410,12 +716,18 @@ const styles = StyleSheet.create({
   notificationBadge:{position:'absolute',right:-1,top:-4,width:25,height:25,borderRadius:13,backgroundColor:'#D62828',alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:ui.surface},
   notificationText:{fontSize: 13,fontWeight: '700',color:ui.surface},
   scrollContent:{paddingHorizontal:16,paddingTop:16,paddingBottom:20,gap:16,width:'100%',maxWidth:840,alignSelf:'center'},
-  hero:{backgroundColor: ui.surface, borderWidth: 1, borderColor: ui.border,borderRadius:16,paddingHorizontal:21,paddingTop:23,paddingBottom:22,minHeight: 0,justifyContent:'center',shadowColor:'#3B0AAB',shadowOpacity: 0,shadowRadius:9,shadowOffset:{width:0,height:5},elevation: 0},
+  hero:{height:220,backgroundColor:'#72508F',borderRadius:16,overflow:'hidden',paddingHorizontal:20,paddingVertical:15,justifyContent:'center',shadowColor:'#3B0AAB',shadowOpacity:0.12,shadowRadius:9,shadowOffset:{width:0,height:5},elevation:2},
+  heroSlide:{height:220,alignItems:'flex-end',justifyContent:'center',paddingRight:4},
+  heroSlideImage:{position:'absolute',left:0,top:0,width:'100%',height:'100%',opacity:1},
+  heroDots:{position:'absolute',bottom:10,left:0,right:0,flexDirection:'row',justifyContent:'center',gap:6},
+  heroDot:{width:6,height:6,borderRadius:3,backgroundColor:'rgba(255,255,255,0.45)'},
+  heroDotActive:{width:18,backgroundColor:'#FFFFFF'},
 
-  heroTitle:{fontSize:22,lineHeight:29,fontWeight: '700',letterSpacing:-.6,color:ui.ink,maxWidth:360},
+  heroTitle:{fontSize:18,lineHeight:22,fontWeight:'600',letterSpacing:-.2,color:'#FFFFFF',maxWidth:'58%',zIndex:2},
+
   heroSubtitle:{fontSize:15,lineHeight:22,color:ui.body,marginTop:9,maxWidth:380},
-  postRfqButton:{alignSelf:'flex-start',height:54,paddingHorizontal:18,backgroundColor:ui.accent,borderRadius:12,marginTop:23,flexDirection:'row',alignItems:'center',gap:8},
-  postRfqText:{fontSize:16,fontWeight: '700',color:ui.surface},
+  postRfqButton:{alignSelf:'flex-start',height:34,paddingHorizontal:14,backgroundColor:'#6500F5',borderRadius:20,marginTop:10,flexDirection:'row',alignItems:'center',gap:5,zIndex:2},
+  postRfqText:{fontSize:13,fontWeight:'700',color:ui.surface},
   categoryGrid:{width:'104%',marginLeft:'-2%',flexDirection:'row',gap:6},
   categoryButtonShadow:{flex:1,aspectRatio:0.84,minHeight:104,borderRadius:16,backgroundColor:'#FFFFFF',borderWidth:1,borderColor:'#E9E0F7',elevation:9,shadowColor:'#5420A8',shadowOpacity:0.34,shadowRadius:12,shadowOffset:{width:0,height:6}},
   categoryButton:{flex:1,borderRadius:16,overflow:'hidden',backgroundColor:'#FFFFFF',borderWidth:0},
@@ -423,6 +735,66 @@ const styles = StyleSheet.create({
   categoryButtonPressed:{opacity:0.76,transform:[{scale:0.98}]},
   categoryButtonArtwork:{width:'100%',height:'100%'},
 
+  popularSection:{marginTop:4,marginBottom:4,gap:9},
+  popularHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
+  popularTitle:{fontSize:17,fontWeight:'900',color:ui.ink},
+  popularViewAll:{flexDirection:'row',alignItems:'center',gap:2,paddingVertical:3},
+  popularViewAllText:{fontSize:12,fontWeight:'800',color:'#172033'},
+  popularGrid:{flexDirection:'row',justifyContent:'space-between',gap:10},
+  popularCard:{flex:1,minWidth:0,minHeight:154,alignItems:'center',justifyContent:'center',gap:10,borderRadius:14,padding:7,backgroundColor:'#FFFFFF',borderWidth:1,borderColor:'#EEEAF5'},
+
+  popularCardPressed:{opacity:0.78,transform:[{scale:0.97}]},
+  popularArtwork:{width:'100%',height:114,borderRadius:12,backgroundColor:'#FFFFFF',alignItems:'center',justifyContent:'center',overflow:'hidden'},
+
+  popularArtworkImage:{width:'130%',height:'130%'},
+
+
+
+  popularLabel:{fontSize:14,fontWeight:'800',color:ui.ink,textAlign:'center',marginTop:2},
+
+  trendySection:{gap:9,marginTop:0,marginBottom:0},
+  trendyHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:1},
+  trendyTitleRow:{flexDirection:'row',alignItems:'center',gap:7},
+  trendyTitle:{fontSize:18,fontWeight:'800',color:'#151B29',letterSpacing:-.3},
+  trendyViewAll:{flexDirection:'row',alignItems:'center',gap:1,paddingVertical:3},
+  trendyViewAllText:{fontSize:12,fontWeight:'700',color:'#172033'},
+  trendyList:{gap:10,paddingBottom:3},
+  trendyCard:{width:132,backgroundColor:'#FFFFFF',borderRadius:14,borderWidth:1,borderColor:'#E9E5F0',padding:7,shadowColor:'#4C1D95',shadowOpacity:.07,shadowRadius:5,shadowOffset:{width:0,height:2},elevation:1},
+  trendyImageWrap:{height:124,borderRadius:10,backgroundColor:'#F5F2F8',overflow:'hidden',position:'relative'},
+  trendyImage:{width:'100%',height:'100%',backgroundColor:'#F5F2F8'},
+ 
+  trendyProductName:{fontSize:11,fontWeight:'800',color:'#202839',marginTop:6},
+  trendySupplierName:{fontSize:9,fontWeight:'600',color:'#7B8493',marginTop:2},
+  trendyEmpty:{minHeight:62,borderWidth:1,borderStyle:'dashed',borderColor:'#DDD5EA',borderRadius:12,backgroundColor:'#FAF8FD',paddingHorizontal:12,paddingVertical:10,flexDirection:'row',alignItems:'center',gap:9},
+  trendyEmptyText:{flex:1,fontSize:11,lineHeight:16,color:'#7B718D'},
+  reelsSection:{gap:12,marginTop:4,marginBottom:2},
+  reelsHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10,paddingHorizontal:2},
+  reelsTitle:{fontSize:25,lineHeight:30,fontWeight:'900',color:'#5B13EC',letterSpacing:-.5},
+  reelsSubtitle:{fontSize:12,color:'#6F7785',marginTop:3},
+  reelsRefresh:{minHeight:36,paddingHorizontal:10,borderRadius:18,backgroundColor:'#F3EDFF',flexDirection:'row',alignItems:'center',gap:4},
+  reelsRefreshText:{fontSize:11,fontWeight:'800',color:PURPLE},
+  reelCard:{borderRadius:22,overflow:'hidden',backgroundColor:'#21172A',borderWidth:2,borderColor:'#FFFFFF',shadowColor:'#4C1D95',shadowOpacity:.2,shadowRadius:12,shadowOffset:{width:0,height:7},elevation:5},
+  reelTopBadges:{position:'absolute',top:13,left:12,right:12,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8},
+  reelBadge:{minHeight:28,paddingHorizontal:9,borderRadius:18,backgroundColor:'rgba(24,17,31,.66)',borderWidth:1,borderColor:'rgba(255,255,255,.55)',flexDirection:'row',alignItems:'center',gap:4},
+  reelBadgeText:{fontSize:10,fontWeight:'800',color:'#FFFFFF'},
+  reelPlayButton:{position:'absolute',top:'43%',alignSelf:'center',width:58,height:58,borderRadius:29,backgroundColor:'rgba(18,12,25,.48)',borderWidth:2,borderColor:'rgba(255,255,255,.9)',alignItems:'center',justifyContent:'center'},
+  reelBottomInfo:{position:'absolute',left:13,right:13,bottom:17,gap:9},
+  reelSupplierRow:{flexDirection:'row',alignItems:'center',gap:9},
+  reelLogo:{width:42,height:42,borderRadius:21,backgroundColor:'#FFFFFF',alignItems:'center',justifyContent:'center',overflow:'hidden'},
+  reelLogoImage:{width:'86%',height:'86%'},
+  reelSupplierName:{fontSize:14,fontWeight:'900',color:'#FFFFFF'},
+  reelSupplierType:{fontSize:10,fontWeight:'600',color:'rgba(255,255,255,.82)',marginTop:2},
+  reelCollectionTitle:{fontSize:19,lineHeight:24,fontWeight:'800',fontStyle:'italic',color:'#FFFFFF'},
+  reelMetaRow:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'},
+  reelMetaText:{fontSize:10,fontWeight:'700',color:'rgba(255,255,255,.86)'},
+  reelDots:{flexDirection:'row',alignItems:'center',justifyContent:'center',gap:8,paddingVertical:3},
+  reelDot:{width:8,height:8,borderRadius:4,backgroundColor:'#D6D3DD'},
+  reelDotActive:{width:20,backgroundColor:PURPLE},
+  reelsFairNote:{minHeight:40,borderRadius:12,backgroundColor:'#F6F0FF',flexDirection:'row',alignItems:'center',justifyContent:'center',gap:8,paddingHorizontal:12},
+  reelsFairText:{fontSize:11,fontWeight:'700',color:'#5C4A79',flexShrink:1},
+  reelsEmpty:{minHeight:116,borderWidth:1,borderStyle:'dashed',borderColor:'#D8CBEA',borderRadius:16,backgroundColor:'#FAF8FD',alignItems:'center',justifyContent:'center',padding:18,gap:7},
+  reelsEmptyTitle:{fontSize:14,fontWeight:'800',color:ui.ink},
+  reelsEmptyText:{fontSize:11,lineHeight:16,color:ui.muted,textAlign:'center'},
   searchRow:{flexDirection:'row',alignItems:'center',gap:12},
   searchBox:{flex:1,minHeight:52,borderRadius:12,backgroundColor:ui.surface,borderWidth:1,borderColor:ui.border,paddingHorizontal:14,flexDirection:'row',alignItems:'center',gap:8,shadowColor:'#000',shadowOpacity: 0,shadowRadius:4,elevation: 0},
   searchInput:{flex:1,minWidth:0,fontSize:15,color:'#303744',paddingVertical:10},

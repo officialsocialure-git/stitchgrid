@@ -1,12 +1,14 @@
 import { ui } from '@/theme/ui';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable,
+  ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
-import { apiPost } from '@/services/api';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import { apiPost, API_BASE_URL } from '@/services/api';
 
 const PURPLE = ui.accent;
 type Section = 'product' | 'quantity' | 'delivery';
@@ -100,7 +102,7 @@ export default function CreateRfqModal({ visible, onClose, onSuccess, supplierOr
   const [colors, setColors] = useState(['Black', 'White', 'Navy', 'Grey']);
   const [newColor, setNewColor] = useState('');
   const [addingColor, setAddingColor] = useState(false);
-  const [fileName] = useState('');
+  const [sampleImage, setSampleImage] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [totalQuantity, setTotalQuantity] = useState('5000');
   const [unit, setUnit] = useState('Pieces');
   const [sizes, setSizes] = useState({ S: '500', M: '1250', L: '1500', XL: '1000', XXL: '750' });
@@ -118,6 +120,7 @@ export default function CreateRfqModal({ visible, onClose, onSuccess, supplierOr
   useEffect(() => {
     if (visible) {
       setTitle(supplierName ? `Sourcing Order for ${supplierName}` : '5,000 Oversized T-Shirts');
+      setSampleImage(null);
       setError('');
       setSuccess('');
     }
@@ -128,6 +131,16 @@ export default function CreateRfqModal({ visible, onClose, onSuccess, supplierOr
     setError('');
     setSuccess('');
     onClose();
+  };
+
+  const chooseSampleImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) { Alert.alert('Permission required', 'Allow photo library access to upload the RFQ sample image.'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    if (asset.fileSize && asset.fileSize > 10 * 1024 * 1024) { Alert.alert('Image too large', 'Please select an image smaller than 10 MB.'); return; }
+    setSampleImage(asset);
   };
 
   const submit = async (submitMode: 'PUBLISH' | 'DRAFT') => {
@@ -156,12 +169,25 @@ export default function CreateRfqModal({ visible, onClose, onSuccess, supplierOr
         `Colorways: ${colorString}`,
         `Delivery Location: ${deliveryLocation.trim()}`,
         `Quote Deadline: ${quoteDeadline}`,
-        fileName ? `Tech Pack File: ${fileName}` : null,
+
       ].filter(Boolean).join(' | ');
+      let sampleImageUrl: string | undefined;
+      if (sampleImage) {
+        const base64 = await FileSystem.readAsStringAsync(sampleImage.uri, { encoding: FileSystem.EncodingType.Base64 });
+        const mimeType = sampleImage.mimeType || 'image/jpeg';
+        const extension = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : mimeType === 'image/heic' ? 'heic' : 'jpg';
+        const uploaded = await apiPost<{ url: string }>('/upload', {
+          filename: sampleImage.fileName || `rfq-sample-${Date.now()}.${extension}`,
+          data: `data:${mimeType};base64,${base64}`,
+          label: 'RFQ_SAMPLE_IMAGE',
+        }, 90000);
+        sampleImageUrl = uploaded.url.startsWith('http') ? uploaded.url : `${API_BASE_URL.replace('/api', '')}${uploaded.url.startsWith('/') ? '' : '/'}${uploaded.url}`;
+      }
       const date = deliveryDate ? new Date(`${deliveryDate}T12:00:00`).toISOString() : undefined;
       await apiPost('/rfqs', {
         buyerOrgId,
         title: title.trim(),
+        sampleImageUrl,
         garmentType: productType || category,
         fabricSpec: fabricSpec.trim(),
         targetQuantity: Number(totalQuantity),
@@ -234,12 +260,12 @@ export default function CreateRfqModal({ visible, onClose, onSuccess, supplierOr
                   </View>
                 </View>
                 <View style={styles.field}>
-                  <Text style={styles.label}>Upload Design / Tech Pack (Optional)</Text>
-                  <Pressable style={styles.uploadBox} onPress={() => Alert.alert('Tech pack attachments', 'File uploads are not available in this mobile form. Include the relevant specifications in Requirement Details before publishing.')}>
-                    <View style={styles.uploadIcon}><MaterialCommunityIcons name="information-outline" size={26} color={PURPLE} /></View>
+                  <Text style={styles.label}>Upload Sample / Product Photo (Optional)</Text>
+                  <Pressable style={styles.uploadBox} onPress={() => void chooseSampleImage()}>
+                    {sampleImage ? <Image source={{ uri: sampleImage.uri }} style={styles.samplePreview} resizeMode="cover" /> : <View style={styles.uploadIcon}><MaterialCommunityIcons name="image-plus-outline" size={26} color={PURPLE} /></View>}
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.uploadLink}>{fileName || 'About tech-pack attachments'}</Text>
-                      <Text style={styles.uploadHint}>File uploads are not available here yet; include specifications below.</Text>
+                      <Text style={styles.uploadLink}>{sampleImage?.fileName || 'Choose sample photo'}</Text>
+                      <Text style={styles.uploadHint}>This exact photo will appear on your My Requests card. JPG, PNG or WEBP · Max 10 MB.</Text>
                     </View>
                   </Pressable>
                 </View>
@@ -325,6 +351,7 @@ const styles = StyleSheet.create({
   addColorInput:{height:36,minWidth:120,borderWidth:1,borderColor:'#D8C8F7',borderRadius:9,paddingHorizontal:9,color:'#222',flex:1},
   uploadBox:{minHeight:76,borderWidth:1,borderStyle:'solid',borderColor:ui.border,borderRadius:14,padding:12,flexDirection:'row',alignItems:'center',gap:12,backgroundColor:ui.surfaceMuted},
   uploadIcon:{width:43,height:43,borderRadius:13,backgroundColor:'#F1E9FF',alignItems:'center',justifyContent:'center'},
+  samplePreview:{width:58,height:58,borderRadius:10,backgroundColor:'#F3F0F8'},
   uploadLink:{fontSize:14,fontWeight:'600',color:ui.ink},
   uploadHint:{fontSize: 13,color:ui.muted,marginTop:4},
   sizeHeader:{flexDirection:'row',flexWrap:'wrap',alignItems:'center',justifyContent:'space-between',gap:8},

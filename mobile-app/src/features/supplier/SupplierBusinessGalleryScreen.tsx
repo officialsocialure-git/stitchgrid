@@ -136,7 +136,7 @@ export default function SupplierBusinessGalleryScreen() {
 
   return (
     <View style={s.screen}>
-      <AppHeader role="SUPPLIER" title="Photos & Factory Gallery" activeSection="profile" showLogo={false} />
+      <AppHeader role="SUPPLIER" title="Photos & Factory Gallery" activeSection="profile" showLogo />
       {loading ? <View style={s.state}><ActivityIndicator size="large" color={PURPLE} /><Text style={s.muted}>Loading gallery…</Text></View> : (
         <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
           <View style={s.tabs}>

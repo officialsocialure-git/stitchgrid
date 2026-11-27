@@ -210,7 +210,7 @@ export default function SupplierManufacturingCapabilitiesScreen() {
 
   return (
     <View style={s.screen}>
-      <AppHeader role="SUPPLIER" title="Manufacturing Capabilities" isBack showLogo={false} />
+      <AppHeader role="SUPPLIER" title="Manufacturing Capabilities" isBack showLogo />
       {loading ? (
         <View style={s.state}><ActivityIndicator size="large" color={ui.accent} /><Text style={s.stateText}>Loading manufacturing capabilities…</Text></View>
       ) : (

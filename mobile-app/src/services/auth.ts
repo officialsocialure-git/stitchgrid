@@ -31,7 +31,9 @@ async function persistSession(result: AuthResponse) {
 }
 
 export async function login(identifier: string, password: string) {
-  const result = await apiPost<AuthResponse>('/auth/login', { identifier, password });
+  // Render Free services can take close to a minute to wake from idle.
+  // Keep the login request alive long enough for the cold start + DB query.
+  const result = await apiPost<AuthResponse>('/auth/login', { identifier, password }, 120000);
   return persistSession(result);
 }
 
@@ -82,7 +84,7 @@ export type SignupPayload = {
 };
 
 export async function signup(payload: SignupPayload) {
-  const result = await apiPost<AuthResponse>('/auth/signup', payload);
+  const result = await apiPost<AuthResponse>('/auth/signup', payload, 120000);
   return persistSession(result);
 }
 

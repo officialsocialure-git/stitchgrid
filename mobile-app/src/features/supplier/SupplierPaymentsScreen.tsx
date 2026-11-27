@@ -307,7 +307,7 @@ export default function SupplierPaymentsScreen() {
 
   return (
     <View style={s.screen}>
-      <AppHeader role="SUPPLIER" activeSection="orders" isBack title="Payments & Earnings" showLogo={false} onBack={() => router.back()} />
+      <AppHeader role="SUPPLIER" activeSection="orders" isBack title="Payments & Earnings" showLogo onBack={() => router.back()} />
       <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(true); }} tintColor={PURPLE} />}>
         <View style={s.heading}>

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { listAdminSupplierReels, moderateSupplierReel } from "../controllers/supplier-reel.controller";
 import { authenticate, requireRole } from "../middleware/auth";
 import {
   adminCatalog, adminDisputes, adminOrderDetails, adminOrders, adminOrganizationActivity, adminOrganizationDetails, adminOverview, adminPayments, adminSupplierPaymentSetups, adminReviewSupplierPaymentSetup,
@@ -23,6 +24,8 @@ router.get("/organizations/:organizationId/activity", adminOrganizationActivity)
 router.get("/organizations/:organizationId", adminOrganizationDetails);
 router.get("/trendy-collections", listAdminTrendyCollections);
 router.patch("/trendy-collections/:collectionId", moderateTrendyCollection);
+router.get("/supplier-reels", listAdminSupplierReels);
+router.patch("/supplier-reels/:reelId", moderateSupplierReel);
 router.get("/marketplace", adminCatalog);
 router.patch("/marketplace/:itemId/moderation", adminUpdateCatalogStatus);
 router.get("/certifications", adminCertifications);

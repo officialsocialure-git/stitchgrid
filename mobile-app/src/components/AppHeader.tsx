@@ -30,6 +30,8 @@ export type AppHeaderProps = {
   onBack?: () => void;
   title?: string;
   showLogo?: boolean;
+  showCart?: boolean;
+  onCartPress?: () => void;
   unreadCount?: number;
   onNotificationPress?: () => void;
   onProfilePress?: () => void;
@@ -70,6 +72,8 @@ export function AppHeader({
   onBack,
   title,
   showLogo = true,
+  showCart = true,
+  onCartPress,
   unreadCount: propUnread,
   onNotificationPress,
   onProfilePress,
@@ -259,7 +263,7 @@ export function AppHeader({
               <MaterialCommunityIcons
                 name={isMenuOpen ? 'close' : 'menu'}
                 size={22}
-                color="#68727F"
+                color="#111827"
               />
             </Pressable>
           )}
@@ -291,11 +295,11 @@ export function AppHeader({
               <Pressable
                 onPress={handleNotificationPress}
                 hitSlop={8}
-                style={({ pressed }) => [styles.circleButton, pressed && styles.pressed]}
+                style={({ pressed }) => [styles.chromeIconButton, pressed && styles.pressed]}
                 accessibilityRole="button"
                 accessibilityLabel={displayUnread > 0 ? `Notifications, ${displayUnread} unread` : 'Notifications'}
               >
-                <MaterialCommunityIcons name="bell-outline" size={20} color={HEADER_PURPLE} />
+                <MaterialCommunityIcons name="bell-outline" size={25} color="#111827" />
                 {displayUnread > 0 && (
                   <View style={styles.badge}>
                     <Text style={styles.badgeText}>
@@ -309,12 +313,32 @@ export function AppHeader({
               <Pressable
                 onPress={handleProfilePress}
                 hitSlop={8}
-                style={({ pressed }) => [styles.circleButton, pressed && styles.pressed]}
+                style={({ pressed }) => [styles.chromeIconButton, pressed && styles.pressed]}
                 accessibilityRole="button"
                 accessibilityLabel="Profile and Settings"
               >
-                <MaterialCommunityIcons name="account-outline" size={20} color={HEADER_PURPLE} />
+                <MaterialCommunityIcons name="account-outline" size={25} color="#111827" />
               </Pressable>
+
+              {showCart && (
+                <Pressable
+                  onPress={() => {
+                    closeMenu();
+                    if (onCartPress) onCartPress();
+                    else if (role === 'BUYER') router.push('/buyer/cart' as any);
+                    else Alert.alert('Cart', 'Cart is available in the buyer workspace.');
+                  }}
+                  hitSlop={8}
+                  style={({ pressed }) => [styles.chromeIconButton, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Shopping cart"
+                >
+                  <MaterialCommunityIcons name="cart-outline" size={25} color="#111827" />
+                </Pressable>
+              )}
+
+
+
             </>
           )}
         </View>
@@ -475,6 +499,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  chromeIconButton: {
+    width: 40,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
   },
   circleButton: {
     width: 48, height: 48,

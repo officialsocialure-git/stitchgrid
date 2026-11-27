@@ -262,7 +262,7 @@ export default function BuyerPaymentsScreen() {
 
   return (
     <View style={styles.screen}>
-      <AppHeader role="BUYER" activeSection="orders" isBack onBack={() => router.back()} title="Secure Payments" showLogo={false} />
+      <AppHeader role="BUYER" activeSection="orders" isBack onBack={() => router.back()} title="Secure Payments" showLogo />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}

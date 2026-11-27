@@ -134,36 +134,49 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
       data: z.string().min(1),
       label: z.string().max(100).optional(),
     }).parse(req.body);
+    if (input.label === "SUPPLIER_REEL" && req.auth?.role !== "SUPPLIER") {
+      throw new AppError(403, "Only supplier accounts can upload collection Reels.");
+    }
+    if (input.label === "RFQ_SAMPLE_IMAGE" && req.auth?.role !== "BUYER") {
+      throw new AppError(403, "Only buyer accounts can upload RFQ sample images.");
+    }
 
     let base64Data = input.data;
     let mimeType = "image/jpeg";
     let extension = path.extname(input.filename).replace(".", "").toLowerCase() || "jpg";
 
     if (input.data.startsWith("data:")) {
-      const match = input.data.match(/^data:([a-zA-Z0-9.+-]+\/[a-zA-Z0-9.+-]+);base64,/);
+      const match = input.data.match(/^data:([^;]+);base64,/);
       if (!match) throw new AppError(400, "Invalid base64 data URL.");
       mimeType = match[1].toLowerCase();
       base64Data = input.data.substring(match[0].length);
-      if (mimeType === "image/png") extension = "png";
-      else if (mimeType === "image/webp") extension = "webp";
-      else if (mimeType === "application/pdf") extension = "pdf";
-      else if (mimeType === "image/jpeg") extension = "jpg";
-      else if (mimeType === "image/heic") extension = "heic";
-      else if (mimeType === "image/heif") extension = "heif";
-      else throw new AppError(415, "Only JPG, PNG, WEBP, HEIC, HEIF and PDF files are supported.");
+      const mimeExtensions: Record<string, string> = {
+        "image/png": "png", "image/webp": "webp", "application/pdf": "pdf",
+        "image/jpeg": "jpg", "image/heic": "heic", "image/heif": "heif",
+        "video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm",
+      };
+      extension = mimeExtensions[mimeType] || "";
     } else {
       const extMime: Record<string, string> = {
         jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
         webp: "image/webp", heic: "image/heic", heif: "image/heif", pdf: "application/pdf",
+        mp4: "video/mp4", mov: "video/quicktime", webm: "video/webm",
       };
       mimeType = extMime[extension] || "";
-      if (!mimeType) throw new AppError(415, "Only JPG, PNG, WEBP, HEIC, HEIF and PDF files are supported.");
     }
 
+    const isVideo = mimeType.startsWith("video/");
+    if (input.label === "RFQ_SAMPLE_IMAGE" && !mimeType.startsWith("image/")) {
+      throw new AppError(415, "RFQ sample attachments must be image files.");
+    }
+    if (!mimeType || (isVideo && input.label !== "SUPPLIER_REEL") || (!isVideo && input.label === "SUPPLIER_REEL") || (!isVideo && !["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"].includes(mimeType))) {
+      throw new AppError(415, "Supported files are JPG, PNG, WEBP, HEIC, HEIF, PDF, or MP4/MOV/WEBM video for Supplier Reels.");
+    }
     const safeFilename = `sg-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}.${extension}`;
     const buffer = Buffer.from(base64Data, "base64");
     if (!buffer.length) throw new AppError(400, "Uploaded file is empty or invalid.");
-    if (buffer.length > 10 * 1024 * 1024) throw new AppError(413, "File size must be 10 MB or less.");
+    const maxBytes = isVideo ? 30 * 1024 * 1024 : 10 * 1024 * 1024;
+    if (buffer.length > maxBytes) throw new AppError(413, isVideo ? "Reel video must be 30 MB or less." : "File size must be 10 MB or less.");
 
     const cloudName = env.CLOUDINARY_CLOUD_NAME;
     const apiKey = env.CLOUDINARY_API_KEY;
@@ -171,7 +184,7 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
     if (cloudName && apiKey && apiSecret) {
       const timestamp = Math.floor(Date.now() / 1000);
       const businessMediaLabels = ["COMPANY_LOGO", "COVER_PHOTO", "COMPANY_PHOTO", "FACTORY_PHOTO", "WORK_PROCESS"];
-      const folder = input.label?.startsWith("CAPABILITY_") ? "stitchgrid/capability-images" : businessMediaLabels.includes(input.label || "") ? "stitchgrid/business-gallery" : input.label === "PRODUCT_PORTFOLIO" ? "stitchgrid/product-portfolio" : input.label === "TRENDY_COLLECTION" ? "stitchgrid/trendy-collections" : input.label === "SUPPLIER_CERTIFICATE" ? "stitchgrid/certifications" : "stitchgrid/sample-attachments";
+      const folder = input.label === "SUPPLIER_REEL" ? "stitchgrid/supplier-reels" : input.label === "RFQ_SAMPLE_IMAGE" ? "stitchgrid/rfq-sample-images" : input.label?.startsWith("CAPABILITY_") ? "stitchgrid/capability-images" : businessMediaLabels.includes(input.label || "") ? "stitchgrid/business-gallery" : input.label === "PRODUCT_PORTFOLIO" ? "stitchgrid/product-portfolio" : input.label === "TRENDY_COLLECTION" ? "stitchgrid/trendy-collections" : input.label === "SUPPLIER_CERTIFICATE" ? "stitchgrid/certifications" : "stitchgrid/sample-attachments";
       const signature = createHash("sha1")
         .update(`folder=${folder}&timestamp=${timestamp}${apiSecret}`)
         .digest("hex");
@@ -181,7 +194,7 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
       form.append("timestamp", String(timestamp));
       form.append("folder", folder);
       form.append("signature", signature);
-      const resourceType = mimeType === "application/pdf" ? "raw" : "image";
+      const resourceType = isVideo ? "video" : mimeType === "application/pdf" ? "raw" : "image";
       const cloudResponse = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`, {
         method: "POST",
         body: form,
@@ -196,6 +209,7 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
         label: input.label || "Sample Attachment",
         size: cloudPayload.bytes || buffer.length,
         mimeType,
+        durationSeconds: typeof cloudPayload.duration === "number" ? Math.round(cloudPayload.duration) : null,
       }, 201);
     }
 

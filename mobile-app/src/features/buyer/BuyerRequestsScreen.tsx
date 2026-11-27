@@ -10,7 +10,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import { apiGet, apiRequest } from '@/services/api';
+import { apiGet, apiRequest, API_BASE_URL } from '@/services/api';
 import CreateRfqModal from '@/features/buyer/CreateRfqModal';
 import { AppHeader } from '@/components/AppHeader';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
@@ -21,7 +21,7 @@ const LOGO_URI = 'https://stitchgrid-three.vercel.app/stitchgrid-logo-transparen
 type Rfq = {
   id: string; title: string; status: string; targetQuantity: number;
   targetDate?: string | null; createdAt?: string; garmentType?: string;
-  fabricSpec?: string; description?: string; targetPrice?: number;
+  fabricSpec?: string; description?: string; targetPrice?: number; sampleImageUrl?: string | null;
   items?: { id?: string; name?: string; quantity?: number; unit?: string; description?: string }[];
   quotations?: { id: string; status: string; totalAmount?: number; supplier?: { name?: string } }[];
 };
@@ -153,10 +153,10 @@ export default function BuyerRequestsScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(true); }} tintColor={PURPLE} />}
         ListHeaderComponent={<>
         <View style={styles.titleRow}>
-          <Text style={styles.pageTitle}>My Requests</Text>
-          <Text style={styles.hubPill}>Buyer Sourcing Hub</Text>
+          <Text style={styles.pageTitle}>My Requests (RFQs)</Text>
+          
         </View>
-        <Text style={styles.subtitle}>Create and manage your production requests (RFQs), compare supplier quotes, and move to order.</Text>
+        <Text style={styles.subtitle}>Create RFQs, compare supplier quotes and place orders.</Text>
 
 
         <Pressable style={styles.postButton} onPress={() => setPostModalVisible(true)}>
@@ -166,7 +166,7 @@ export default function BuyerRequestsScreen() {
 
         <View style={styles.searchBox}>
           <MaterialCommunityIcons name="magnify" size={24} color="#929BA6" />
-          <TextInput value={search} onChangeText={setSearch} placeholder="Search by RFQ ID, title or product..." placeholderTextColor={ui.muted} style={styles.searchInput} autoCapitalize="none" />
+          <TextInput value={search} onChangeText={setSearch} placeholder="Search by RFQ ID, product or keyword..." placeholderTextColor={ui.muted} style={styles.searchInput} autoCapitalize="none" />
           {!!search && <Pressable onPress={() => setSearch('')}><MaterialCommunityIcons name="close-circle" size={19} color="#929BA6" /></Pressable>}
         </View>
 
@@ -195,6 +195,9 @@ export default function BuyerRequestsScreen() {
           const awardedTo = rfq.quotations?.find(q => q.status === 'ACCEPTED' || q.status === 'AWARDED')?.supplier?.name;
           return (
             <View key={rfq.id} style={styles.rfqCard}>
+              <View style={styles.rfqMainRow}>
+                {rfq.sampleImageUrl ? <Image source={{ uri: rfq.sampleImageUrl.startsWith('http') ? rfq.sampleImageUrl : `${API_BASE_URL.replace('/api', '')}${rfq.sampleImageUrl.startsWith('/') ? '' : '/'}${rfq.sampleImageUrl}` }} style={styles.rfqThumbnail} resizeMode="cover" /> : <View style={styles.rfqImagePlaceholder}><MaterialCommunityIcons name="image-outline" size={34} color="#A69AB8" /></View>}
+                <View style={styles.rfqMainContent}>
               <View style={styles.cardTop}>
                 <View style={styles.pillsRow}>
                   <Text style={styles.rfqPill}>{rfqCode(rfq.id)}</Text>
@@ -213,26 +216,28 @@ export default function BuyerRequestsScreen() {
                 <View style={styles.metaItem}><MaterialCommunityIcons name="layers-outline" size={21} color="#9AA1AA" /><Text style={styles.metaText}>Qty: {Number(rfq.targetQuantity || 0).toLocaleString('en-IN')} {rfq.items?.[0]?.unit || 'pieces'}</Text></View>
                 <View style={styles.metaItem}><MaterialCommunityIcons name="calendar-month-outline" size={21} color="#9AA1AA" /><Text style={styles.metaText}>Delivery: {formatDate(rfq.targetDate)}</Text></View>
               </View>
+                </View>
+              </View>
               <View style={styles.cardDivider} />
               {label === 'Awarded' ? (
                 <View style={styles.bottomInfo}>
                   <View><Text style={styles.smallLabel}>Awarded To</Text><Text style={styles.infoStrong}>{awardedTo || 'Selected Supplier'}</Text></View>
-                  <View style={styles.createdBlock}><Text style={styles.smallLabel}>Created On</Text><Text style={styles.infoStrong}>{formatDate(rfq.createdAt)}</Text></View>
+                  <View style={styles.createdBlock}><Text style={styles.smallLabel}>Created</Text><Text style={styles.infoStrong}>{formatDate(rfq.createdAt)}</Text></View>
                 </View>
               ) : count > 0 ? (
                 <View style={styles.bottomInfo}>
-                  <View><Text style={styles.smallLabel}>Quotes Received</Text><Text style={styles.quoteCount}>{count}</Text><Pressable onPress={() => router.push({ pathname: '/buyer/[section]', params: { section: 'offers', rfqId: rfq.id } } as any)}><Text style={styles.linkText}>View Quotes</Text></Pressable></View>
-                  <View style={styles.createdBlock}><Text style={styles.smallLabel}>Created On</Text><Text style={styles.infoStrong}>{formatDate(rfq.createdAt)}</Text></View>
+                  <View><Text style={styles.quoteCount}>Quotes: {count}</Text></View>
+                  <View style={styles.createdBlock}><Text style={styles.smallLabel}>Created</Text><Text style={styles.infoStrong}>{formatDate(rfq.createdAt)}</Text></View>
                 </View>
               ) : (
                 <View style={styles.bottomInfo}>
-                  <View><Text style={styles.smallLabel}>Created On</Text><Text style={styles.infoStrong}>{formatDate(rfq.createdAt)}</Text></View>
+                  <View><Text style={styles.smallLabel}>Created</Text><Text style={styles.infoStrong}>{formatDate(rfq.createdAt)}</Text></View>
                   <View style={styles.createdBlock}><Text style={styles.smallLabel}>Quotes Received</Text><Text style={styles.quoteCount}>0</Text></View>
                 </View>
               )}
               <View style={styles.actionsRow}>
                 {count > 0 && label !== 'Awarded' && <Pressable style={styles.compareButton} onPress={() => router.push({ pathname: '/buyer/[section]', params: { section: 'offers', rfqId: rfq.id } } as any)}><MaterialCommunityIcons name="compare-horizontal" size={20} color="#FFFFFF" /><Text style={styles.compareText}>Compare Quotes</Text></Pressable>}
-                <Pressable style={[styles.detailsButton, count === 0 && { flex: 1 }]} onPress={() => setSelected(rfq)}><MaterialCommunityIcons name="eye-outline" size={21} color={PURPLE} /><Text style={styles.detailsText}>View Details</Text></Pressable>
+                <Pressable style={[styles.detailsButton, count === 0 && { flex: 1 }]} onPress={() => count > 0 ? router.push({ pathname: '/buyer/[section]', params: { section: 'offers', rfqId: rfq.id } } as any) : setSelected(rfq)}><MaterialCommunityIcons name={count > 0 ? 'swap-horizontal' : 'eye-outline'} size={21} color={PURPLE} /><Text style={styles.detailsText}>{count > 0 ? `View Quotes (${count})` : 'View Details'}</Text></Pressable>
               </View>
             </View>
           );
@@ -268,6 +273,7 @@ export default function BuyerRequestsScreen() {
             <View style={styles.pickerHeader}><View style={{flex:1}}><Text style={styles.detailTitle}>{selected?.title || 'RFQ Details'}</Text><Text style={styles.detailSubtitle}>{selected ? rfqCode(selected.id) : ''} · Created {selected ? formatDate(selected.createdAt) : ''}</Text></View><Pressable onPress={() => setSelected(null)}><MaterialCommunityIcons name="close" size={21} color="#8A929E" /></Pressable></View>
             {selected && <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{gap:13,paddingTop:14}}>
               <View style={styles.detailStatus}><Text style={styles.rfqPill}>{rfqCode(selected.id)}</Text><Text style={[styles.statusPill,styles.greenPill]}>{statusOf(selected)}</Text></View>
+              {selected.sampleImageUrl ? <Image source={{ uri: selected.sampleImageUrl.startsWith('http') ? selected.sampleImageUrl : `${API_BASE_URL.replace('/api', '')}${selected.sampleImageUrl}` }} style={styles.detailSampleImage} resizeMode="contain" /> : null}
               <View style={styles.detailGrid}>
                 <View style={styles.detailStat}><Text style={styles.smallLabel}>Target Quantity</Text><Text style={styles.infoStrong}>{Number(selected.targetQuantity || 0).toLocaleString('en-IN')} {selected.items?.[0]?.unit || 'pieces'}</Text></View>
                 <View style={styles.detailStat}><Text style={styles.smallLabel}>Target Delivery</Text><Text style={styles.infoStrong}>{formatDate(selected.targetDate)}</Text></View>
@@ -297,17 +303,22 @@ const styles = StyleSheet.create({
   badgeText:{fontSize: 12,fontWeight: '700',color:ui.surface},
   content:{paddingHorizontal:16,paddingTop:16,paddingBottom:20,gap:16,width:'100%',maxWidth:840,alignSelf:'center'},
   titleRow:{flexDirection:'row',alignItems:'center',flexWrap:'wrap',gap:9},
-  pageTitle:{fontSize:22,fontWeight: '700',color:ui.ink,letterSpacing:-.7},
+  pageTitle:{fontSize:28,fontWeight:'800',color:'#101522',letterSpacing:-.8},
   hubPill:{fontSize: 13,fontWeight: '700',color:ui.accent,backgroundColor:'#F3EDFF',paddingHorizontal:11,paddingVertical:6,borderRadius:15,overflow:'hidden'},
-  subtitle:{fontSize:14,lineHeight:21,color:'#707986',marginTop:-8},
-  postButton:{alignSelf:'flex-start',minHeight:49,paddingHorizontal:17,borderRadius:14,backgroundColor:PURPLE,flexDirection:'row',alignItems:'center',gap:8,marginTop:1,marginBottom:5,elevation: 0},
-  postButtonText:{fontSize:15,fontWeight: '700',color:ui.surface},
-  searchBox:{minHeight:53,backgroundColor:ui.surface,borderWidth:1,borderColor:'#E4E6EB',borderRadius:12,paddingHorizontal:14,flexDirection:'row',alignItems:'center',gap:9},
+  subtitle:{fontSize:16,lineHeight:24,color:'#343B49',marginTop:-5},
+  postButton:{alignSelf:'flex-start',minHeight:58,paddingHorizontal:23,borderRadius:17,backgroundColor:PURPLE,flexDirection:'row',alignItems:'center',gap:10,marginTop:5,marginBottom:6,elevation:2},
+  postButtonText:{fontSize:17,fontWeight:'800',color:ui.surface},
+  searchBox:{minHeight:62,backgroundColor:ui.surface,borderWidth:1,borderColor:'#D9D9E2',borderRadius:17,paddingHorizontal:17,flexDirection:'row',alignItems:'center',gap:11},
   searchInput:{flex:1,minWidth:0,fontSize:14,color:'#252B35',paddingVertical:10},
   filtersRow:{flexDirection:'row',gap:9},
-  filterButton:{flex:1,minWidth:0,minHeight:51,backgroundColor:ui.surface,borderWidth:1,borderColor:'#E4E6EB',borderRadius:12,paddingHorizontal:10,flexDirection:'row',alignItems:'center',gap:6},
+  filterButton:{flex:1,minWidth:0,minHeight:57,backgroundColor:ui.surface,borderWidth:1,borderColor:'#D9D9E2',borderRadius:16,paddingHorizontal:12,flexDirection:'row',alignItems:'center',gap:8},
   filterText:{flex:1,minWidth:0,fontSize: 13,fontWeight:'700',color:'#303744'},
-  rfqCard:{backgroundColor:ui.surface,borderRadius:16,borderWidth:1,borderColor:ui.border,padding:15,gap:12,shadowColor:ui.ink,shadowOpacity: 0,shadowRadius:6,shadowOffset:{width:0,height:2},elevation: 0},
+  rfqCard:{backgroundColor:ui.surface,borderRadius:23,borderWidth:1,borderColor:'#E7E5EC',padding:15,gap:13,shadowColor:'#252033',shadowOpacity:.07,shadowRadius:10,shadowOffset:{width:0,height:4},elevation:2},
+  rfqMainRow:{flexDirection:'row',alignItems:'flex-start',gap:12},
+  rfqMainContent:{flex:1,minWidth:0,gap:9},
+  rfqThumbnail:{width:92,height:112,borderRadius:15,backgroundColor:'#F2F0F6'},
+  rfqImagePlaceholder:{width:92,height:112,borderRadius:15,backgroundColor:'#F4F2F8',alignItems:'center',justifyContent:'center'},
+  detailSampleImage:{width:'100%',height:190,borderRadius:14,backgroundColor:'#F5F3F8'},
   cardTop:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8},
   pillsRow:{flexDirection:'row',alignItems:'center',flexWrap:'wrap',gap:7,flex:1},
   rfqPill:{fontSize: 13,fontWeight: '700',color:PURPLE,backgroundColor:'#F5F0FF',paddingHorizontal:10,paddingVertical:6,borderRadius:15,overflow:'hidden'},
@@ -315,7 +326,7 @@ const styles = StyleSheet.create({
   greenPill:{color:'#16804A',backgroundColor:'#E9FAF1'},
   amberPill:{color:'#9A5B08',backgroundColor:'#FFF7E6'},
   grayPill:{color:'#525B67',backgroundColor:'#F0F1F3'},
-  rfqTitle:{fontSize:18,fontWeight: '700',color:'#151923',marginTop:1},
+  rfqTitle:{fontSize:19,fontWeight:'800',color:'#111827',marginTop:0,lineHeight:25},
   metaRow:{flexDirection:'row',flexWrap:'wrap',gap:13},
   metaItem:{flexDirection:'row',alignItems:'center',gap:6,flexShrink:1},
   metaText:{fontSize:13,color:'#697381',flexShrink:1},
@@ -324,13 +335,13 @@ const styles = StyleSheet.create({
   smallLabel:{fontSize: 12,color:ui.muted},
   infoStrong:{fontSize:14,fontWeight: '700',color:ui.ink,marginTop:3},
   createdBlock:{alignItems:'flex-end'},
-  quoteCount:{fontSize:20,fontWeight: '700',color:ui.ink,marginTop:2},
+  quoteCount:{fontSize:17,fontWeight:'800',color:PURPLE,marginTop:2},
   linkText:{fontSize:13,fontWeight: '700',color:PURPLE,marginTop:3},
   actionsRow:{flexDirection:'row',gap:9,marginTop:2},
-  compareButton:{flex:1,minHeight:48,borderRadius:13,backgroundColor:PURPLE,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7,paddingHorizontal:8},
-  compareText:{fontSize:13,fontWeight: '700',color:ui.surface},
-  detailsButton:{flex:1,minHeight:48,borderRadius:13,borderWidth:1,borderColor:'#E3D9F4',backgroundColor:ui.surface,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7},
-  detailsText:{fontSize:13,fontWeight: '700',color:PURPLE},
+  compareButton:{flex:1,minHeight:55,borderRadius:15,backgroundColor:PURPLE,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7,paddingHorizontal:8,elevation:2},
+  compareText:{fontSize:15,fontWeight:'800',color:ui.surface},
+  detailsButton:{flex:1,minHeight:55,borderRadius:15,borderWidth:1.5,borderColor:PURPLE,backgroundColor:ui.surface,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7,paddingHorizontal:5},
+  detailsText:{fontSize:14,fontWeight:'800',color:PURPLE},
   menuPopup:{alignSelf:'flex-end',backgroundColor:ui.surface,borderWidth:1,borderColor:ui.border,borderRadius:12,padding:5,minWidth:155,elevation: 0,zIndex:5},
   menuAction:{minHeight:39,flexDirection:'row',alignItems:'center',gap:9,paddingHorizontal:8},
   menuText:{fontSize:13,fontWeight:'700',color:'#404854'},

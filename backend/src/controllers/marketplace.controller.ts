@@ -440,7 +440,7 @@ export async function getPublicSupplierProfile(req: Request, res: Response, next
     return sendOk(res, {
       ...organization,
       trendyCollection: organization.verificationStatus === "APPROVED" && organization.trendyCollection?.status === "APPROVED" && organization.trendyCollection.isActive
-        ? { id: organization.trendyCollection.id, name: organization.trendyCollection.name, description: organization.trendyCollection.description, imageUrl: organization.trendyCollection.imageUrl, updatedAt: organization.trendyCollection.updatedAt }
+        ? { id: organization.trendyCollection.id, name: organization.trendyCollection.name, description: organization.trendyCollection.description, imageUrl: organization.trendyCollection.imageUrl, images: Array.isArray(organization.trendyCollection.images) ? organization.trendyCollection.images : [organization.trendyCollection.imageUrl], updatedAt: organization.trendyCollection.updatedAt }
         : null,
       publicRating: {
         average: ratingSummary._avg.rating ?? null,
@@ -807,6 +807,7 @@ export async function createRfq(req: Request, res: Response, next: NextFunction)
       buyerOrgId: z.string(),
       title: z.string().min(3).max(200),
       description: z.string().max(8000).optional(),
+      sampleImageUrl: z.string().max(2000).refine(value => value.startsWith("/") || /^https?:\/\//i.test(value), "Invalid sample image URL").optional(),
       garmentType: z.string().max(100).optional(),
       fabricSpec: z.string().max(2000).optional(),
       targetPrice: z.coerce.number().positive().optional(),
@@ -833,6 +834,7 @@ export async function createRfq(req: Request, res: Response, next: NextFunction)
           buyerOrgId: input.buyerOrgId,
           title: input.title,
           description: input.description,
+          sampleImageUrl: input.sampleImageUrl,
           garmentType: input.garmentType,
           fabricSpec: input.fabricSpec,
           targetPrice: input.targetPrice,

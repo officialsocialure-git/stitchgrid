@@ -76,7 +76,7 @@ export default function SupplierAccountSettingsScreen() {
         role="SUPPLIER"
         activeSection="account-settings"
         title="Account Settings"
-        showLogo={false}
+        showLogo
       />
       <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
         <View style={s.titleRow}>

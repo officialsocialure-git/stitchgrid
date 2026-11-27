@@ -29,7 +29,9 @@ function notify(payload: RealtimeSyncPayload) {
 export function connectRealtime(token: string) {
   if (!token) return;
   if (socket && activeToken === token) {
-    if (!socket.connected) socket.connect();
+    // A socket can be active while its initial handshake is still pending.
+    // Calling connect() again during that window can restart the handshake.
+    if (!socket.connected && !socket.active) socket.connect();
     return;
   }
   if (activeToken !== token) {
@@ -45,15 +47,22 @@ export function connectRealtime(token: string) {
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
-      reconnectionDelayMax: 10000,
-      timeout: 20000,
+      reconnectionDelayMax: 15000,
+      // Render free instances can take a while to wake from idle.
+      // Give the first handshake enough time before Socket.IO retries.
+      timeout: 120000,
     });
     socket.on('connect', () => {
       console.info('[REALTIME] Connected');
       notify({ topic: 'connection:restored', action: 'refresh' });
     });
     socket.on('disconnect', reason => console.info('[REALTIME] Disconnected', reason));
-    socket.on('connect_error', error => console.warn('[REALTIME] Connection error', error.message));
+    socket.on('connect_error', error => {
+      console.warn('[REALTIME] Connection error', error.message, {
+        url: REALTIME_URL,
+        transport: socket?.io.engine?.transport?.name || 'handshake',
+      });
+    });
     // The backend sends a normalized sync envelope alongside domain-specific events.
     socket.on('sync', (payload: RealtimeSyncPayload) => {
       if (payload && typeof payload.topic === 'string') notify(payload);

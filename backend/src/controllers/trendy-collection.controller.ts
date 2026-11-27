@@ -25,6 +25,7 @@ export async function upsertMyTrendyCollection(req: Request, res: Response, next
   try {
     const input = z.object({
       imageUrl: z.string().url().max(2000),
+      images: z.array(z.string().url().max(2000)).min(1).max(5).optional(),
       isActive: z.boolean().optional(),
     }).parse(req.body);
     const organizationId = await supplierOrganization(req);
@@ -33,14 +34,17 @@ export async function upsertMyTrendyCollection(req: Request, res: Response, next
       prisma.organization.findUnique({ where: { id: organizationId }, select: { name: true } }),
     ]);
     if (!organization) throw new AppError(404, "Supplier organization not found");
-    const contentChanged = !existing || existing.imageUrl !== input.imageUrl;
+    const nextImages = input.images?.length ? input.images : [input.imageUrl];
+    const existingImages = Array.isArray(existing?.images) ? existing.images as string[] : [existing?.imageUrl].filter(Boolean) as string[];
+    const contentChanged = !existing || existing.imageUrl !== input.imageUrl || JSON.stringify(existingImages) !== JSON.stringify(nextImages);
     const item = await prisma.trendyCollection.upsert({
       where: { organizationId },
-      create: { organizationId, name: organization.name, description: null, imageUrl: input.imageUrl, isActive: false, status: "PENDING" }, 
+      create: { organizationId, name: organization.name, description: null, imageUrl: input.imageUrl, images: nextImages, isActive: false, status: "PENDING" }, 
       update: {
         name: organization.name,
         description: null,
         imageUrl: input.imageUrl,
+        images: nextImages,
         status: contentChanged ? "PENDING" : (existing?.status ?? "PENDING"),
         isActive: !contentChanged && existing?.status === "APPROVED" ? (input.isActive ?? existing.isActive) : false,
         moderationNote: null,

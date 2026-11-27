@@ -54,6 +54,8 @@ const sections = [
   { key: 'company', title: 'Company Information', subtitle: 'Basic company and legal details', icon: 'domain', target: 'company-information' },
   { key: 'gallery', title: 'Photos & Factory Gallery', subtitle: 'Logo, factory and product photos', icon: 'image-multiple-outline', target: 'business-gallery' },
   { key: 'products', title: 'Products & Portfolio', subtitle: 'Your products and previous work', icon: 'hanger', target: 'catalog' },
+  { key: 'reels', title: 'Viral Trends / Reels', subtitle: 'Upload and manage short collection videos', icon: 'movie-play-outline', target: 'supplier-reels' },
+  { key: 'trendy', title: 'Trendy Collection', subtitle: 'Showcase one featured collection to buyers', icon: 'crown-outline', target: 'trendy-collection' },
   { key: 'capabilities', title: 'Manufacturing Capabilities', subtitle: 'Categories, capacity, MOQ etc.', icon: 'factory', target: 'manufacturing-capabilities' },
   { key: 'certificates', title: 'Certifications', subtitle: 'Business and quality certificates', icon: 'certificate-outline', target: 'business-certifications' },
   { key: 'reviews', title: 'Reviews & Ratings', subtitle: 'Add customer testimonials and ratings', icon: 'star-plus-outline', target: 'supplier-reviews' },
@@ -127,7 +129,7 @@ export default function SupplierBusinessProfileScreen() {
 
   return (
     <View style={s.screen}>
-      <AppHeader role="SUPPLIER" title="My Business Profile" activeSection="profile" showLogo={false} />
+      <AppHeader role="SUPPLIER" title="My Business Profile" activeSection="profile" showLogo />
       {loading ? (
         <View style={s.state}><ActivityIndicator size="large" color={PURPLE} /><Text style={s.muted}>Loading your business profile…</Text></View>
       ) : error ? (

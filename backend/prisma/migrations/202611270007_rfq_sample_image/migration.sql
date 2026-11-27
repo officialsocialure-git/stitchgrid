@@ -1,0 +1,2 @@
+ALTER TABLE `Rfq`
+  ADD COLUMN `sampleImageUrl` TEXT NULL;

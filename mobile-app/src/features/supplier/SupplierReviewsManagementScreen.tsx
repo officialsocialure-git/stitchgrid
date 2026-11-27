@@ -74,7 +74,7 @@ export default function SupplierReviewsManagementScreen() {
   const distribution = [5, 4, 3, 2, 1].map(star => ({ star, count: items.filter(item => item.rating === star).length }));
 
   return <View style={s.screen}>
-    <AppHeader role="SUPPLIER" title="Reviews & Ratings" activeSection="profile" showLogo={false} />
+    <AppHeader role="SUPPLIER" title="Reviews & Ratings" activeSection="profile" showLogo />
     {loading ? <View style={s.center}><ActivityIndicator color={purple} /><Text style={s.muted}>Loading testimonials…</Text></View> : <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
       <View style={s.hero}><View style={s.heroIcon}><MaterialCommunityIcons name="star-plus-outline" size={25} color={purple} /></View><View style={{ flex: 1 }}><Text style={s.heroTitle}>Supplier Reviews & Ratings</Text><Text style={s.heroText}>Add customer testimonials and ratings to build trust with buyers.</Text></View></View>
       <View style={s.summary}>
