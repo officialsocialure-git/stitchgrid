@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authenticate, optionalAuthenticate, requireRole } from "../middleware/auth";
 import { createSupplierTestimonial, deleteSupplierTestimonial, listSupplierTestimonials, updateSupplierTestimonial } from "../controllers/testimonial.controller";
+import { getMyTrendyCollection, upsertMyTrendyCollection, listPublicTrendyCollections, listAdminTrendyCollections, moderateTrendyCollection } from "../controllers/trendy-collection.controller";
 import { createCatalogItem, listMyCatalogItems, updateCatalogItem, deleteCatalogItem } from "../controllers/catalog.controller";
 import { createCertification, listMyCertifications, updateCertification, deleteCertification } from "../controllers/certification.controller";
 import {
@@ -16,9 +17,14 @@ const router = Router();
 // Public / optional auth routes for supplier discovery
 router.get("/suppliers", optionalAuthenticate, supplierSearch);
 router.get("/suppliers/:organizationId/profile", optionalAuthenticate, getPublicSupplierProfile);
+router.get("/trendy-collections", listPublicTrendyCollections);
 
 // Protected routes below
 router.use(authenticate);
+router.get("/trendy-collections/mine", requireRole("SUPPLIER"), getMyTrendyCollection);
+router.put("/trendy-collections/mine", requireRole("SUPPLIER"), upsertMyTrendyCollection);
+router.get("/admin/trendy-collections", requireRole("ADMIN"), listAdminTrendyCollections);
+router.patch("/admin/trendy-collections/:collectionId", requireRole("ADMIN"), moderateTrendyCollection);
 router.put("/supplier-profile", upsertSupplierProfile);
 router.get("/catalog-items", listMyCatalogItems);
 router.post("/catalog-items", createCatalogItem);

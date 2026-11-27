@@ -171,7 +171,7 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
     if (cloudName && apiKey && apiSecret) {
       const timestamp = Math.floor(Date.now() / 1000);
       const businessMediaLabels = ["COMPANY_LOGO", "COVER_PHOTO", "COMPANY_PHOTO", "FACTORY_PHOTO", "WORK_PROCESS"];
-      const folder = input.label?.startsWith("CAPABILITY_") ? "stitchgrid/capability-images" : businessMediaLabels.includes(input.label || "") ? "stitchgrid/business-gallery" : input.label === "PRODUCT_PORTFOLIO" ? "stitchgrid/product-portfolio" : input.label === "SUPPLIER_CERTIFICATE" ? "stitchgrid/certifications" : "stitchgrid/sample-attachments";
+      const folder = input.label?.startsWith("CAPABILITY_") ? "stitchgrid/capability-images" : businessMediaLabels.includes(input.label || "") ? "stitchgrid/business-gallery" : input.label === "PRODUCT_PORTFOLIO" ? "stitchgrid/product-portfolio" : input.label === "TRENDY_COLLECTION" ? "stitchgrid/trendy-collections" : input.label === "SUPPLIER_CERTIFICATE" ? "stitchgrid/certifications" : "stitchgrid/sample-attachments";
       const signature = createHash("sha1")
         .update(`folder=${folder}&timestamp=${timestamp}${apiSecret}`)
         .digest("hex");

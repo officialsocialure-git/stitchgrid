@@ -402,6 +402,7 @@ export async function getPublicSupplierProfile(req: Request, res: Response, next
         businessMedia: {
           orderBy: [{ mediaType: "asc" }, { sortOrder: "asc" }],
         },
+        trendyCollection: true,
       },
     });
 
@@ -436,6 +437,9 @@ export async function getPublicSupplierProfile(req: Request, res: Response, next
 
     return sendOk(res, {
       ...organization,
+      trendyCollection: organization.verificationStatus === "APPROVED" && organization.trendyCollection?.status === "APPROVED" && organization.trendyCollection.isActive
+        ? { id: organization.trendyCollection.id, name: organization.trendyCollection.name, description: organization.trendyCollection.description, imageUrl: organization.trendyCollection.imageUrl, updatedAt: organization.trendyCollection.updatedAt }
+        : null,
       publicRating: {
         average: ratingSummary._avg.rating ?? null,
         count: ratingSummary._count._all,

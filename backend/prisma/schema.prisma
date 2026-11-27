@@ -139,12 +139,36 @@ model Organization {
   businessMedia          BusinessMedia[]
   supplierPaymentProfile SupplierPaymentProfile?
   supplierTestimonials   SupplierTestimonial[]
+  trendyCollection       TrendyCollection?
   rfqs                   Rfq[]
   quotes                 Quotation[]
   buyerOrders            PurchaseOrder[]         @relation("BuyerOrganization")
   supplierOrders         PurchaseOrder[]         @relation("SupplierOrganization")
 
   @@index([verificationStatus, createdAt])
+}
+
+enum TrendyCollectionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  HIDDEN
+}
+
+model TrendyCollection {
+  id             String                 @id @default(cuid())
+  organizationId String                 @unique
+  name           String                 @db.VarChar(120)
+  description    String?                @db.VarChar(500)
+  imageUrl       String                 @db.VarChar(2000)
+  isActive       Boolean                @default(false)
+  status         TrendyCollectionStatus @default(PENDING)
+  moderationNote String?                @db.VarChar(500)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([status, isActive, updatedAt])
 }
 
 model OrganizationMember {
@@ -174,21 +198,21 @@ model RefreshToken {
 }
 
 model SupplierProfile {
-  id                   String                      @id @default(cuid())
-  organizationId       String                      @unique
-  description          String?                     @db.Text
-  yearsInBusiness      Int?
-  productionCapacity   Int?
-  minimumOrderQuantity Int? // Piece-based MOQ (PCS)
+  id                         String                      @id @default(cuid())
+  organizationId             String                      @unique
+  description                String?                     @db.Text
+  yearsInBusiness            Int?
+  productionCapacity         Int?
+  minimumOrderQuantity       Int? // Piece-based MOQ (PCS)
   fabricMinimumOrderQuantity Int? // Fabric MOQ (meters)
-  sampleDevelopment    Boolean                     @default(false)
-  verificationStatus   VerificationStatus          @default(PENDING)
-  organization         Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  categories           SupplierCategory[]
-  capabilities         SupplierCapability[]
-  workforceResources   SupplierWorkforceResource[]
-  catalogItems         CatalogItem[]
-  certifications       SupplierCertification[]
+  sampleDevelopment          Boolean                     @default(false)
+  verificationStatus         VerificationStatus          @default(PENDING)
+  organization               Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  categories                 SupplierCategory[]
+  capabilities               SupplierCapability[]
+  workforceResources         SupplierWorkforceResource[]
+  catalogItems               CatalogItem[]
+  certifications             SupplierCertification[]
 }
 
 model SupplierCapability {
@@ -391,43 +415,43 @@ model QuotationItem {
 }
 
 model PurchaseOrder {
-  id                  String               @id @default(cuid())
-  poNumber            String               @unique
-  buyerOrgId          String
-  supplierOrgId       String
-  quotationId         String               @unique
-  status              OrderStatus          @default(PENDING_ACCEPTANCE)
-  totalAmount         Decimal              @db.Decimal(12, 2)
-  currency            String               @default("INR")
-  expectedDate        DateTime?
-  dispatchDate        DateTime?
-  trackingNumber      String?
-  deliveryDate        DateTime?
-  deliveryAddressStatus String             @default("NOT_REQUESTED") @db.VarChar(24)
-  deliveryRecipientName String?            @db.VarChar(160)
-  deliveryPhone       String?              @db.VarChar(30)
-  deliveryAddressLine String?              @db.Text
-  deliveryCity        String?              @db.VarChar(120)
-  deliveryState       String?              @db.VarChar(120)
-  deliveryPostalCode  String?              @db.VarChar(20)
-  deliveryCountry     String?              @db.VarChar(100)
-  deliveryLatitude    Float?
-  deliveryLongitude   Float?
+  id                         String               @id @default(cuid())
+  poNumber                   String               @unique
+  buyerOrgId                 String
+  supplierOrgId              String
+  quotationId                String               @unique
+  status                     OrderStatus          @default(PENDING_ACCEPTANCE)
+  totalAmount                Decimal              @db.Decimal(12, 2)
+  currency                   String               @default("INR")
+  expectedDate               DateTime?
+  dispatchDate               DateTime?
+  trackingNumber             String?
+  deliveryDate               DateTime?
+  deliveryAddressStatus      String               @default("NOT_REQUESTED") @db.VarChar(24)
+  deliveryRecipientName      String?              @db.VarChar(160)
+  deliveryPhone              String?              @db.VarChar(30)
+  deliveryAddressLine        String?              @db.Text
+  deliveryCity               String?              @db.VarChar(120)
+  deliveryState              String?              @db.VarChar(120)
+  deliveryPostalCode         String?              @db.VarChar(20)
+  deliveryCountry            String?              @db.VarChar(100)
+  deliveryLatitude           Float?
+  deliveryLongitude          Float?
   deliveryAddressRequestedAt DateTime?
   deliveryAddressSubmittedAt DateTime?
-  qcNotes             String?              @db.Text
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  buyer               Organization         @relation("BuyerOrganization", fields: [buyerOrgId], references: [id])
-  supplier            Organization         @relation("SupplierOrganization", fields: [supplierOrgId], references: [id])
-  quotation           Quotation            @relation(fields: [quotationId], references: [id])
-  items               PurchaseOrderItem[]
-  milestones          OrderMilestone[]
-  paymentPlan         PaymentPlan?
-  paymentTransactions PaymentTransaction[]
-  samples             Sample[]
-  events              OrderEvent[]
-  qcReports           QualityCheckReport[]
+  qcNotes                    String?              @db.Text
+  createdAt                  DateTime             @default(now())
+  updatedAt                  DateTime             @updatedAt
+  buyer                      Organization         @relation("BuyerOrganization", fields: [buyerOrgId], references: [id])
+  supplier                   Organization         @relation("SupplierOrganization", fields: [supplierOrgId], references: [id])
+  quotation                  Quotation            @relation(fields: [quotationId], references: [id])
+  items                      PurchaseOrderItem[]
+  milestones                 OrderMilestone[]
+  paymentPlan                PaymentPlan?
+  paymentTransactions        PaymentTransaction[]
+  samples                    Sample[]
+  events                     OrderEvent[]
+  qcReports                  QualityCheckReport[]
 
   @@index([buyerOrgId, createdAt])
   @@index([supplierOrgId, createdAt])
