@@ -373,6 +373,7 @@ export async function getPublicSupplierProfile(req: Request, res: Response, next
     const organization = await prisma.organization.findFirst({
       where: {
         id: organizationId,
+        verificationStatus: "APPROVED",
         members: { some: { role: "SUPPLIER", isActive: true } },
       },
       select: {
@@ -390,7 +391,8 @@ export async function getPublicSupplierProfile(req: Request, res: Response, next
             capabilities: true,
             workforceResources: { orderBy: { resource: "asc" } },
             catalogItems: {
-              select: { id: true, name: true, itemType: true, imageUrl: true, images: { orderBy: { sortOrder: "asc" }, select: { id: true, imageUrl: true, sortOrder: true } } },
+              where: { moderationStatus: "APPROVED", isActive: true },
+              select: { id: true, name: true, itemType: true, description: true, imageUrl: true, moq: true, unitPrice: true, currency: true, gender: true, material: true, gsm: true, sizes: true, colors: true, images: { orderBy: { sortOrder: "asc" }, select: { id: true, imageUrl: true, sortOrder: true } }, priceTiers: { orderBy: { minQuantity: "asc" } } },
               orderBy: { createdAt: "desc" },
             },
             certifications: {

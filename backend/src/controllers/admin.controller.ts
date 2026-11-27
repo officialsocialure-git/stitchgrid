@@ -280,7 +280,7 @@ export async function adminCatalog(req: Request, res: Response, next: NextFuncti
       where.createdAt = { gte: new Date(Date.now() - days * 24 * 60 * 60 * 1000) };
     }
     const [items, total, totalListings, pending, approved, rejected, categories] = await Promise.all([
-      prisma.catalogItem.findMany({ where, include: { images: { orderBy: { sortOrder: "asc" } }, supplierProfile: { include: { organization: { select: { id: true, name: true, city: true, verificationStatus: true } } } } }, orderBy: { createdAt: "desc" }, skip: (parsed.page - 1) * parsed.limit, take: parsed.limit }),
+      prisma.catalogItem.findMany({ where, include: { images: { orderBy: { sortOrder: "asc" } }, priceTiers: { orderBy: { minQuantity: "asc" } }, supplierProfile: { include: { organization: { select: { id: true, name: true, city: true, verificationStatus: true } } } } }, orderBy: { createdAt: "desc" }, skip: (parsed.page - 1) * parsed.limit, take: parsed.limit }),
       prisma.catalogItem.count({ where }),
       prisma.catalogItem.count(),
       prisma.catalogItem.count({ where: { moderationStatus: "PENDING" } }),
@@ -296,9 +296,22 @@ export async function adminUpdateCatalogStatus(req: Request, res: Response, next
   try {
     const input = z.object({ status: z.enum(["APPROVED", "REJECTED"]), note: z.string().max(2000).optional() }).parse(req.body);
     const itemId = String(req.params.itemId);
-    const item = await prisma.catalogItem.update({ where: { id: itemId }, data: { moderationStatus: input.status, moderationNote: input.note || null } });
-    await audit("ADMIN_CATALOG_MODERATION", "CatalogItem", item.id, req.auth!.userId, undefined, { status: input.status, note: input.note });
+    const existing = await prisma.catalogItem.findUnique({
+      where: { id: itemId },
+      include: { supplierProfile: { include: { organization: { select: { id: true, verificationStatus: true } } } } }
+    });
+    if (!existing) throw new AppError(404, "Product not found");
+    if (input.status === "APPROVED" && existing.supplierProfile.organization.verificationStatus !== "APPROVED") {
+      throw new AppError(409, "Supplier organization must be verified before its product can be approved");
+    }
+    const item = await prisma.catalogItem.update({
+      where: { id: itemId },
+      data: { moderationStatus: input.status, moderationNote: input.note || null, isActive: input.status === "APPROVED" }
+    });
+    await audit("ADMIN_CATALOG_MODERATION", "CatalogItem", item.id, req.auth!.userId, existing.supplierProfile.organization.id, { status: input.status, note: input.note });
     await invalidateCachePattern("cache:suppliers:");
+    emitToRole("SUPPLIER", "catalog:moderated", { itemId: item.id, organizationId: existing.supplierProfile.organization.id, status: item.moderationStatus });
+    emitToRole("BUYER", "catalog:updated", { itemId: item.id, status: item.moderationStatus });
     return sendOk(res, item);
   } catch (error) { next(error); }
 }

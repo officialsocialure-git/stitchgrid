@@ -25,6 +25,14 @@ type Listing = {
   createdAt: string;
   imageUrl?: string | null;
   images?: { id: string; imageUrl: string; sortOrder?: number }[];
+  gender?: string | null;
+  material?: string | null;
+  gsm?: number | null;
+  sizes?: string | null;
+  colors?: string | null;
+  manufacturingType?: string | null;
+  customization?: boolean;
+  priceTiers?: { minQuantity: number; maxQuantity?: number | null; unitPrice: number | string }[];
   supplierProfile?: {
     organization?: { id: string; name: string; city?: string | null; verificationStatus?: string };
   };
@@ -267,6 +275,12 @@ export default function MarketplacePage() {
                     {activeListing.unitPrice !== null && activeListing.unitPrice !== undefined && activeListing.unitPrice !== "" && <div className="flex justify-between gap-3 py-3"><span className="text-slate-500">Unit price</span><span className="font-medium text-slate-900">{formatPrice(activeListing.unitPrice, activeListing.itemType, activeListing.currency)}</span></div>}
                     {activeListing.moq !== null && activeListing.moq !== undefined && <div className="flex justify-between gap-3 py-3"><span className="text-slate-500">Minimum order quantity</span><span className="font-medium text-slate-900">{activeListing.moq} {activeListing.itemType.toLowerCase().includes("fabric") ? "m" : "units"}</span></div>}
                     <div className="flex justify-between gap-3 py-3"><span className="text-slate-500">Currency</span><span className="font-medium text-slate-900">{activeListing.currency || "INR"}</span></div>
+                    {activeListing.material && <div className="flex justify-between gap-3 py-3"><span className="text-slate-500">Material</span><span className="font-medium text-slate-900">{activeListing.material}</span></div>}
+                    {activeListing.gsm && <div className="flex justify-between gap-3 py-3"><span className="text-slate-500">GSM</span><span className="font-medium text-slate-900">{activeListing.gsm}</span></div>}
+                    {activeListing.gender && <div className="flex justify-between gap-3 py-3"><span className="text-slate-500">Gender</span><span className="font-medium text-slate-900">{activeListing.gender}</span></div>}
+                    {activeListing.sizes && <div className="flex justify-between gap-3 py-3"><span className="text-slate-500">Sizes</span><span className="font-medium text-slate-900">{activeListing.sizes}</span></div>}
+                    {activeListing.colors && <div className="flex justify-between gap-3 py-3"><span className="text-slate-500">Colours</span><span className="font-medium text-slate-900">{activeListing.colors}</span></div>}
+                    {activeListing.priceTiers?.length ? <div className="py-3"><span className="text-slate-500">Bulk price tiers</span><div className="mt-2 space-y-1">{activeListing.priceTiers.map((tier, index) => <div key={index} className="flex justify-between gap-3 text-slate-900"><span>{tier.minQuantity}+ pcs</span><span className="font-semibold">{formatPrice(tier.unitPrice, activeListing.itemType, activeListing.currency)}</span></div>)}</div></div> : null}
                     <div className="flex justify-between gap-3 py-3"><span className="text-slate-500">Moderation status</span><span className="font-medium text-slate-900">{activeListing.moderationStatus}</span></div>
                   </div>
                   <p className="mt-3 text-xs text-slate-500">Only specifications currently stored for this listing are shown.</p>

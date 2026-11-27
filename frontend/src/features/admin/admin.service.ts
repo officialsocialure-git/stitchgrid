@@ -20,6 +20,8 @@ export const adminService = {
   updateUserStatus: (id: string, isActive: boolean) => api.patch(`/admin/users/${id}/status`, { isActive }),
   marketplace: (params: URLSearchParams) => api.get<AdminPageResult>(`/admin/marketplace?${params.toString()}`),
   moderateCatalog: (id: string, status: "APPROVED" | "REJECTED", note?: string) => api.patch(`/admin/marketplace/${id}/moderation`, { status, note }),
+  trendyCollections: (status = "ALL") => api.get<any>(`/admin/trendy-collections?status=${encodeURIComponent(status)}`),
+  moderateTrendyCollection: (id: string, status: "APPROVED" | "REJECTED" | "HIDDEN", moderationNote?: string) => api.patch(`/admin/trendy-collections/${id}`, { status, moderationNote }),
   rfqs: (params: URLSearchParams) => api.get<AdminPageResult>(`/admin/rfqs?${params.toString()}`),
   rfq: (id: string) => api.get<any>(`/admin/rfqs/${id}`),
   updateRfqStatus: (id: string, status: "OPEN" | "CLOSED" | "CANCELLED") => api.patch(`/admin/rfqs/${id}/status`, { status }),

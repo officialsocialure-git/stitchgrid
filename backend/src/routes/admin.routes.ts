@@ -8,6 +8,7 @@ import {
 import { adminAuditLogs } from "../controllers/workflow.controller";
 import { adminListPaymentRefunds, adminProcessPaymentRefund } from "../controllers/payment.controller";
 import { adminCertifications, adminReviewCertification } from "../controllers/admin-certification.controller";
+import { listAdminTrendyCollections, moderateTrendyCollection } from "../controllers/trendy-collection.controller";
 
 const router = Router();
 router.use(authenticate, requireRole("ADMIN"));
@@ -20,6 +21,8 @@ router.patch("/users/:userId/status", adminUpdateUserStatus);
 router.delete("/users/:userId", adminDeleteUser);
 router.get("/organizations/:organizationId/activity", adminOrganizationActivity);
 router.get("/organizations/:organizationId", adminOrganizationDetails);
+router.get("/trendy-collections", listAdminTrendyCollections);
+router.patch("/trendy-collections/:collectionId", moderateTrendyCollection);
 router.get("/marketplace", adminCatalog);
 router.patch("/marketplace/:itemId/moderation", adminUpdateCatalogStatus);
 router.get("/certifications", adminCertifications);

@@ -10,7 +10,7 @@ import { authService } from "@/services/auth.service";
 import { useNotifications } from "@/hooks/useNotifications";
 import {
   Bell, ChevronDown, FileText, Headset, Home, Layers3, LogOut, Menu, Package,
-  Search, Settings, ShieldCheck, Users, Wallet, X, MoreHorizontal
+  Search, Settings, ShieldCheck, Users, Wallet, X, MoreHorizontal, Image as ImageIcon
 } from "lucide-react";
 
 const links = [
@@ -18,6 +18,7 @@ const links = [
   { label: "Users", href: "/admin/users", icon: Users },
   { label: "Verification", href: "/admin/verification", icon: ShieldCheck },
   { label: "Marketplace", href: "/admin/marketplace", icon: Layers3 },
+  { label: "Trendy Collections", href: "/admin/trendy-collections", icon: ImageIcon },
   { label: "RFQs", href: "/admin/rfqs", icon: FileText },
   { label: "Orders", href: "/admin/orders", icon: Package },
   { label: "Payments", href: "/admin/payments", icon: Wallet },

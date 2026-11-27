@@ -291,11 +291,33 @@ model CatalogItem {
   moderationStatus  CatalogModerationStatus @default(PENDING)
   moderationNote    String?                 @db.Text
   imageUrl          String?                 @db.VarChar(2000)
+  gender            String?                 @db.VarChar(30)
+  material          String?                 @db.VarChar(120)
+  gsm               Int?
+  sizes             String?                 @db.Text
+  colors            String?                 @db.Text
+  manufacturingType String?                 @db.VarChar(80)
+  customization     Boolean                 @default(false)
+  isActive          Boolean                 @default(true)
   createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
   supplierProfile   SupplierProfile         @relation(fields: [supplierProfileId], references: [id], onDelete: Cascade)
   images            CatalogItemImage[]
+  priceTiers        CatalogItemPriceTier[]
 
   @@index([supplierProfileId, createdAt])
+}
+
+model CatalogItemPriceTier {
+  id            String      @id @default(cuid())
+  catalogItemId String
+  minQuantity   Int
+  maxQuantity   Int?
+  unitPrice     Decimal     @db.Decimal(12, 2)
+  createdAt     DateTime    @default(now())
+  catalogItem   CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+
+  @@index([catalogItemId, minQuantity])
 }
 
 model CatalogItemImage {

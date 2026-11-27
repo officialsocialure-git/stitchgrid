@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Boxes, FileText, Package, ShieldCheck, Users, ChevronRight, RefreshCw, Wallet, CreditCard, Headset, Zap, RotateCcw } from "lucide-react";
+import { Boxes, FileText, Package, ShieldCheck, Users, ChevronRight, RefreshCw, Wallet, CreditCard, Headset, Zap, RotateCcw, Image as ImageIcon } from "lucide-react";
 import { adminService } from "@/features/admin/admin.service";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 
@@ -35,6 +35,7 @@ export default function AdminOverviewPage() {
 
   const pending = [
     { label: "Supplier verification", description: "Organization verification requests", count: data?.pendingVerifications ?? 0, href: "/admin/verification", icon: ShieldCheck },
+    { label: "Trendy Collections", description: "Review supplier collection images", href: "/admin/trendy-collections", icon: ImageIcon },
     { label: "RFQs to review", description: "Requests awaiting review", count: data?.openRfqs ?? 0, href: "/admin/rfqs", icon: FileText },
     { label: "Support cases", description: "Open support issues", count: data?.openDisputes ?? 0, href: "/admin/support", icon: Headset },
     { label: "Supplier payment setups", description: "Pending payment configurations", count: data?.pendingPaymentSetups ?? 0, href: "/admin/payments", icon: Wallet },
