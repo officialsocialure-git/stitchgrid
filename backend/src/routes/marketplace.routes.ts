@@ -1,8 +1,9 @@
 import { Router } from "express";
+import { getBuyerCart, addBuyerCartItem, updateBuyerCartItem, removeBuyerCartItem, clearBuyerCart, submitCartAsRfq } from "../controllers/cart.controller";
 import { authenticate, optionalAuthenticate, requireRole } from "../middleware/auth";
 import { createSupplierTestimonial, deleteSupplierTestimonial, listSupplierTestimonials, updateSupplierTestimonial } from "../controllers/testimonial.controller";
 import { getMyTrendyCollection, upsertMyTrendyCollection, listPublicTrendyCollections } from "../controllers/trendy-collection.controller";
-import { createCatalogItem, listMyCatalogItems, updateCatalogItem, deleteCatalogItem, listMarketplaceProducts, getMarketplaceProduct } from "../controllers/catalog.controller";
+import { createCatalogItem, listMyCatalogItems, updateCatalogItem, deleteCatalogItem, listMarketplaceProducts, listMarketplaceFilterOptions, getMarketplaceProduct } from "../controllers/catalog.controller";
 import { createCertification, listMyCertifications, updateCertification, deleteCertification } from "../controllers/certification.controller";
 import {
   adminVerification, createPurchaseOrder, createRfq, deleteRfq, getPurchaseOrderDetails,
@@ -18,11 +19,18 @@ const router = Router();
 router.get("/suppliers", optionalAuthenticate, supplierSearch);
 router.get("/suppliers/:organizationId/profile", optionalAuthenticate, getPublicSupplierProfile);
 router.get("/trendy-collections", listPublicTrendyCollections);
+router.get("/products/filters", listMarketplaceFilterOptions);
 router.get("/products", listMarketplaceProducts);
 router.get("/products/:productId", getMarketplaceProduct);
 
 // Protected routes below
 router.use(authenticate);
+router.get("/cart", getBuyerCart);
+router.post("/cart/items", addBuyerCartItem);
+router.patch("/cart/items/:cartItemId", updateBuyerCartItem);
+router.delete("/cart/items/:cartItemId", removeBuyerCartItem);
+router.delete("/cart", clearBuyerCart);
+router.post("/cart/submit-rfq", submitCartAsRfq);
 router.get("/trendy-collections/mine", requireRole("SUPPLIER"), getMyTrendyCollection);
 router.put("/trendy-collections/mine", requireRole("SUPPLIER"), upsertMyTrendyCollection);
 router.put("/supplier-profile", upsertSupplierProfile);

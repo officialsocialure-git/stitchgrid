@@ -19,6 +19,7 @@ type Listing = {
   itemType: string;
   moq?: number | null;
   unitPrice?: number | string | null;
+  maxUnitPrice?: number | string | null;
   currency?: string;
   moderationStatus: "PENDING" | "APPROVED" | "REJECTED";
   moderationNote?: string | null;
@@ -46,8 +47,6 @@ type Result = {
   categories: string[];
 };
 
-const PAGE_SIZE = 10;
-
 const formatPrice = (amount: Listing["unitPrice"], itemType = "", currency = "INR") => {
   if (amount === null || amount === undefined || amount === "") return "—";
   const unit = itemType.toLowerCase().includes("fabric") ? "/ meter" : "/ piece";
@@ -57,6 +56,15 @@ const formatPrice = (amount: Listing["unitPrice"], itemType = "", currency = "IN
     return `₹${amount} ${unit}`;
   }
 };
+
+const formatPriceRange = (item: Listing) => {
+  if (item.unitPrice === null || item.unitPrice === undefined || item.unitPrice === "") return "—";
+  const min = formatPrice(item.unitPrice, item.itemType, item.currency);
+  const max = formatPrice(item.maxUnitPrice ?? item.unitPrice, item.itemType, item.currency);
+  return Number(item.maxUnitPrice ?? item.unitPrice) > Number(item.unitPrice) ? `${min} – ${max}` : min;
+};
+
+const PAGE_SIZE = 10;
 
 export default function MarketplacePage() {
   const [data, setData] = useState<Result>({
@@ -247,7 +255,7 @@ export default function MarketplacePage() {
                     <h3 className="mb-3 flex items-center gap-2 text-base font-bold text-slate-900"><Info size={18} className="text-[#5B13EC]" /> Listing Information</h3>
                     <div className="divide-y divide-slate-100 text-sm">
                       <div className="flex justify-between gap-3 py-2"><span className="text-slate-500">Category</span><span className="font-medium text-slate-900">{activeListing.itemType}</span></div>
-                      {activeListing.unitPrice !== null && activeListing.unitPrice !== undefined && activeListing.unitPrice !== "" && <div className="flex justify-between gap-3 py-2"><span className="text-slate-500">Price</span><span className="font-medium text-slate-900">{formatPrice(activeListing.unitPrice, activeListing.itemType, activeListing.currency)}</span></div>}
+                      {activeListing.unitPrice !== null && activeListing.unitPrice !== undefined && activeListing.unitPrice !== "" && <div className="flex justify-between gap-3 py-2"><span className="text-slate-500">Price</span><span className="font-medium text-slate-900">{formatPriceRange(activeListing)}</span></div>}
                       {activeListing.moq !== null && activeListing.moq !== undefined && <div className="flex justify-between gap-3 py-2"><span className="text-slate-500">MOQ</span><span className="font-medium text-slate-900">{activeListing.moq} {activeListing.itemType.toLowerCase().includes("fabric") ? "m" : "units"}</span></div>}
                       <div className="flex justify-between gap-3 py-2"><span className="text-slate-500">Listing ID</span><span className="max-w-[55%] break-all text-right font-medium text-slate-900">{activeListing.id}</span></div>
                       <div className="flex justify-between gap-3 py-2"><span className="text-slate-500">Added On</span><span className="font-medium text-slate-900">{new Date(activeListing.createdAt).toLocaleString()}</span></div>
@@ -272,7 +280,7 @@ export default function MarketplacePage() {
                   <h3 className="mb-3 text-base font-bold text-slate-900">Listing Specifications</h3>
                   <div className="divide-y divide-slate-100 text-sm">
                     <div className="flex justify-between gap-3 py-3"><span className="text-slate-500">Listing type</span><span className="font-medium text-slate-900">{activeListing.itemType}</span></div>
-                    {activeListing.unitPrice !== null && activeListing.unitPrice !== undefined && activeListing.unitPrice !== "" && <div className="flex justify-between gap-3 py-3"><span className="text-slate-500">Unit price</span><span className="font-medium text-slate-900">{formatPrice(activeListing.unitPrice, activeListing.itemType, activeListing.currency)}</span></div>}
+                    {activeListing.unitPrice !== null && activeListing.unitPrice !== undefined && activeListing.unitPrice !== "" && <div className="flex justify-between gap-3 py-3"><span className="text-slate-500">Unit price</span><span className="font-medium text-slate-900">{formatPriceRange(activeListing)}</span></div>}
                     {activeListing.moq !== null && activeListing.moq !== undefined && <div className="flex justify-between gap-3 py-3"><span className="text-slate-500">Minimum order quantity</span><span className="font-medium text-slate-900">{activeListing.moq} {activeListing.itemType.toLowerCase().includes("fabric") ? "m" : "units"}</span></div>}
                     <div className="flex justify-between gap-3 py-3"><span className="text-slate-500">Currency</span><span className="font-medium text-slate-900">{activeListing.currency || "INR"}</span></div>
                     {activeListing.material && <div className="flex justify-between gap-3 py-3"><span className="text-slate-500">Material</span><span className="font-medium text-slate-900">{activeListing.material}</span></div>}
@@ -833,7 +841,7 @@ export default function MarketplacePage() {
                 <div>
                   <span className="text-slate-400 font-medium">Price:</span>
                   <p className="font-bold text-slate-900 font-mono">
-                    {formatPrice(activeListing.unitPrice, activeListing.itemType, activeListing.currency)}
+                    {formatPriceRange(activeListing)}
                   </p>
                 </div>
                 <div>

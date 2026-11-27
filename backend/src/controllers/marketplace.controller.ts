@@ -391,8 +391,8 @@ export async function getPublicSupplierProfile(req: Request, res: Response, next
             capabilities: true,
             workforceResources: { orderBy: { resource: "asc" } },
             catalogItems: {
-              where: { moderationStatus: "APPROVED", isActive: true },
-              select: { id: true, name: true, itemType: true, description: true, imageUrl: true, moq: true, unitPrice: true, currency: true, gender: true, material: true, gsm: true, sizes: true, colors: true, images: { orderBy: { sortOrder: "asc" }, select: { id: true, imageUrl: true, sortOrder: true } }, priceTiers: { orderBy: { minQuantity: "asc" } } },
+              where: { isActive: true },
+              select: { id: true, name: true, itemType: true, description: true, imageUrl: true, moq: true, unitPrice: true, maxUnitPrice: true, currency: true, gender: true, material: true, gsm: true, sizes: true, colors: true, images: { orderBy: { sortOrder: "asc" }, select: { id: true, imageUrl: true, sortOrder: true } }, priceTiers: { orderBy: { minQuantity: "asc" } } },
               orderBy: { createdAt: "desc" },
             },
             certifications: {
@@ -909,6 +909,17 @@ export async function submitQuote(req: Request, res: Response, next: NextFunctio
     });
     const rfq = await prisma.rfq.findUnique({ where: { id: input.rfqId } });
     if (!member || !rfq || rfq.status !== "OPEN") throw new AppError(403, "Active supplier membership and open RFQ required");
+    const linkedRfqItemIds = input.items.map(item => item.rfqItemId).filter((id): id is string => Boolean(id));
+    if (new Set(linkedRfqItemIds).size !== linkedRfqItemIds.length) throw new AppError(400, "Duplicate RFQ line items are not allowed");
+    if (linkedRfqItemIds.length) {
+      const matchingItems = await prisma.rfqItem.count({ where: { rfqId: input.rfqId, id: { in: linkedRfqItemIds } } });
+      if (matchingItems !== linkedRfqItemIds.length) throw new AppError(400, "Quotation contains a product line that does not belong to this RFQ");
+    }
+    const invitationCount = await prisma.rfqInvitation.count({ where: { rfqId: rfq.id } });
+    if (invitationCount > 0) {
+      const invited = await prisma.rfqInvitation.findFirst({ where: { rfqId: rfq.id, supplierOrgId: input.supplierOrgId } });
+      if (!invited) throw new AppError(403, "This RFQ was assigned to another supplier");
+    }
 
     const quote = await prisma.$transaction(async tx => {
       const q = await tx.quotation.create({
@@ -990,6 +1001,12 @@ export async function reviseSupplierQuotation(req: Request, res: Response, next:
 
     const rfq = await prisma.rfq.findUnique({ where: { id: input.rfqId } });
     if (!rfq || rfq.status !== "OPEN") throw new AppError(400, "This RFQ is no longer open for quotation revisions");
+    const linkedRfqItemIds = input.items.map(item => item.rfqItemId).filter((id): id is string => Boolean(id));
+    if (new Set(linkedRfqItemIds).size !== linkedRfqItemIds.length) throw new AppError(400, "Duplicate RFQ line items are not allowed");
+    if (linkedRfqItemIds.length) {
+      const matchingItems = await prisma.rfqItem.count({ where: { rfqId: input.rfqId, id: { in: linkedRfqItemIds } } });
+      if (matchingItems !== linkedRfqItemIds.length) throw new AppError(400, "Quotation contains a product line that does not belong to this RFQ");
+    }
 
     const updated = await prisma.quotation.update({
       where: { id: quotationId },
@@ -1099,7 +1116,7 @@ export async function listMyRfqs(req: Request, res: Response, next: NextFunction
             where: {
               OR: [
                 { invitations: { some: { supplierOrgId: orgId } } },
-                { status: "OPEN" }
+                { AND: [{ status: "OPEN" }, { invitations: { none: {} } }] }
               ]
             },
             include: {
@@ -1123,7 +1140,7 @@ export async function listMyRfqs(req: Request, res: Response, next: NextFunction
           ? {
               OR: [
                 { invitations: { some: { supplierOrgId: { in: orgIds } } } },
-                { status: "OPEN" }
+                { AND: [{ status: "OPEN" }, { invitations: { none: {} } }] }
               ]
             }
           : {
@@ -1167,6 +1184,12 @@ export async function getRfqDetails(req: Request, res: Response, next: NextFunct
       }
     });
     if (!rfq) throw new AppError(404, "RFQ not found");
+    const buyerMember = await prisma.organizationMember.findFirst({ where: { userId: req.auth!.userId, organizationId: rfq.buyerOrgId, role: "BUYER", isActive: true } });
+    const supplierMemberships = await prisma.organizationMember.findMany({ where: { userId: req.auth!.userId, role: "SUPPLIER", isActive: true }, select: { organizationId: true } });
+    const supplierOrgIds = supplierMemberships.map(member => member.organizationId);
+    const invitedSupplier = supplierOrgIds.length ? await prisma.rfqInvitation.findFirst({ where: { rfqId: rfq.id, supplierOrgId: { in: supplierOrgIds } } }) : null;
+    const isPublicOpenRfq = rfq.status === "OPEN" && rfq.invitations.length === 0 && supplierOrgIds.length > 0;
+    if (!buyerMember && !invitedSupplier && !isPublicOpenRfq && req.auth!.role !== "ADMIN") throw new AppError(403, "You are not authorized to view this RFQ");
     return sendOk(res, rfq);
   } catch (e) { next(e); }
 }

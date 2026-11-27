@@ -17,6 +17,7 @@ const productFields = {
   description: z.string().max(4000).optional(),
   moq: z.coerce.number().int().positive().optional(),
   unitPrice: z.coerce.number().positive().optional(),
+  maxUnitPrice: z.coerce.number().positive().optional(),
   currency: z.string().length(3).default("INR"),
   imageUrl: z.string().url().max(2000).optional(),
   additionalImageUrls: z.array(z.string().url().max(2000)).max(5).optional().default([]),
@@ -52,7 +53,7 @@ export async function listMyCatalogItems(req: Request, res: Response, next: Next
 
 export async function createCatalogItem(req: Request, res: Response, next: NextFunction) {
   try {
-    const input = z.object({ organizationId: z.string().min(1), ...productFields }).parse(req.body);
+    const input = z.object({ organizationId: z.string().min(1), ...productFields }).refine(value => value.maxUnitPrice === undefined || value.unitPrice === undefined || value.maxUnitPrice >= value.unitPrice, { message: "Maximum price must be greater than or equal to minimum price", path: ["maxUnitPrice"] }).parse(req.body);
     const membership = await prisma.organizationMember.findFirst({
       where: { userId: req.auth!.userId, organizationId: input.organizationId, role: "SUPPLIER", isActive: true },
       select: { id: true }
@@ -70,11 +71,11 @@ export async function createCatalogItem(req: Request, res: Response, next: NextF
       return tx.catalogItem.create({
         data: {
           supplierProfileId: profile.id, name: input.name, itemType: input.itemType,
-          description: input.description, moq: input.moq, unitPrice: input.unitPrice,
+          description: input.description, moq: input.moq, unitPrice: input.unitPrice, maxUnitPrice: input.maxUnitPrice,
           currency: input.currency, imageUrl: input.imageUrl, gender: input.gender,
           material: input.material, gsm: input.gsm, sizes: input.sizes.join(","),
           colors: input.colors.join(","), manufacturingType: input.manufacturingType,
-          customization: input.customization, moderationStatus: "PENDING", isActive: true,
+          customization: input.customization, moderationStatus: "APPROVED", isActive: true,
           images: input.additionalImageUrls.length ? { create: input.additionalImageUrls.map((imageUrl, index) => ({ imageUrl, sortOrder: index + 1 })) } : undefined,
           priceTiers: input.priceTiers.length ? { create: input.priceTiers.map(tier => ({ minQuantity: tier.minQuantity, maxQuantity: tier.maxQuantity ?? null, unitPrice: tier.unitPrice })) } : undefined
         },
@@ -94,6 +95,7 @@ export async function updateCatalogItem(req: Request, res: Response, next: NextF
       description: z.string().max(4000).nullable().optional(),
       moq: z.coerce.number().int().positive().nullable().optional(),
       unitPrice: z.coerce.number().positive().nullable().optional(),
+      maxUnitPrice: z.coerce.number().positive().nullable().optional(),
       currency: z.string().length(3).optional(), imageUrl: z.string().url().max(2000).nullable().optional(),
       gender: z.string().max(30).nullable().optional(), material: z.string().max(120).nullable().optional(),
       gsm: z.coerce.number().int().positive().max(2000).nullable().optional(),
@@ -102,7 +104,7 @@ export async function updateCatalogItem(req: Request, res: Response, next: NextF
       manufacturingType: z.string().max(80).nullable().optional(), customization: z.boolean().optional(),
       additionalImageUrls: z.array(z.string().url().max(2000)).max(5).optional(),
       priceTiers: z.array(priceTierSchema).max(20).optional(),
-    }).refine(value => Object.keys(value).length > 0, "At least one field is required").parse(req.body);
+    }).refine(value => Object.keys(value).length > 0, "At least one field is required").refine(value => value.maxUnitPrice == null || value.unitPrice == null || value.maxUnitPrice >= value.unitPrice, { message: "Maximum price must be greater than or equal to minimum price", path: ["maxUnitPrice"] }).parse(req.body);
     const item = await prisma.catalogItem.findUnique({ where: { id: String(req.params.itemId) }, include: { supplierProfile: true } });
     if (!item) throw new AppError(404, "Product not found");
     const membership = await prisma.organizationMember.findFirst({
@@ -120,7 +122,7 @@ export async function updateCatalogItem(req: Request, res: Response, next: NextF
         data: {
           ...fields, ...(sizes !== undefined ? { sizes: sizes.join(",") } : {}),
           ...(colors !== undefined ? { colors: colors.join(",") } : {}),
-          moderationStatus: "PENDING", moderationNote: null,
+          moderationStatus: "APPROVED", moderationNote: null,
           ...(additionalImageUrls !== undefined && additionalImageUrls.length ? { images: { create: additionalImageUrls.map((imageUrl, index) => ({ imageUrl, sortOrder: index + 1 })) } } : {}),
           ...(priceTiers !== undefined && priceTiers.length ? { priceTiers: { create: priceTiers.map(tier => ({ minQuantity: tier.minQuantity, maxQuantity: tier.maxQuantity ?? null, unitPrice: tier.unitPrice })) } } : {})
         },
@@ -156,16 +158,17 @@ export async function listMarketplaceProducts(req: Request, res: Response, next:
       gender: z.string().trim().max(30).optional(),
       q: z.string().trim().max(120).optional(),
       minMoq: z.coerce.number().int().positive().optional(),
+      maxMoq: z.coerce.number().int().positive().optional(),
       maxPrice: z.coerce.number().positive().optional(),
       minPrice: z.coerce.number().nonnegative().optional(),
       supplierType: z.string().trim().max(80).optional(),
       city: z.string().trim().max(100).optional(),
-      sort: z.enum(["RECOMMENDED", "PRICE_LOW", "PRICE_HIGH", "NEWEST"]).default("RECOMMENDED"),
+      sort: z.enum(["RECOMMENDED", "PRICE_LOW", "PRICE_HIGH", "NEWEST", "SUPPLIER_AZ", "SUPPLIER_ZA"]).default("RECOMMENDED"),
       page: z.coerce.number().int().min(1).default(1),
       limit: z.coerce.number().int().min(1).max(60).default(20)
     }).parse(req.query);
     const where: any = {
-      moderationStatus: "APPROVED", isActive: true,
+      isActive: true,
       supplierProfile: { organization: { verificationStatus: "APPROVED", members: { some: { role: "SUPPLIER", isActive: true } } } }
     };
     if (query.category) {
@@ -175,14 +178,17 @@ export async function listMarketplaceProducts(req: Request, res: Response, next:
     }
     if (query.gender && query.gender !== "All") where.gender = query.gender;
     if (query.q) where.OR = [{ name: { contains: query.q } }, { description: { contains: query.q } }, { itemType: { contains: query.q } }, { material: { contains: query.q } }];
-    if (query.minMoq) where.moq = { lte: query.minMoq };
+    if (query.minMoq || query.maxMoq) where.moq = { ...(query.minMoq ? { gte: query.minMoq } : {}), ...(query.maxMoq ? { lte: query.maxMoq } : {}) };
     if (query.minPrice !== undefined || query.maxPrice !== undefined) {
-      const priceRange = { ...(query.minPrice !== undefined ? { gte: query.minPrice } : {}), ...(query.maxPrice !== undefined ? { lte: query.maxPrice } : {}) };
-      where.AND = [...(where.AND || []), { OR: [{ unitPrice: priceRange }, { priceTiers: { some: { unitPrice: priceRange } } }] }];
+      const priceConditions: any[] = [];
+      if (query.maxPrice !== undefined) priceConditions.push({ unitPrice: { lte: query.maxPrice } });
+      if (query.minPrice !== undefined) priceConditions.push({ OR: [{ maxUnitPrice: { gte: query.minPrice } }, { maxUnitPrice: null, unitPrice: { gte: query.minPrice } }] });
+      const tierPriceWhere = { unitPrice: { ...(query.minPrice !== undefined ? { gte: query.minPrice } : {}), ...(query.maxPrice !== undefined ? { lte: query.maxPrice } : {}) } };
+      where.AND = [...(where.AND || []), { OR: [{ AND: priceConditions }, { priceTiers: { some: tierPriceWhere } }] }];
     }
     if (query.supplierType) where.supplierProfile.organization.businessType = { contains: query.supplierType };
     if (query.city) where.supplierProfile.organization.city = { contains: query.city };
-    const orderBy = query.sort === "PRICE_LOW" ? { unitPrice: "asc" as const } : query.sort === "PRICE_HIGH" ? { unitPrice: "desc" as const } : { createdAt: "desc" as const };
+    const orderBy = query.sort === "PRICE_LOW" ? { unitPrice: "asc" as const } : query.sort === "PRICE_HIGH" ? { unitPrice: "desc" as const } : query.sort === "SUPPLIER_AZ" ? { supplierProfile: { organization: { name: "asc" as const } } } : query.sort === "SUPPLIER_ZA" ? { supplierProfile: { organization: { name: "desc" as const } } } : { createdAt: "desc" as const };
     const [items, total] = await Promise.all([
       prisma.catalogItem.findMany({
         where, include: {
@@ -197,11 +203,28 @@ export async function listMarketplaceProducts(req: Request, res: Response, next:
   } catch (error) { next(error); }
 }
 
+export async function listMarketplaceFilterOptions(req: Request, res: Response, next: NextFunction) {
+  try {
+    const locations = await prisma.organization.findMany({
+      where: {
+        verificationStatus: "APPROVED",
+        city: { not: null },
+        members: { some: { role: "SUPPLIER", isActive: true } },
+        supplierProfile: { catalogItems: { some: { isActive: true } } }
+      },
+      select: { city: true },
+      distinct: ["city"],
+      orderBy: { city: "asc" }
+    });
+    return sendOk(res, { locations: locations.map(item => item.city).filter((city): city is string => Boolean(city)) });
+  } catch (error) { next(error); }
+}
+
 export async function getMarketplaceProduct(req: Request, res: Response, next: NextFunction) {
   try {
     const item = await prisma.catalogItem.findFirst({
       where: {
-        id: String(req.params.productId), moderationStatus: "APPROVED", isActive: true,
+        id: String(req.params.productId), isActive: true,
         supplierProfile: { organization: { verificationStatus: "APPROVED", members: { some: { role: "SUPPLIER", isActive: true } } } }
       },
       include: {
