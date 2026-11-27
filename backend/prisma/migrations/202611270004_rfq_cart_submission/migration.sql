@@ -25,13 +25,22 @@ CREATE TABLE `RfqSubmissionGroup` (
   CONSTRAINT `RfqSubmissionGroup_buyerOrgId_fkey` FOREIGN KEY (`buyerOrgId`) REFERENCES `Organization`(`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+ALTER TABLE `Rfq` ADD COLUMN `submissionGroupId` VARCHAR(191) NULL;
+
+CREATE INDEX `Rfq_submissionGroupId_idx` ON `Rfq` (`submissionGroupId`);
+
 ALTER TABLE `Rfq`
-  ADD COLUMN `submissionGroupId` VARCHAR(191) NULL,
-  ADD INDEX `Rfq_submissionGroupId_idx`(`submissionGroupId`),
-  ADD CONSTRAINT `Rfq_submissionGroupId_fkey` FOREIGN KEY (`submissionGroupId`) REFERENCES `RfqSubmissionGroup`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+  ADD CONSTRAINT `Rfq_submissionGroupId_fkey`
+  FOREIGN KEY (`submissionGroupId`) REFERENCES `RfqSubmissionGroup`(`id`)
+  ON DELETE SET NULL ON UPDATE CASCADE;
+
+ALTER TABLE `RfqItem` ADD COLUMN `catalogItemId` VARCHAR(191) NULL;
+
+ALTER TABLE `RfqItem` ADD COLUMN `specifications` TEXT NULL;
+
+CREATE INDEX `RfqItem_catalogItemId_idx` ON `RfqItem` (`catalogItemId`);
 
 ALTER TABLE `RfqItem`
-  ADD COLUMN `catalogItemId` VARCHAR(191) NULL,
-  ADD COLUMN `specifications` TEXT NULL,
-  ADD INDEX `RfqItem_catalogItemId_idx`(`catalogItemId`),
-  ADD CONSTRAINT `RfqItem_catalogItemId_fkey` FOREIGN KEY (`catalogItemId`) REFERENCES `CatalogItem`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+  ADD CONSTRAINT `RfqItem_catalogItemId_fkey`
+  FOREIGN KEY (`catalogItemId`) REFERENCES `CatalogItem`(`id`)
+  ON DELETE SET NULL ON UPDATE CASCADE;
