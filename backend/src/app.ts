@@ -56,7 +56,11 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 if (env.NODE_ENV !== "test") app.use(morgan("combined"));
 
-// Public health endpoint for Render and uptime checks; it must not require authentication.
+// Public root and API health endpoints; both are unauthenticated.
+// The root endpoint avoids a misleading NOT_FOUND when opening the Render service URL.
+app.get("/", (_req, res) =>
+  res.json({ success: true, service: "STITCHGRID API", status: "healthy" })
+);
 app.get("/api/health", (_req, res) =>
   res.json({ success: true, service: "STITCHGRID API", status: "healthy" })
 );
