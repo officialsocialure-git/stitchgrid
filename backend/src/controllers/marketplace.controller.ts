@@ -1117,7 +1117,20 @@ export async function listMyRfqs(req: Request, res: Response, next: NextFunction
               items: true,
               quotations: {
                 include: {
-                  supplier: { select: { id: true, name: true, city: true } },
+                  supplier: {
+                    select: {
+                      id: true,
+                      name: true,
+                      city: true,
+                      country: true,
+                      verificationStatus: true,
+                      businessMedia: {
+                        where: { mediaType: { in: ["COMPANY_PHOTO", "FACTORY_PHOTO", "COMPANY_LOGO"] } },
+                        orderBy: [{ mediaType: "asc" }, { sortOrder: "asc" }],
+                        select: { id: true, mediaType: true, url: true, sortOrder: true }
+                      }
+                    }
+                  },
                   items: true
                 }
               }
@@ -1174,6 +1187,35 @@ export async function listMyRfqs(req: Request, res: Response, next: NextFunction
         orderBy: { createdAt: "desc" }
       });
     }
+
+    // Include real supplier trust signals on buyer RFQ quotation cards.
+    // Ratings are aggregated from submitted reviews; never invent a fallback rating.
+    const supplierOrgIds = [...new Set((data as any[]).flatMap((rfq: any) =>
+      (rfq.quotations || []).map((quote: any) => quote.supplierOrgId).filter(Boolean)
+    ))];
+    const supplierRatingRows = supplierOrgIds.length
+      ? await prisma.review.groupBy({
+          by: ["reviewedOrgId"],
+          where: { reviewedOrgId: { in: supplierOrgIds } },
+          _avg: { rating: true },
+          _count: { _all: true },
+        })
+      : [];
+    const supplierRatingByOrg = new Map(supplierRatingRows.map(row => [row.reviewedOrgId, {
+      average: row._avg.rating === null ? null : Number(row._avg.rating),
+      count: row._count._all,
+    }]));
+    data = (data as any[]).map((rfq: any) => ({
+      ...rfq,
+      quotations: (rfq.quotations || []).map((quote: any) => ({
+        ...quote,
+        supplier: quote.supplier ? {
+          ...quote.supplier,
+          publicRating: supplierRatingByOrg.get(quote.supplierOrgId) || { average: null, count: 0 },
+        } : quote.supplier,
+      })),
+    }));
+
     return sendOk(res, data);
   } catch (e) { next(e); }
 }

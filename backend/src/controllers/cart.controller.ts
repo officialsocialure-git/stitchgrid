@@ -181,6 +181,7 @@ export async function submitCartAsRfq(req: Request, res: Response, next: NextFun
             buyerOrgId: input.buyerOrgId,
             submissionGroupId: group.id,
             title: rows.length === 1 ? `RFQ - ${names[0]}` : `RFQ - ${rows.length} Products`,
+            sampleImageUrl: rows[0]?.product.images?.[0]?.imageUrl || rows[0]?.product.imageUrl || null,
             description: [
               input.instructions,
               `Delivery location: ${input.deliveryLocation}`,
