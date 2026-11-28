@@ -48,6 +48,7 @@ export interface Rfq {
   buyerOrgId: string;
   title: string;
   description?: string;
+  sampleImageUrl?: string;
   garmentType?: string;
   fabricSpec?: string;
   targetPrice?: number;

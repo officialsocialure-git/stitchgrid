@@ -159,6 +159,15 @@ export const marketplaceService = {
     return api.put("/organization-profile", data);
   },
 
+  // Organization banner and gallery media
+  listBusinessMedia: async (organizationId: string) => {
+    return api.get<any[]>(`/business-gallery?organizationId=${encodeURIComponent(organizationId)}`);
+  },
+
+  createBusinessMedia: async (data: { organizationId: string; mediaType: "COVER_PHOTO"; url: string; fileName?: string }) => {
+    return api.post<any>("/business-gallery", data);
+  },
+
   // 7. Messaging
   listConversations: async () => {
     return api.get<any[]>("/conversations");

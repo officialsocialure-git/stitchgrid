@@ -140,6 +140,9 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
     if (input.label === "RFQ_SAMPLE_IMAGE" && req.auth?.role !== "BUYER") {
       throw new AppError(403, "Only buyer accounts can upload RFQ sample images.");
     }
+    if (input.label === "COVER_PHOTO" && !["BUYER", "SUPPLIER"].includes(req.auth?.role || "")) {
+      throw new AppError(403, "Only organization accounts can upload a cover image.");
+    }
     if (input.label === "COMPANY_LOGO" && !["BUYER", "SUPPLIER"].includes(req.auth?.role || "")) {
       throw new AppError(403, "Only organization accounts can upload a company logo.");
     }
@@ -169,7 +172,7 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
     }
 
     const isVideo = mimeType.startsWith("video/");
-    if ((input.label === "RFQ_SAMPLE_IMAGE" || input.label === "COMPANY_LOGO") && !mimeType.startsWith("image/")) {
+    if ((input.label === "RFQ_SAMPLE_IMAGE" || input.label === "COMPANY_LOGO" || input.label === "COVER_PHOTO") && !mimeType.startsWith("image/")) {
       throw new AppError(415, "This upload must be an image file.");
     }
     if (!mimeType || (isVideo && input.label !== "SUPPLIER_REEL") || (!isVideo && input.label === "SUPPLIER_REEL") || (!isVideo && !["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"].includes(mimeType))) {

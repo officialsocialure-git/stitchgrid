@@ -740,7 +740,7 @@ export async function listBusinessMedia(req: Request, res: Response, next: NextF
     });
     if (!membership) throw new AppError(403, "Active organization membership required");
     const items = await prisma.businessMedia.findMany({
-      where: { organizationId, ...(membership.role === "BUYER" ? { mediaType: "COMPANY_LOGO" } : {}) },
+      where: { organizationId, ...(membership.role === "BUYER" ? { mediaType: { in: ["COMPANY_LOGO", "COVER_PHOTO"] } } : {}) },
       orderBy: [{ mediaType: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }]
     });
     return sendOk(res, items);
@@ -760,8 +760,8 @@ export async function createBusinessMedia(req: Request, res: Response, next: Nex
       select: { id: true, role: true }
     });
     if (!membership) throw new AppError(403, "Active organization membership required");
-    if (membership.role === "BUYER" && input.mediaType !== "COMPANY_LOGO") {
-      throw new AppError(403, "Buyer accounts can upload only their organization logo.");
+    if (membership.role === "BUYER" && !["COMPANY_LOGO", "COVER_PHOTO"].includes(input.mediaType)) {
+      throw new AppError(403, "Buyer accounts can upload only their organization logo or cover image.");
     }
 
     const result = await prisma.$transaction(async tx => {
@@ -799,7 +799,7 @@ export async function deleteBusinessMedia(req: Request, res: Response, next: Nex
       where: { userId: req.auth!.userId, organizationId: media.organizationId, role: req.auth!.role === "BUYER" ? "BUYER" : "SUPPLIER", isActive: true },
       select: { id: true, role: true }
     });
-    if (!membership || (membership.role === "BUYER" && media.mediaType !== "COMPANY_LOGO")) {
+    if (!membership || (membership.role === "BUYER" && !["COMPANY_LOGO", "COVER_PHOTO"].includes(media.mediaType))) {
       throw new AppError(403, "You do not have permission to remove this organization image.");
     }
     await prisma.businessMedia.delete({ where: { id: mediaId } });
