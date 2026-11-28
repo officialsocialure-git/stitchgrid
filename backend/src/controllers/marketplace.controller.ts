@@ -609,10 +609,15 @@ export async function updateOrganizationProfile(req: Request, res: Response, nex
     }).parse(req.body);
 
     const membership = await prisma.organizationMember.findFirst({
-      where: { userId: req.auth!.userId, organizationId: input.organizationId, role: "SUPPLIER", isActive: true },
+      where: {
+        userId: req.auth!.userId,
+        organizationId: input.organizationId,
+        role: { in: ["BUYER", "SUPPLIER"] },
+        isActive: true
+      },
       select: { id: true, role: true }
     });
-    if (!membership) throw new AppError(403, "Active supplier membership required to edit company information");
+    if (!membership) throw new AppError(403, "Active buyer or supplier organization membership required to edit this profile");
 
     const orgUpdateData: any = {};
     if (input.name !== undefined) orgUpdateData.name = input.name;
@@ -706,7 +711,7 @@ export async function updateOrganizationProfile(req: Request, res: Response, nex
 
       return tx.organization.findUnique({
         where: { id: input.organizationId },
-        include: { supplierProfile: { include: { categories: true, capabilities: true, workforceResources: { orderBy: { resource: "asc" } }, certifications: { orderBy: { createdAt: "desc" } } } } }
+        include: { businessMedia: { orderBy: [{ mediaType: "asc" }, { sortOrder: "asc" }] }, supplierProfile: { include: { categories: true, capabilities: true, workforceResources: { orderBy: { resource: "asc" } }, certifications: { orderBy: { createdAt: "desc" } } } } }
       });
     });
 
@@ -730,12 +735,12 @@ export async function listBusinessMedia(req: Request, res: Response, next: NextF
     const organizationId = String(req.query.organizationId || "");
     if (!organizationId) throw new AppError(400, "Organization ID is required");
     const membership = await prisma.organizationMember.findFirst({
-      where: { userId: req.auth!.userId, organizationId, role: "SUPPLIER", isActive: true },
-      select: { id: true }
+      where: { userId: req.auth!.userId, organizationId, role: req.auth!.role === "BUYER" ? "BUYER" : "SUPPLIER", isActive: true },
+      select: { role: true, id: true }
     });
-    if (!membership) throw new AppError(403, "Active supplier membership required");
+    if (!membership) throw new AppError(403, "Active organization membership required");
     const items = await prisma.businessMedia.findMany({
-      where: { organizationId },
+      where: { organizationId, ...(membership.role === "BUYER" ? { mediaType: "COMPANY_LOGO" } : {}) },
       orderBy: [{ mediaType: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }]
     });
     return sendOk(res, items);
@@ -751,10 +756,13 @@ export async function createBusinessMedia(req: Request, res: Response, next: Nex
       fileName: z.string().max(255).optional(),
     }).parse(req.body);
     const membership = await prisma.organizationMember.findFirst({
-      where: { userId: req.auth!.userId, organizationId: input.organizationId, role: "SUPPLIER", isActive: true },
-      select: { id: true }
+      where: { userId: req.auth!.userId, organizationId: input.organizationId, role: req.auth!.role === "BUYER" ? "BUYER" : "SUPPLIER", isActive: true },
+      select: { id: true, role: true }
     });
-    if (!membership) throw new AppError(403, "Active supplier membership required");
+    if (!membership) throw new AppError(403, "Active organization membership required");
+    if (membership.role === "BUYER" && input.mediaType !== "COMPANY_LOGO") {
+      throw new AppError(403, "Buyer accounts can upload only their organization logo.");
+    }
 
     const result = await prisma.$transaction(async tx => {
       if (input.mediaType === "COMPANY_LOGO" || input.mediaType === "COVER_PHOTO") {
@@ -788,10 +796,12 @@ export async function deleteBusinessMedia(req: Request, res: Response, next: Nex
     const media = await prisma.businessMedia.findUnique({ where: { id: mediaId } });
     if (!media) throw new AppError(404, "Gallery image not found");
     const membership = await prisma.organizationMember.findFirst({
-      where: { userId: req.auth!.userId, organizationId: media.organizationId, role: "SUPPLIER", isActive: true },
-      select: { id: true }
+      where: { userId: req.auth!.userId, organizationId: media.organizationId, role: req.auth!.role === "BUYER" ? "BUYER" : "SUPPLIER", isActive: true },
+      select: { id: true, role: true }
     });
-    if (!membership) throw new AppError(403, "Active supplier membership required");
+    if (!membership || (membership.role === "BUYER" && media.mediaType !== "COMPANY_LOGO")) {
+      throw new AppError(403, "You do not have permission to remove this organization image.");
+    }
     await prisma.businessMedia.delete({ where: { id: mediaId } });
     await audit("BUSINESS_MEDIA_DELETED", "BusinessMedia", mediaId, req.auth!.userId, media.organizationId, { mediaType: media.mediaType });
     await invalidateCachePattern("cache:suppliers:");
@@ -1246,6 +1256,7 @@ export async function listPurchaseOrders(req: Request, res: Response, next: Next
         buyer: { select: { id: true, name: true, city: true } },
         supplier: { select: { id: true, name: true, city: true } },
         items: true,
+        quotation: { include: { rfq: { select: { id: true, title: true, sampleImageUrl: true } } } },
         milestones: { orderBy: { dueDate: "asc" } },
         samples: true,
         qcReports: { orderBy: { submittedAt: "desc" } }

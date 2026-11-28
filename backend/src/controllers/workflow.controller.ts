@@ -140,6 +140,9 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
     if (input.label === "RFQ_SAMPLE_IMAGE" && req.auth?.role !== "BUYER") {
       throw new AppError(403, "Only buyer accounts can upload RFQ sample images.");
     }
+    if (input.label === "COMPANY_LOGO" && !["BUYER", "SUPPLIER"].includes(req.auth?.role || "")) {
+      throw new AppError(403, "Only organization accounts can upload a company logo.");
+    }
 
     let base64Data = input.data;
     let mimeType = "image/jpeg";
@@ -166,8 +169,8 @@ export async function uploadFile(req: Request, res: Response, next: NextFunction
     }
 
     const isVideo = mimeType.startsWith("video/");
-    if (input.label === "RFQ_SAMPLE_IMAGE" && !mimeType.startsWith("image/")) {
-      throw new AppError(415, "RFQ sample attachments must be image files.");
+    if ((input.label === "RFQ_SAMPLE_IMAGE" || input.label === "COMPANY_LOGO") && !mimeType.startsWith("image/")) {
+      throw new AppError(415, "This upload must be an image file.");
     }
     if (!mimeType || (isVideo && input.label !== "SUPPLIER_REEL") || (!isVideo && input.label === "SUPPLIER_REEL") || (!isVideo && !["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"].includes(mimeType))) {
       throw new AppError(415, "Supported files are JPG, PNG, WEBP, HEIC, HEIF, PDF, or MP4/MOV/WEBM video for Supplier Reels.");
@@ -550,7 +553,9 @@ export async function updateMilestone(req: Request, res: Response, next: NextFun
 
 export async function listConversations(req: Request, res: Response, next: NextFunction) {
   try {
-    const memberships = await prisma.organizationMember.findMany({ where: { userId: req.auth!.userId, isActive: true } });
+    if (req.auth!.role !== "BUYER" && req.auth!.role !== "SUPPLIER") return sendOk(res, []);
+    const activeRole = req.auth!.role;
+    const memberships = await prisma.organizationMember.findMany({ where: { userId: req.auth!.userId, role: activeRole, isActive: true } });
     const orgIds = memberships.map(m => m.organizationId);
 
     // Auto-ensure conversations exist for active purchase orders
@@ -597,9 +602,26 @@ export async function listConversations(req: Request, res: Response, next: NextF
     const relatedOrgIds = [...new Set(conversations.flatMap(c => [c.buyerOrgId, c.supplierOrgId]))];
     const orgs = await prisma.organization.findMany({
       where: { id: { in: relatedOrgIds } },
-      select: { id: true, name: true, city: true }
+      select: {
+        id: true, name: true, city: true, verificationStatus: true,
+        businessMedia: {
+          where: { mediaType: { in: ["COMPANY_LOGO", "COMPANY_PHOTO", "FACTORY_PHOTO"] } },
+          select: { url: true, mediaType: true },
+          orderBy: { sortOrder: "asc" }
+        }
+      }
     });
     const orgMap = new Map(orgs.map(o => [o.id, o]));
+    const relatedMembers = await prisma.organizationMember.findMany({
+      where: { organizationId: { in: relatedOrgIds }, isActive: true },
+      select: { organizationId: true, userId: true }
+    });
+    const memberIdsByOrg = new Map<string, string[]>();
+    for (const member of relatedMembers) {
+      const ids = memberIdsByOrg.get(member.organizationId) || [];
+      ids.push(member.userId);
+      memberIdsByOrg.set(member.organizationId, ids);
+    }
 
     // Fetch linked orders for these organization pairs
     const linkedOrders = await prisma.purchaseOrder.findMany({
@@ -616,30 +638,66 @@ export async function listConversations(req: Request, res: Response, next: NextF
         totalAmount: true,
         buyerOrgId: true,
         supplierOrgId: true,
-        items: { select: { name: true }, take: 1 }
+        items: { select: { name: true }, take: 1 },
+        samples: { select: { id: true, status: true } }
       },
       orderBy: { createdAt: "desc" }
     });
 
     const orderByOrgPair = new Map<string, (typeof linkedOrders)[number]>();
+    const samplesByOrgPair = new Map<string, number>();
     for (const order of linkedOrders) {
-      orderByOrgPair.set(`${order.buyerOrgId}:${order.supplierOrgId}`, order);
+      const pairKey = `${order.buyerOrgId}:${order.supplierOrgId}`;
+      if (!orderByOrgPair.has(pairKey)) orderByOrgPair.set(pairKey, order);
+      samplesByOrgPair.set(pairKey, (samplesByOrgPair.get(pairKey) || 0) + order.samples.length);
     }
-    const withOrgs = conversations.map(c => {
+    const readStates = await prisma.conversationReadState.findMany({
+      where: { userId: req.auth!.userId, conversationId: { in: conversations.map(c => c.id) } },
+      select: { conversationId: true, lastReadAt: true }
+    });
+    const readAtByConversation = new Map(readStates.map(state => [state.conversationId, state.lastReadAt]));
+
+    const withOrgs = await Promise.all(conversations.map(async c => {
       const order = orderByOrgPair.get(`${c.buyerOrgId}:${c.supplierOrgId}`) ||
         orderByOrgPair.get(`${c.supplierOrgId}:${c.buyerOrgId}`);
+      const lastReadAt = readAtByConversation.get(c.id);
+      const otherOrgId = orgIds.includes(c.buyerOrgId) ? c.supplierOrgId : c.buyerOrgId;
+      const otherMemberIds = memberIdsByOrg.get(otherOrgId) || [];
+      const unreadCount = await prisma.message.count({
+        where: {
+          conversationId: c.id,
+          senderUserId: { in: otherMemberIds },
+          ...(lastReadAt ? { createdAt: { gt: lastReadAt } } : {})
+        }
+      });
+      const buyer = orgMap.get(c.buyerOrgId) || { id: c.buyerOrgId, name: "Buyer Organization", city: null, verificationStatus: "PENDING", businessMedia: [] as { url: string; mediaType: string }[] };
+      const supplier = orgMap.get(c.supplierOrgId) || { id: c.supplierOrgId, name: "Supplier Partner", city: null, verificationStatus: "PENDING", businessMedia: [] as { url: string; mediaType: string }[] };
+      const otherOrg = orgIds.includes(c.buyerOrgId) ? supplier : buyer;
       return {
         ...c,
-        buyer: orgMap.get(c.buyerOrgId) || { id: c.buyerOrgId, name: "Buyer Organization" },
-        supplier: orgMap.get(c.supplierOrgId) || { id: c.supplierOrgId, name: "Supplier Partner" },
+        buyer,
+        supplier,
+        otherOrganization: {
+          id: otherOrg.id,
+          name: otherOrg.name,
+          city: otherOrg.city,
+          verificationStatus: otherOrg.verificationStatus,
+          logoUrl:
+            otherOrg.businessMedia?.find(media => media.mediaType === "COMPANY_LOGO")?.url ||
+            otherOrg.businessMedia?.find(media => media.mediaType === "COMPANY_PHOTO")?.url ||
+            otherOrg.businessMedia?.find(media => media.mediaType === "FACTORY_PHOTO")?.url ||
+            null
+        },
+        unreadCount,
         linkedOrder: order ? {
           id: order.id,
           poNumber: order.poNumber,
           status: order.status,
           item: order.items?.[0]?.name || "Garment Order"
         } : null,
+        linkedSamplesCount: samplesByOrgPair.get(`${c.buyerOrgId}:${c.supplierOrgId}`) || samplesByOrgPair.get(`${c.supplierOrgId}:${c.buyerOrgId}`) || 0
       };
-    });
+    }));
 
     // Sort by latest message date if available, otherwise conversation creation date
     withOrgs.sort((a, b) => {
@@ -665,6 +723,11 @@ export async function getConversationMessages(req: Request, res: Response, next:
       }
     });
     if (!member) throw new AppError(403, "Conversation access denied");
+    await prisma.conversationReadState.upsert({
+      where: { conversationId_userId: { conversationId: convId, userId: req.auth!.userId } },
+      create: { conversationId: convId, userId: req.auth!.userId, lastReadAt: new Date() },
+      update: { lastReadAt: new Date() }
+    });
     const messages = await prisma.message.findMany({
       where: { conversationId: convId },
       orderBy: { createdAt: "asc" }
